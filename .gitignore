@@ -1,0 +1,38 @@
+# Sony and third-party binaries must never be committed.
+local-artifacts/
+captures-private/
+secrets/
+*.exe
+*.msi
+*.cab
+*.dll
+*.sys
+*.dmp
+*.pcap
+*.pcapng
+
+# Authentication material and local configuration.
+*.token
+*.tokens
+*.cookie
+*.cookies
+.env
+.env.*
+auth/
+
+# Build products.
+build/
+target/
+dist/
+*.vpk
+*.elf
+*.self
+*.suprx
+
+# Editor and operating-system files.
+.vs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
