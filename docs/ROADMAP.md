@@ -5,9 +5,9 @@ used by an independent desktop reference client.
 
 ## Phase 1: PC client feasibility audit
 
-1. Verify and inventory the official installer.
-2. Inspect the installed application, native libraries, drivers, codecs, and
-   configuration without collecting account data.
+1. [x] Verify and inventory the official installer.
+2. [x] Inspect the installed application, native libraries, drivers, codecs,
+   and configuration without collecting account data.
 3. Observe one user-authorized session and document authentication, catalog,
    allocation, media, input, and shutdown behavior.
 4. Make a go/no-go decision.
@@ -32,4 +32,3 @@ conservative 720p stream profile.
 Add token lifecycle handling, diagnostics, reconnect support, network recovery,
 controller remapping, compatibility testing, packaging, and release
 documentation.
-

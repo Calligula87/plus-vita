@@ -17,10 +17,10 @@ The installer itself is deliberately excluded from this repository.
 
 The file is a signed Windows PE installer and does not expose its payload as a
 normal archive through the built-in archive tools used during the first audit.
-The next step is installation using the default location, without signing into
-PSN, followed by an inventory of installed executables, libraries, drivers,
-resources, configuration, media dependencies, and service endpoints.
+Installation and the initial read-only inventory are complete. Findings are in
+[`installed-client-audit.md`](installed-client-audit.md). The next step is one
+user-authorized, redacted runtime observation of normal login and a short
+streaming session.
 
 No credentials, tokens, cookies, account profiles, or authenticated captures
 will be collected or committed.
-
