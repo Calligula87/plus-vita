@@ -50,3 +50,14 @@ without event or packet logging. Private ETL and JSONL outputs are written under
 Create `captures-private/stop-etw-flow-observer` to stop it before its time
 limit. Review and sanitize decoded event fields before committing any findings.
 
+## Static IPC schema extractor
+
+`extract-ipc-schema.ps1` reads the installed JavaScript bridge and writes a
+reproducible inventory of literal command names, event names, parameter-field
+names, and source hashes. It does not connect to the running client, read
+runtime values, or copy Sony source code into the repository.
+
+```powershell
+.\tools\extract-ipc-schema.ps1
+```
+
