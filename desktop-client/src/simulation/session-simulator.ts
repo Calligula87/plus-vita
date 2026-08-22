@@ -5,6 +5,7 @@ import type { SessionAction } from "../session/reducer.ts";
 import { executeRecovery } from "../session/recovery-executor.ts";
 import { recoveryLimits } from "../session/recovery-policy.ts";
 import { SyntheticTransport } from "./synthetic-transport.ts";
+import type { DiagnosticSink } from "../diagnostics/recorder.ts";
 
 export type ScenarioName =
   | "successful-session"
@@ -59,9 +60,12 @@ const recordCommand = async (
   }
 };
 
-export async function runScenario(scenario: ScenarioName): Promise<SimulationResult> {
+export async function runScenario(
+  scenario: ScenarioName,
+  diagnostics?: DiagnosticSink,
+): Promise<SimulationResult> {
   const transport = new SyntheticTransport();
-  const controller = new SessionController(transport);
+  const controller = new SessionController(transport, diagnostics);
   const steps: SimulationStep[] = [];
 
   recordTransition(controller, steps, "connect", { type: "transport-connected" });
@@ -143,6 +147,7 @@ export async function runScenario(scenario: ScenarioName): Promise<SimulationRes
           controller,
           recoveryLimits.allocationTimeoutMs,
           async () => {},
+          diagnostics,
         );
         steps.push({
           operation: `recovery-${recovery.decision.action}`,
@@ -159,6 +164,7 @@ export async function runScenario(scenario: ScenarioName): Promise<SimulationRes
         controller,
         recoveryLimits.startupTimeoutMs,
         async () => {},
+        diagnostics,
       );
       steps.push({
         operation: `recovery-${recovery.decision.action}`,

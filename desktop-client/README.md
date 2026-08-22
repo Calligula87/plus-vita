@@ -45,3 +45,13 @@ Structured diagnostics are allowlist-only, bounded, and in-memory. See
 `../docs/diagnostics-policy.md`. They contain state/action/command names and
 fixed outcomes only—never IPC values, endpoints, timestamps, or error text.
 
+Run the combined offline feasibility demonstration with:
+
+```powershell
+npm run demo
+```
+
+It executes every synthetic scenario through the controller, recovery policy,
+and diagnostic recorder, then prints deterministic, value-free JSON. It opens
+no external connections.
+
