@@ -27,3 +27,13 @@ Output is JSON Lines under `captures-private/`. That directory is ignored by
 Git and its raw contents must never be committed. Only manually reviewed,
 redacted findings belong under `research/`.
 
+## Header-only UDP observer
+
+`observe-udp-headers.ps1` uses Windows Packet Monitor from an Administrator
+PowerShell session. It filters for IPv4 UDP and logs only 42 bytes per frame:
+the ordinary Ethernet, IPv4, and UDP headers, truncated before application
+payload. It refuses to run if Packet Monitor is active or has existing filters.
+
+The private ETL output is written under `captures-private/`. Create the
+`captures-private/stop-udp-observer` marker to stop it before its time limit.
+
