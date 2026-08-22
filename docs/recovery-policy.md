@@ -22,3 +22,7 @@ transport's legitimate lifecycle.
 The implementation accepts explicit elapsed milliseconds and attempt counts;
 it does not read wall-clock time. This keeps simulation and tests deterministic.
 
+`recovery-executor.ts` applies decisions through the session controller. Delay
+is injected, so production code can use a scheduler while tests advance
+immediately. Retry sends use the already-confirmed `requestGame` shape; startup
+timeout sends `stop`; queue timeout performs no mutation or network action.

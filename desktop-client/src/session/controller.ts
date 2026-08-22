@@ -10,6 +10,7 @@ import type { SessionLifecycleState } from "../ipc/session-schema.ts";
 export class SessionController {
   readonly #transport: SessionTransport;
   #state: SessionLifecycleState = "disconnected";
+  #allocationAttempts = 0;
 
   constructor(transport: SessionTransport) {
     this.#transport = transport;
@@ -19,10 +20,18 @@ export class SessionController {
     return this.#state;
   }
 
+  get allocationAttempts(): number {
+    return this.#allocationAttempts;
+  }
+
   transition(action: SessionAction): TransitionResult {
+    const previousState = this.#state;
     const result = reduceSession(this.#state, action);
     if (result.accepted) {
       this.#state = result.state;
+      if (result.state === "ready" && previousState !== "ready") {
+        this.#allocationAttempts = 0;
+      }
     }
     return result;
   }
@@ -37,6 +46,21 @@ export class SessionController {
       source: "reference-client",
       target: "QAS",
     });
+    this.#allocationAttempts = 1;
+    return transition;
+  }
+
+  async retryRequestGame(forceLogout = false): Promise<TransitionResult> {
+    const transition = this.transition({ type: "allocation-retry-sent" });
+    if (!transition.accepted) return transition;
+
+    await this.#send({
+      command: "requestGame",
+      params: { forceLogout },
+      source: "reference-client",
+      target: "QAS",
+    });
+    this.#allocationAttempts += 1;
     return transition;
   }
 
@@ -64,6 +88,24 @@ export class SessionController {
       target: "QAS",
     });
     return transition;
+  }
+
+  async abortStartup(): Promise<TransitionResult> {
+    if (this.#state !== "starting") {
+      return {
+        state: this.#state,
+        accepted: false,
+        reason: `Startup abort is not valid from ${this.#state}`,
+      };
+    }
+
+    await this.#send({
+      command: "stop",
+      params: {},
+      source: "reference-client",
+      target: "QAS",
+    });
+    return this.transition({ type: "startup-timeout" });
   }
 
   async #send(command: SessionCommand): Promise<void> {

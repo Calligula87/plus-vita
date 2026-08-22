@@ -4,11 +4,13 @@ export type SessionAction =
   | Readonly<{ type: "transport-connected" }>
   | Readonly<{ type: "transport-disconnected" }>
   | Readonly<{ type: "request-game-sent" }>
+  | Readonly<{ type: "allocation-retry-sent" }>
   | Readonly<{ type: "queue-state"; queued: boolean }>
   | Readonly<{ type: "start-game-sent" }>
   | Readonly<{ type: "streaming-state"; streaming: boolean }>
   | Readonly<{ type: "stop-sent" }>
   | Readonly<{ type: "shutdown-state"; shuttingDown: boolean }>
+  | Readonly<{ type: "startup-timeout" }>
   | Readonly<{ type: "fault" }>;
 
 export interface TransitionResult {
@@ -52,6 +54,9 @@ export function reduceSession(
         : reject(state, action);
 
     case "allocation-requested":
+      if (action.type === "allocation-retry-sent") {
+        return { state: "allocation-requested", accepted: true };
+      }
       if (action.type === "queue-state" && action.queued) {
         return { state: "queued", accepted: true };
       }
@@ -70,6 +75,9 @@ export function reduceSession(
       return reject(state, action);
 
     case "starting":
+      if (action.type === "startup-timeout") {
+        return { state: "error", accepted: true };
+      }
       return action.type === "streaming-state" && action.streaming
         ? { state: "streaming", accepted: true }
         : reject(state, action);
@@ -95,4 +103,3 @@ export function reduceSession(
         : reject(state, action);
   }
 }
-

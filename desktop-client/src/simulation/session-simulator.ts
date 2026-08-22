@@ -2,6 +2,8 @@ import type { SessionLifecycleState } from "../ipc/session-schema.ts";
 import { SessionController } from "../session/controller.ts";
 import { adaptSyntheticSessionEvent } from "../session/synthetic-event-adapter.ts";
 import type { SessionAction } from "../session/reducer.ts";
+import { executeRecovery } from "../session/recovery-executor.ts";
+import { recoveryLimits } from "../session/recovery-policy.ts";
 import { SyntheticTransport } from "./synthetic-transport.ts";
 
 export type ScenarioName =
@@ -9,7 +11,9 @@ export type ScenarioName =
   | "queue-then-stream"
   | "shutdown"
   | "network-loss"
-  | "transport-failure";
+  | "transport-failure"
+  | "allocation-retry-exhausted"
+  | "startup-timeout-recovery";
 
 export interface SimulationStep {
   readonly operation: string;
@@ -131,6 +135,38 @@ export async function runScenario(scenario: ScenarioName): Promise<SimulationRes
       transport.failNextSend = true;
       await recordCommand(controller, steps, "requestGame");
       break;
+
+    case "allocation-retry-exhausted":
+      await recordCommand(controller, steps, "requestGame");
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const recovery = await executeRecovery(
+          controller,
+          recoveryLimits.allocationTimeoutMs,
+          async () => {},
+        );
+        steps.push({
+          operation: `recovery-${recovery.decision.action}`,
+          state: controller.state,
+          accepted: recovery.transition?.accepted ?? false,
+        });
+      }
+      break;
+
+    case "startup-timeout-recovery": {
+      await recordCommand(controller, steps, "requestGame");
+      await recordCommand(controller, steps, "startGame");
+      const recovery = await executeRecovery(
+        controller,
+        recoveryLimits.startupTimeoutMs,
+        async () => {},
+      );
+      steps.push({
+        operation: `recovery-${recovery.decision.action}`,
+        state: controller.state,
+        accepted: recovery.transition?.accepted ?? false,
+      });
+      break;
+    }
   }
 
   return {
@@ -147,5 +183,6 @@ export const scenarioNames: readonly ScenarioName[] = [
   "shutdown",
   "network-loss",
   "transport-failure",
+  "allocation-retry-exhausted",
+  "startup-timeout-recovery",
 ];
-

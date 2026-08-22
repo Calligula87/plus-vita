@@ -33,3 +33,20 @@ test("transport failure enters error without recording a command", async () => {
   assert.equal(result.steps.at(-1)?.accepted, false);
 });
 
+test("allocation recovery exhausts after two retries", async () => {
+  const result = await runScenario("allocation-retry-exhausted");
+  assert.equal(result.finalState, "error");
+  assert.deepEqual(result.commandNames, [
+    "requestGame",
+    "requestGame",
+    "requestGame",
+  ]);
+  assert.equal(result.steps.at(-1)?.operation, "recovery-fail");
+});
+
+test("startup timeout recovery sends stop and enters error", async () => {
+  const result = await runScenario("startup-timeout-recovery");
+  assert.equal(result.finalState, "error");
+  assert.deepEqual(result.commandNames, ["requestGame", "startGame", "stop"]);
+  assert.equal(result.steps.at(-1)?.operation, "recovery-stop-and-fail");
+});
