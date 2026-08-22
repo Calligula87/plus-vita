@@ -23,3 +23,8 @@ npm test
 
 All tests use synthetic messages and transports.
 
+Raw event inspection returns only a supported discriminator and sorted field
+names; it never returns input values and rejects sensitive identifier names.
+The synthetic event adapter uses the project-owned `{ type, active }` test
+format, which must not be treated as the unresolved Sony event schema.
+
