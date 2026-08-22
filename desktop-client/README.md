@@ -37,3 +37,7 @@ npm run simulate
 Simulator output contains state, operation, accepted status, and command names
 only. Parameter and event values are never included.
 
+Recovery decisions are pure and deterministic. See
+`../docs/recovery-policy.md` for bounded allocation retries, queue handling,
+startup timeout, and fail-closed stop/shutdown behavior.
+
