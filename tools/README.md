@@ -42,7 +42,10 @@ The private ETL output is written under `captures-private/`. Create the
 `observe-etw-flows.ps1` starts a dedicated Administrator ETW session for TCP/IP
 endpoint, bind, process-hint, connect, close, and address events. Packet capture
 is disabled and the TCP/IP provider's packet keyword is deliberately excluded.
-The private ETL is written under `captures-private/`.
+It also records PlayStation Plus process lifecycle and cumulative packet/byte
+counters filtered to UDP port `2053`. Packet Monitor runs in counters-only mode,
+without event or packet logging. Private ETL and JSONL outputs are written under
+`captures-private/`.
 
 Create `captures-private/stop-etw-flow-observer` to stop it before its time
 limit. Review and sanitize decoded event fields before committing any findings.
