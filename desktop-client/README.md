@@ -28,3 +28,12 @@ names; it never returns input values and rejects sensitive identifier names.
 The synthetic event adapter uses the project-owned `{ type, active }` test
 format, which must not be treated as the unresolved Sony event schema.
 
+Run all offline scenarios with:
+
+```powershell
+npm run simulate
+```
+
+Simulator output contains state, operation, accepted status, and command names
+only. Parameter and event values are never included.
+

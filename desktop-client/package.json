@@ -3,10 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/*.test.ts"
+    "test": "node --test test/*.test.ts",
+    "simulate": "node src/simulation/run.ts"
   },
   "engines": {
     "node": ">=24"
   }
 }
-
