@@ -4,6 +4,7 @@ import {
   type RecoveryDecision,
 } from "./recovery-policy.ts";
 import type { TransitionResult } from "./reducer.ts";
+import type { DiagnosticSink } from "../diagnostics/recorder.ts";
 
 export type Delay = (delayMs: number) => Promise<void>;
 
@@ -16,11 +17,16 @@ export async function executeRecovery(
   controller: SessionController,
   elapsedMs: number,
   delay: Delay,
+  diagnostics?: DiagnosticSink,
 ): Promise<RecoveryExecution> {
   const decision = evaluateRecovery({
     state: controller.state,
     elapsedMs,
     allocationAttempts: controller.allocationAttempts,
+  });
+  diagnostics?.record({
+    event: "recovery-decision",
+    decision: decision.action,
   });
 
   switch (decision.action) {
@@ -54,4 +60,3 @@ export async function executeRecovery(
       };
   }
 }
-

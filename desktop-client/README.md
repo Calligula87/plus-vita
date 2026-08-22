@@ -41,3 +41,7 @@ Recovery decisions are pure and deterministic. See
 `../docs/recovery-policy.md` for bounded allocation retries, queue handling,
 startup timeout, and fail-closed stop/shutdown behavior.
 
+Structured diagnostics are allowlist-only, bounded, and in-memory. See
+`../docs/diagnostics-policy.md`. They contain state/action/command names and
+fixed outcomes only—never IPC values, endpoints, timestamps, or error text.
+
