@@ -70,3 +70,15 @@ The next collector revision should capture at an IP-layer Packet Monitor
 component rather than the Wi-Fi link layer. That would make a fixed
 IPv4-plus-UDP header limit sufficient to decode endpoints while still ending
 before application payload. No broader or longer packet capture is warranted.
+
+## Follow-up component-selection result
+
+A follow-up test selected both the active Wi-Fi adapter's primary component ID
+and the inventory's `TCP/IPv4 - L3/L4` secondary ID. On this Windows build,
+Packet Monitor resolved both selectors to the parent Ethernet-edge component.
+Reducing retention to 28 bytes therefore truncated inside the Ethernet/IP
+headers and did not expose application payload or a decodable stream tuple.
+
+Further Packet Monitor component-selection tests are not warranted. The next
+approach should use TCP/IP ETW endpoint and bind events with packet capture
+explicitly disabled.
