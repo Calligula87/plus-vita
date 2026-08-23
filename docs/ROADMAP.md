@@ -16,18 +16,19 @@ used by an independent desktop reference client.
    - [ ] Establish the Takion handshake, cryptographic key lifecycle, message
      schemas, media framing, and controller wire format without bypassing an
      access control.
-4. [x] Make the current go/no-go decision. See
-   [Phase 1 decision](PHASE1_DECISION.md): a real independent client and direct
-   Vita port are **no-go with the current evidence**. Offline clean-room work
-   may continue; connecting it to Sony services may not.
+4. [x] Make the initial go/no-go decision. The original
+   [Phase 1 decision](PHASE1_DECISION.md) was no-go based on official-client
+   evidence alone. It has now been **reopened** after confirming that Pylux
+   publishes a native direct-cloud implementation. See the
+   [Pylux source audit](../research/pylux-source-audit.md).
 
 Proceed only if the authenticated protocol can be implemented without bypassing
 DRM, authentication, encryption, attestation, or other access controls.
 
 ## Phase 2: Desktop reference client
 
-**Blocked for real service connectivity by the Phase 1 decision.** The current
-implementation is an offline simulator and architecture test, not a Sony
+**Reopened using Pylux/libchiaki as the implementation basis.** The existing
+local implementation remains an offline simulator; it is not itself a Sony
 service client.
 
 Implement the smallest independent client that can authenticate legitimately,

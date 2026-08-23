@@ -2,6 +2,13 @@
 
 Decision date: 2026-08-22
 
+> **Superseded evidence notice (2026-08-23):** This decision accurately records
+> the evidence available from the official PC client audit. It has been reopened
+> because the subsequently identified Pylux project publishes a native direct
+> cloud implementation. See the
+> [Pylux source audit](../research/pylux-source-audit.md). The constraints below
+> remain relevant if that implementation cannot be ported safely to Vita.
+
 ## Verdict
 
 The project is **no-go, at the current evidence boundary, for an independent
