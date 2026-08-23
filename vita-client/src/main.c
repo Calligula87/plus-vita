@@ -276,6 +276,32 @@ static void test_cloudcatalog_unified_cache_hit(void)
 	check(cached == NULL, "unified cache invalidation");
 	if(cached) json_object_put(cached);
 }
+
+#ifdef PLUS_VITA_PUBLIC_APOLLO_TEST
+static size_t public_apollo_game_count;
+static bool public_apollo_complete;
+
+static void test_public_apollo_catalog(void)
+{
+	LogCapture capture = { 0 };
+	ChiakiLog log;
+	chiaki_log_init(&log, 0, capture_log, &capture);
+	plus_vita_http_test_block_network(false);
+	bool complete = false;
+	struct json_object *games = cc_fetch_apollo_fallback(&log, "CH", &complete);
+	size_t count = games ? json_object_array_length(games) : 0;
+	public_apollo_complete = complete;
+	public_apollo_game_count = count;
+	printf("INFO public Apollo CH/EU complete=%d games=%u GETs=%u\n", complete,
+		(unsigned int)count, plus_vita_http_test_network_attempts());
+	check(games != NULL, "public Apollo response");
+	check(complete, "public Apollo traversal complete");
+	check(count > 0, "public Apollo game count");
+	check(plus_vita_http_test_network_attempts() > 0,
+		"public Apollo used native HTTP");
+	if(games) json_object_put(games);
+}
+#endif
 #endif
 
 static void test_takion_protobuf(void)
@@ -582,6 +608,9 @@ int main(void)
 #ifdef __vita__
 	test_cloudcatalog_cache_module();
 	test_cloudcatalog_unified_cache_hit();
+#ifdef PLUS_VITA_PUBLIC_APOLLO_TEST
+	test_public_apollo_catalog();
+#endif
 #endif
 	test_takion_protobuf();
 	test_platform_primitives();
@@ -606,9 +635,25 @@ int main(void)
 	printf("RESULT %s\n", failures ? "FAIL" : "PASS");
 	printf("Checks: %d   Failures: %d\n\n", checks_run, failures);
 	printf("Unified catalog cache-hit test included.\n");
+#ifdef PLUS_VITA_PUBLIC_APOLLO_TEST
+	printf("Public Apollo region: CH/EU\n");
+	printf("Apollo complete: %s   Titles: %u\n",
+		public_apollo_complete ? "yes" : "no",
+		(unsigned int)public_apollo_game_count);
+#endif
 	printf("HTTP attempts: %u   Fetch attempts: %u\n",
 		plus_vita_http_test_network_attempts(),
 		plus_vita_catalog_fetch_guard_attempts());
+#ifdef PLUS_VITA_PUBLIC_APOLLO_TEST
+	printf("Last HTTP: %s native=0x%08X err=%d status=%d\n",
+		plus_vita_http_test_last_stage(),
+		(unsigned int)plus_vita_http_test_last_native_result(),
+		plus_vita_http_test_last_error(),
+		plus_vita_http_test_last_status());
+	printf("TLS error=0x%08X detail=0x%08X\n",
+		(unsigned int)plus_vita_http_test_last_ssl_error(),
+		plus_vita_http_test_last_ssl_detail());
+#endif
 	printf("\nPress X to close. Photograph this screen for the test report.\n");
 	SceCtrlData pad = { 0 };
 	do

@@ -15,10 +15,11 @@ git submodule update --init --recursive
 
 The target compiles Pylux's C base64 and logging implementations, threading,
 protocol sequence/service primitives, nanopb runtime, generated Takion schema,
-and Vita clock/entropy adapters. On launch it runs deterministic tests—including
-a Takion protocol-negotiation round trip and synchronized worker thread—and
-returns nonzero if any test fails. It performs no network access and accepts no
-account data.
+Vita clock/entropy adapters, json-c, and the Pylux catalogue modules. On launch
+it runs deterministic tests—including a Takion protocol-negotiation round trip
+and synchronized worker thread—and returns nonzero if any test fails. The
+optional public Apollo test performs credential-free, read-only Sony catalogue
+GETs; the application accepts no account data.
 
 This deliberately small link proves the compiler, Pylux source boundary, ARM
 ABI, Vita SELF generation, and VPK packaging before larger dependencies are
@@ -26,21 +27,28 @@ introduced.
 
 ## Build
 
-With VitaSDK installed and `VITASDK` set:
+With VitaSDK installed and `VITASDK` set, install the maintained transport
+packages once:
+
+```sh
+vdpm zlib zstd mbedtls curl-mbedtls
+```
+
+Then build:
 
 ```sh
 cmake -S vita-client -B build/vita -DCMAKE_BUILD_TYPE=Release
 cmake --build build/vita --parallel
 ```
 
-The output is `build/vita/plus_vita_smoke.vpk`. GitHub Actions performs the
-same build in the official `vitasdk/vitasdk` container.
+The output is `build/vita/plus_vita_smoke.vpk`. Enable the explicitly
+authorized public CH/EU catalogue hardware test with
+`-DPLUS_VITA_PUBLIC_APOLLO_TEST=ON`; it is off by default.
 
 ## Next increments
 
-1. Add Vita socket initialization, DNS, and loopback-only transport tests.
-2. Replace the blocking timed-join compatibility path with a real Vita timeout.
-3. Add mbedTLS, curl, and json-c for HTTPS and catalogue access.
-4. Add cloud provisioning without logging or persisting credentials.
-5. Add H.264 hardware decode, Opus audio, and Vita controls.
+1. Add cloud authentication without logging or persisting credentials.
+2. Add authenticated catalogue and entitlement resolution.
+3. Add cloud session provisioning and datacenter selection.
+4. Add H.264 hardware decode, Opus audio, and Vita controls.
 

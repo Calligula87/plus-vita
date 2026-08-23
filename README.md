@@ -6,8 +6,10 @@ accessing PlayStation Plus cloud gaming with a legitimate user subscription.
 The project is in a native Vita feasibility phase, using the pinned
 Pylux/libchiaki source as its direct-cloud implementation basis. The current
 VitaSDK smoke target packages successfully and covers protocol serialization,
-platform primitives, network lifecycle, and local TCP sockets. It does not yet
-authenticate or contact PlayStation services.
+platform primitives, network lifecycle, local TCP sockets, and the public Sony
+CH/EU Apollo catalogue. A physical Vita has completed the verified public
+catalogue traversal using an on-device curl/mbedTLS transport; authenticated
+PlayStation sessions are not implemented yet.
 
 ## Project boundaries
 

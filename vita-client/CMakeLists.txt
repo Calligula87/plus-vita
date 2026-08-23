@@ -23,6 +23,8 @@ set(PLUS_VITA_PUBLIC_HTTPS_URL "" CACHE STRING
   "Optional credential-free public HTTPS URL for a system-trust test")
 set(PLUS_VITA_POST_ECHO_URL "" CACHE STRING
   "Optional controlled LAN URL for a physical POST echo test")
+option(PLUS_VITA_PUBLIC_APOLLO_TEST
+  "Enable the explicitly authorized credential-free public Apollo GET test" OFF)
 
 set(PYLUX_ROOT "${CMAKE_CURRENT_LIST_DIR}/../external/pylux")
 set(NANOPB_ROOT "${PYLUX_ROOT}/third-party/nanopb")
@@ -66,6 +68,7 @@ add_executable(${PROJECT_NAME}
   "${PYLUX_ROOT}/lib/src/cloudcatalog_merge.c"
   "${PYLUX_ROOT}/lib/src/cloudcatalog_util.c"
   "${PYLUX_ROOT}/lib/src/cloudcatalog_unified.c"
+  "${PYLUX_ROOT}/lib/src/curl_http.c"
   "${PYLUX_ROOT}/lib/src/log.c"
   "${PYLUX_ROOT}/lib/src/sock.c"
   "${PYLUX_ROOT}/lib/src/thread.c"
@@ -74,7 +77,6 @@ add_executable(${PROJECT_NAME}
   "${NANOPB_ROOT}/pb_encode.c"
   src/platform/random.c
   src/platform/catalog_fetch_guard.c
-  src/platform/curl_escape_compat.c
   src/platform/network.c
   src/platform/secure_http.c
   src/platform/thread_compat.c
@@ -96,6 +98,10 @@ set_source_files_properties("${PYLUX_ROOT}/lib/src/cloudcatalog_fetch.c" PROPERT
     "cc_fetch_psnow_native=plus_vita_disabled_psnow_native_impl;cc_fetch_imagic=plus_vita_disabled_imagic_impl;cc_imagic_result_fini=plus_vita_disabled_imagic_fini_impl;cc_fetch_owned=plus_vita_disabled_owned_impl"
   COMPILE_OPTIONS "-Wno-error=unused-but-set-variable"
 )
+set_source_files_properties("${PYLUX_ROOT}/lib/src/curl_http.c" PROPERTIES
+  COMPILE_DEFINITIONS
+    "cc_http_perform=plus_vita_curl_http_perform;cc_http_response_fini=plus_vita_curl_http_response_fini;cc_http_make_bearer_header=plus_vita_curl_make_bearer_header;cc_http_make_cookie_header=plus_vita_curl_make_cookie_header"
+)
 
 # This pure catalog module does not use json-c. Its private umbrella header
 # includes json-c for sibling modules, so skip that header body for this source.
@@ -109,7 +115,6 @@ set_source_files_properties("${PYLUX_ROOT}/lib/src/thread.c" PROPERTIES
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-	"${CMAKE_CURRENT_LIST_DIR}/src/compat"
 	"${CMAKE_CURRENT_LIST_DIR}/../external"
   "${PYLUX_ROOT}/lib/include"
   "${PYLUX_ROOT}/lib/src"
@@ -133,6 +138,8 @@ if(PLUS_VITA_TLS_PROBE_URL)
 endif()
 
 set(PLUS_VITA_VPK_FILES)
+list(APPEND PLUS_VITA_VPK_FILES FILE
+  "${CMAKE_CURRENT_LIST_DIR}/cacert.pem" "cacert.pem")
 if(PLUS_VITA_TLS_TRUSTED_CA_FILE)
   if(NOT EXISTS "${PLUS_VITA_TLS_TRUSTED_CA_FILE}")
     message(FATAL_ERROR "Trusted test CA does not exist: ${PLUS_VITA_TLS_TRUSTED_CA_FILE}")
@@ -151,6 +158,10 @@ if(PLUS_VITA_POST_ECHO_URL)
     PLUS_VITA_POST_ECHO_URL="${PLUS_VITA_POST_ECHO_URL}"
   )
 endif()
+if(PLUS_VITA_PUBLIC_APOLLO_TEST)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE
+    PLUS_VITA_PUBLIC_APOLLO_TEST=1)
+endif()
 
 target_link_options(${PROJECT_NAME} PRIVATE
   -Wl,--gc-sections
@@ -158,11 +169,21 @@ target_link_options(${PROJECT_NAME} PRIVATE
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
 	json-c
+  curl
+  mbedtls
+  mbedx509
+  mbedcrypto
+  z
+  zstd
   pthread
   SceLibKernel_stub
   SceCtrl_stub
   SceDisplay_stub
   SceKernelThreadMgr_stub
+  SceKernelModulemgr_stub
+  SceIofilemgr_stub
+  SceProcessmgr_stub
+  SceRtc_stub
   SceSysmem_stub
   SceNet_stub
   SceNetCtl_stub

@@ -14,8 +14,8 @@ static bool network_owned;
 #include <stdlib.h>
 #include <string.h>
 
-#define PLUS_VITA_HTTP_POOL_SIZE (1024 * 1024)
-#define PLUS_VITA_SSL_POOL_SIZE (1024 * 1024)
+#define PLUS_VITA_HTTP_POOL_SIZE (2 * 1024 * 1024)
+#define PLUS_VITA_SSL_POOL_SIZE (4 * 1024 * 1024)
 
 static bool module_owned;
 static bool http_initialized;
