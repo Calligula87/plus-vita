@@ -170,6 +170,37 @@ static void test_cloudcatalog_merge_module(void)
 	json_object_put(owned);
 }
 
+#ifdef __vita__
+static void test_cloudcatalog_cache_module(void)
+{
+	static const char cache_dir[] = "ux0:data/plus-vita-cache-test";
+	static const char cache_key[] = "fixture:v8";
+	LogCapture capture = { 0 };
+	ChiakiLog log;
+	chiaki_log_init(&log, 0, capture_log, &capture);
+	cc_cache_remove(cache_dir, cache_key);
+	check(cc_cache_ensure_dir(cache_dir) == CHIAKI_ERR_SUCCESS,
+		"cloud cache directory");
+	struct json_object *fixture = json_tokener_parse(
+		"{\"schemaVersion\":8,\"marker\":\"vita-cache\"}");
+	check(fixture != NULL, "cloud cache fixture parse");
+	check(fixture && cc_cache_write(&log, cache_dir, cache_key, fixture)
+		== CHIAKI_ERR_SUCCESS, "cloud cache write");
+	struct json_object *loaded = cc_cache_read(
+		&log, cache_dir, cache_key, 60L * 60L * 1000L);
+	check(loaded != NULL, "cloud cache read");
+	check(loaded && cc_json_int(loaded, "schemaVersion") == 8
+		&& strcmp(cc_json_str(loaded, "marker"), "vita-cache") == 0,
+		"cloud cache content");
+	if(loaded) json_object_put(loaded);
+	if(fixture) json_object_put(fixture);
+	cc_cache_remove(cache_dir, cache_key);
+	loaded = cc_cache_read(&log, cache_dir, cache_key, 60L * 60L * 1000L);
+	check(loaded == NULL, "cloud cache removal");
+	if(loaded) json_object_put(loaded);
+}
+#endif
+
 static void test_takion_protobuf(void)
 {
 	uint8_t wire[64] = { 0 };
@@ -470,6 +501,9 @@ int main(void)
 	test_protocol_primitives();
 	test_cloudcatalog_locale_module();
 	test_cloudcatalog_merge_module();
+#ifdef __vita__
+	test_cloudcatalog_cache_module();
+#endif
 	test_takion_protobuf();
 	test_platform_primitives();
 	test_http_request_helpers();

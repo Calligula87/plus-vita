@@ -214,8 +214,19 @@ purchaseable. All six merge assertions and the complete suite passed with zero
 failures. No network request, Sony endpoint, credential, token, or cookie was
 used.
 
+## Vita catalog cache layer
+
+Pylux's unmodified `cloudcatalog_cache.c` now links into the Vita target. A
+physical hardware test used the isolated `ux0:data/plus-vita-cache-test`
+directory and a synthetic schema-v8 object. Directory creation, fixture parse,
+atomic cache write, cache read, content integrity, and key removal all passed;
+the complete suite ended with zero failures. The test removed its cache file
+before exit and performed no network request or authentication.
+
 ## Next milestone
 
-Link and exercise Pylux's cache layer using a Vita-owned data directory and
-offline synthetic catalog JSON. Only after cache read/write/invalidation is
-proven should the public, unauthenticated catalog-fetch path be considered.
+Link the credential-free portions of Pylux's unified fetch coordinator and
+validate its cache-hit path entirely offline. This should prove that a complete
+preassembled catalog can flow through the public API without invoking HTTP.
+Only after that guard is demonstrated should a public unauthenticated catalog
+request be enabled.

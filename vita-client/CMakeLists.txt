@@ -61,6 +61,7 @@ add_executable(${PROJECT_NAME}
   generated/takion.pb.c
   "${PYLUX_ROOT}/lib/src/base64.c"
   "${PYLUX_ROOT}/lib/src/cloudcatalog_consts.c"
+  "${PYLUX_ROOT}/lib/src/cloudcatalog_cache.c"
   "${PYLUX_ROOT}/lib/src/cloudcatalog_merge.c"
   "${PYLUX_ROOT}/lib/src/cloudcatalog_util.c"
   "${PYLUX_ROOT}/lib/src/log.c"
