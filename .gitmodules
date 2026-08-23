@@ -1,3 +1,6 @@
 [submodule "external/pylux"]
 	path = external/pylux
 	url = https://github.com/ForWard-Technologies-LLC/Pylux.git
+[submodule "external/json-c"]
+	path = external/json-c
+	url = https://github.com/json-c/json-c.git

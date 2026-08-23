@@ -197,8 +197,25 @@ body is skipped for this one translation unit through the existing include
 guard, allowing the exact upstream source to compile without introducing a
 fake or unused JSON dependency.
 
+## Vita json-c and catalog merge pipeline
+
+The repository now pins Pylux's own json-c dependency version,
+`json-c-0.17-20230812`, as a submodule. Its static library cross-compiles for
+Vita after explicitly declaring the C/math facilities supplied by VitaSDK's
+newlib and disabling static PIC, whose relocation type is not accepted by the
+Vita SELF converter. Pylux's unmodified `cloudcatalog_util.c` and
+`cloudcatalog_merge.c` modules link against that port.
+
+An embedded offline fixture contains one owned PS5 title and one unowned,
+stream-capable PS5 title. On physical Vita hardware, json-c parsed both fixture
+documents; Pylux assembled a non-NULL schema-v8 envelope with exactly two
+games, sorted the owned title first, and categorized the unowned title as
+purchaseable. All six merge assertions and the complete suite passed with zero
+failures. No network request, Sony endpoint, credential, token, or cookie was
+used.
+
 ## Next milestone
 
-Port json-c to the Vita target and link Pylux's pure catalog JSON helpers and
-merge pipeline. Validate catalog assembly from embedded synthetic fixtures
-before enabling any authenticated fetch or Sony service request.
+Link and exercise Pylux's cache layer using a Vita-owned data directory and
+offline synthetic catalog JSON. Only after cache read/write/invalidation is
+proven should the public, unauthenticated catalog-fetch path be considered.

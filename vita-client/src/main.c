@@ -13,6 +13,7 @@
 #include <pb_encode.h>
 #include <takion.pb.h>
 #include <curl_http.h>
+#include "cloudcatalog_internal.h"
 #include "platform/network.h"
 #include "platform/secure_http.h"
 
@@ -118,6 +119,55 @@ static void test_cloudcatalog_locale_module(void)
 		"cloud supported locale first");
 	check(strcmp(chiaki_cloud_supported_locale(count), "") == 0,
 		"cloud supported locale bounds");
+}
+
+static void test_cloudcatalog_merge_module(void)
+{
+	static const char browse_json[] =
+		"[{\"productId\":\"PPSA-ZEBRA_00\",\"name\":\"Zebra\","
+		"\"device\":[\"PS5\"],\"streamingSupported\":true,\"conceptId\":1},"
+		"{\"productId\":\"PPSA-APPLE_00\",\"name\":\"Apple\","
+		"\"device\":[\"PS5\"],\"streamingSupported\":true,\"conceptId\":2}]";
+	static const char owned_json[] =
+		"[{\"serviceType\":\"pscloud\",\"id\":\"PPSA-ZEBRA_00\","
+		"\"product_id\":\"PPSA-ZEBRA_00\",\"conceptId\":1,"
+		"\"feature_type\":3,\"game_meta\":{\"name\":\"Zebra\"}}]";
+	struct json_object *browse = json_tokener_parse(browse_json);
+	struct json_object *owned = json_tokener_parse(owned_json);
+	check(browse && owned, "cloud catalog fixture parse");
+	if(!browse || !owned)
+	{
+		if(browse) json_object_put(browse);
+		if(owned) json_object_put(owned);
+		return;
+	}
+	CCAssembleInput input = {
+		.imagic_browse = browse,
+		.owned_cross_ref = owned,
+		.settled_locale = "en-US",
+	};
+	LogCapture capture = { 0 };
+	ChiakiLog log;
+	chiaki_log_init(&log, 0, capture_log, &capture);
+	struct json_object *envelope = cc_assemble_unified_catalog(&log, &input);
+	check(envelope != NULL, "cloud catalog fixture assembly");
+	struct json_object *games = envelope ? cc_json_arr(envelope, "games") : NULL;
+	check(games && json_object_array_length(games) == 2,
+		"cloud catalog fixture total");
+	check(envelope && cc_json_int(envelope, "schemaVersion")
+		== CHIAKI_CLOUDCATALOG_SCHEMA_VERSION,
+		"cloud catalog schema version");
+	struct json_object *first = games ? json_object_array_get_idx(games, 0) : NULL;
+	struct json_object *second = games ? json_object_array_get_idx(games, 1) : NULL;
+	check(first && cc_json_bool(first, "isOwned")
+		&& strcmp(cc_json_str(first, "name"), "Zebra") == 0,
+		"cloud catalog owned-first order");
+	check(second && strcmp(cc_json_str(second, "name"), "Apple") == 0
+		&& strcmp(cc_json_str(second, "category"), "purchaseable") == 0,
+		"cloud catalog purchaseable route");
+	if(envelope) json_object_put(envelope);
+	json_object_put(browse);
+	json_object_put(owned);
 }
 
 static void test_takion_protobuf(void)
@@ -419,6 +469,7 @@ int main(void)
 	test_base64();
 	test_protocol_primitives();
 	test_cloudcatalog_locale_module();
+	test_cloudcatalog_merge_module();
 	test_takion_protobuf();
 	test_platform_primitives();
 	test_http_request_helpers();

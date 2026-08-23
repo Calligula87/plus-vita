@@ -26,6 +26,7 @@ set(PLUS_VITA_POST_ECHO_URL "" CACHE STRING
 
 set(PYLUX_ROOT "${CMAKE_CURRENT_LIST_DIR}/../external/pylux")
 set(NANOPB_ROOT "${PYLUX_ROOT}/third-party/nanopb")
+set(JSONC_ROOT "${CMAKE_CURRENT_LIST_DIR}/../external/json-c")
 set(VITASDK_COMMON "$ENV{VITASDK}/share/gcc-arm-vita-eabi/samples/common")
 if(NOT EXISTS "${PYLUX_ROOT}/lib/src/base64.c")
   message(FATAL_ERROR "Pylux submodule is missing; run: git submodule update --init --recursive")
@@ -33,12 +34,35 @@ endif()
 if(NOT EXISTS "${NANOPB_ROOT}/pb_encode.c")
   message(FATAL_ERROR "Pylux nanopb submodule is missing; run: git submodule update --init --recursive")
 endif()
+if(NOT EXISTS "${JSONC_ROOT}/json_object.c")
+  message(FATAL_ERROR "json-c submodule is missing; run: git submodule update --init --recursive")
+endif()
+
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
+set(BUILD_APPS OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(DISABLE_WERROR ON CACHE BOOL "" FORCE)
+set(DISABLE_THREAD_LOCAL_STORAGE ON CACHE BOOL "" FORCE)
+set(DISABLE_EXTRA_LIBS ON CACHE BOOL "" FORCE)
+set(DISABLE_STATIC_FPIC ON CACHE BOOL "" FORCE)
+# VitaSDK/newlib exposes these, but json-c only probes several of them when
+# CMake's target platform is classified as UNIX. The Vita toolchain is Generic.
+set(HAVE_SNPRINTF 1 CACHE INTERNAL "VitaSDK provides snprintf" FORCE)
+set(HAVE_VASPRINTF 1 CACHE INTERNAL "VitaSDK provides vasprintf" FORCE)
+set(HAVE_DECL_INFINITY 1 CACHE INTERNAL "VitaSDK provides INFINITY" FORCE)
+set(HAVE_DECL_ISINF 1 CACHE INTERNAL "VitaSDK provides isinf" FORCE)
+set(HAVE_DECL_ISNAN 1 CACHE INTERNAL "VitaSDK provides isnan" FORCE)
+set(HAVE_DECL_NAN 1 CACHE INTERNAL "VitaSDK provides NAN" FORCE)
+add_subdirectory("${JSONC_ROOT}" "${CMAKE_BINARY_DIR}/json-c" EXCLUDE_FROM_ALL)
 
 add_executable(${PROJECT_NAME}
   src/main.c
   generated/takion.pb.c
   "${PYLUX_ROOT}/lib/src/base64.c"
   "${PYLUX_ROOT}/lib/src/cloudcatalog_consts.c"
+  "${PYLUX_ROOT}/lib/src/cloudcatalog_merge.c"
+  "${PYLUX_ROOT}/lib/src/cloudcatalog_util.c"
   "${PYLUX_ROOT}/lib/src/log.c"
   "${PYLUX_ROOT}/lib/src/sock.c"
   "${PYLUX_ROOT}/lib/src/thread.c"
@@ -59,6 +83,9 @@ add_executable(${PROJECT_NAME}
 set_source_files_properties("${PYLUX_ROOT}/lib/src/log.c" PROPERTIES
   COMPILE_OPTIONS "-Wno-error=sign-compare"
 )
+set_source_files_properties("${PYLUX_ROOT}/lib/src/cloudcatalog_merge.c" PROPERTIES
+  COMPILE_OPTIONS "-Wno-error=format-truncation"
+)
 
 # This pure catalog module does not use json-c. Its private umbrella header
 # includes json-c for sibling modules, so skip that header body for this source.
@@ -72,6 +99,7 @@ set_source_files_properties("${PYLUX_ROOT}/lib/src/thread.c" PROPERTIES
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
+	"${CMAKE_CURRENT_LIST_DIR}/../external"
   "${PYLUX_ROOT}/lib/include"
   "${PYLUX_ROOT}/lib/src"
   "${NANOPB_ROOT}"
@@ -118,6 +146,7 @@ target_link_options(${PROJECT_NAME} PRIVATE
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
+	json-c
   pthread
   SceLibKernel_stub
   SceCtrl_stub
