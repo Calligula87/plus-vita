@@ -241,9 +241,24 @@ The hardware harness now clears its scrolling diagnostic output at completion
 and presents a compact final screen with result, assertion totals, and network
 attempt counters so future photographs are unambiguous.
 
+## Offline Apollo fetch gate
+
+Pylux's real `cloudcatalog_fetch.c` now compiles for Vita with its public Apollo
+fallback symbol enabled. A small compatibility implementation supplies the
+four libcurl URL-escaping calls used by this source without linking libcurl.
+Authenticated PS Now, Imagic, and owned-library entry points are renamed away
+and remain satisfied by fail-closed guards; client device-ID generation also
+fails closed.
+
+On physical Vita hardware, RFC 3986 escaping of reserved characters, valid
+Sony container country/language extraction, and malformed container rejection
+all passed. The clean summary reported 74 checks, zero failures, zero HTTP
+attempts, and zero coordinator fetch attempts. No network request or account
+data was used.
+
 ## Next milestone
 
-Replace only the public Apollo fallback guard with its real fetch path while
-keeping authentication, owned-library calls, and Sony account credentials
-disabled. First validate URL escaping and response parsing against controlled
-offline fixtures; then explicitly authorize the first public catalog request.
+With explicit tester approval, invoke only the real public Apollo fallback for
+one region through the tested native HTTP backend. Keep all authenticated paths
+renamed/blocked, use no credential or token, cap the returned data as already
+enforced by the HTTP adapter, and report only status/count—not catalog content.

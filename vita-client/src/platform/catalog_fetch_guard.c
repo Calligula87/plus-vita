@@ -34,15 +34,6 @@ CCNativeResult cc_fetch_psnow_native(ChiakiLog *log, const char *npsso,
 	return CC_NATIVE_FATAL;
 }
 
-struct json_object *cc_fetch_apollo_fallback(ChiakiLog *log,
-	const char *account_country, bool *out_complete)
-{
-	(void)log; (void)account_country;
-	attempts++;
-	if(out_complete) *out_complete = false;
-	return NULL;
-}
-
 bool cc_fetch_imagic(ChiakiLog *log, const char *stored_locale,
 	CCImagicResult *out)
 {
@@ -69,4 +60,11 @@ CCOwnedResult cc_fetch_owned(ChiakiLog *log, const char *npsso,
 	if(out_games) *out_games = NULL;
 	if(out_component_ids) *out_component_ids = NULL;
 	return CC_OWNED_ERROR;
+}
+
+ChiakiErrorCode chiaki_holepunch_generate_client_device_uid(
+	char *out, size_t *out_size)
+{
+	(void)out; (void)out_size;
+	return CHIAKI_ERR_CANCELED;
 }

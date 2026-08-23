@@ -13,6 +13,7 @@
 #include <pb_encode.h>
 #include <takion.pb.h>
 #include <curl_http.h>
+#include <curl/curl.h>
 #include "cloudcatalog_internal.h"
 #include "platform/network.h"
 #include "platform/secure_http.h"
@@ -125,6 +126,27 @@ static void test_cloudcatalog_locale_module(void)
 		"cloud supported locale first");
 	check(strcmp(chiaki_cloud_supported_locale(count), "") == 0,
 		"cloud supported locale bounds");
+}
+
+static void test_cloudcatalog_fetch_parsers(void)
+{
+	CURL *curl = curl_easy_init();
+	char *escaped = curl ? curl_easy_escape(curl, "scope one:/?+", 0) : NULL;
+	check(escaped && strcmp(escaped, "scope%20one%3A%2F%3F%2B") == 0,
+		"cloud fetch URL escaping");
+	curl_free(escaped);
+	curl_easy_cleanup(curl);
+	char country[8] = { 0 };
+	char language[8] = { 0 };
+	check(cc_parse_container_store_locale(
+		"https://store.example/container/FI/fi/19/PPSA00001_00",
+		country, sizeof(country), language, sizeof(language))
+		&& strcmp(country, "FI") == 0 && strcmp(language, "fi") == 0,
+		"cloud fetch store locale parse");
+	check(!cc_parse_container_store_locale("https://store.example/not-container",
+		country, sizeof(country), language, sizeof(language))
+		&& country[0] == 0 && language[0] == 0,
+		"cloud fetch store locale rejection");
 }
 
 static void test_cloudcatalog_merge_module(void)
@@ -555,6 +577,7 @@ int main(void)
 	test_base64();
 	test_protocol_primitives();
 	test_cloudcatalog_locale_module();
+	test_cloudcatalog_fetch_parsers();
 	test_cloudcatalog_merge_module();
 #ifdef __vita__
 	test_cloudcatalog_cache_module();

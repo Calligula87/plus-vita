@@ -62,6 +62,7 @@ add_executable(${PROJECT_NAME}
   "${PYLUX_ROOT}/lib/src/base64.c"
   "${PYLUX_ROOT}/lib/src/cloudcatalog_consts.c"
   "${PYLUX_ROOT}/lib/src/cloudcatalog_cache.c"
+  "${PYLUX_ROOT}/lib/src/cloudcatalog_fetch.c"
   "${PYLUX_ROOT}/lib/src/cloudcatalog_merge.c"
   "${PYLUX_ROOT}/lib/src/cloudcatalog_util.c"
   "${PYLUX_ROOT}/lib/src/cloudcatalog_unified.c"
@@ -73,6 +74,7 @@ add_executable(${PROJECT_NAME}
   "${NANOPB_ROOT}/pb_encode.c"
   src/platform/random.c
   src/platform/catalog_fetch_guard.c
+  src/platform/curl_escape_compat.c
   src/platform/network.c
   src/platform/secure_http.c
   src/platform/thread_compat.c
@@ -89,6 +91,11 @@ set_source_files_properties("${PYLUX_ROOT}/lib/src/log.c" PROPERTIES
 set_source_files_properties("${PYLUX_ROOT}/lib/src/cloudcatalog_merge.c" PROPERTIES
   COMPILE_OPTIONS "-Wno-error=format-truncation"
 )
+set_source_files_properties("${PYLUX_ROOT}/lib/src/cloudcatalog_fetch.c" PROPERTIES
+  COMPILE_DEFINITIONS
+    "cc_fetch_psnow_native=plus_vita_disabled_psnow_native_impl;cc_fetch_imagic=plus_vita_disabled_imagic_impl;cc_imagic_result_fini=plus_vita_disabled_imagic_fini_impl;cc_fetch_owned=plus_vita_disabled_owned_impl"
+  COMPILE_OPTIONS "-Wno-error=unused-but-set-variable"
+)
 
 # This pure catalog module does not use json-c. Its private umbrella header
 # includes json-c for sibling modules, so skip that header body for this source.
@@ -102,6 +109,7 @@ set_source_files_properties("${PYLUX_ROOT}/lib/src/thread.c" PROPERTIES
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
+	"${CMAKE_CURRENT_LIST_DIR}/src/compat"
 	"${CMAKE_CURRENT_LIST_DIR}/../external"
   "${PYLUX_ROOT}/lib/include"
   "${PYLUX_ROOT}/lib/src"
