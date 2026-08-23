@@ -21,6 +21,8 @@ set(PLUS_VITA_TLS_TRUSTED_CA_FILE "" CACHE FILEPATH
   "Optional DER test CA packaged for the controlled trusted-HTTPS test")
 set(PLUS_VITA_PUBLIC_HTTPS_URL "" CACHE STRING
   "Optional credential-free public HTTPS URL for a system-trust test")
+set(PLUS_VITA_POST_ECHO_URL "" CACHE STRING
+  "Optional controlled LAN URL for a physical POST echo test")
 
 set(PYLUX_ROOT "${CMAKE_CURRENT_LIST_DIR}/../external/pylux")
 set(NANOPB_ROOT "${PYLUX_ROOT}/third-party/nanopb")
@@ -96,6 +98,11 @@ endif()
 if(PLUS_VITA_PUBLIC_HTTPS_URL)
   target_compile_definitions(${PROJECT_NAME} PRIVATE
     PLUS_VITA_PUBLIC_HTTPS_URL="${PLUS_VITA_PUBLIC_HTTPS_URL}"
+  )
+endif()
+if(PLUS_VITA_POST_ECHO_URL)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE
+    PLUS_VITA_POST_ECHO_URL="${PLUS_VITA_POST_ECHO_URL}"
   )
 endif()
 

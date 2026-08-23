@@ -359,6 +359,40 @@ static void test_public_https(void)
 }
 #endif
 
+#if defined(__vita__) && defined(PLUS_VITA_POST_ECHO_URL)
+static void test_post_echo(void)
+{
+	static const char body[] = "plus-vita-post=takion-12";
+	static const char *const headers[] = {
+		"Content-Type: application/x-www-form-urlencoded",
+		"X-Plus-Vita-Test: compat-post",
+	};
+	CCHttpRequest request = {
+		.method = "POST",
+		.url = PLUS_VITA_POST_ECHO_URL,
+		.headers = headers,
+		.header_count = 2,
+		.body = body,
+		.body_len = sizeof(body) - 1,
+		.capture_headers = true,
+		.timeout_ms = 10000,
+	};
+	CCHttpResponse response = { 0 };
+	ChiakiErrorCode result = cc_http_perform(NULL, &request, &response);
+	printf("INFO compat POST result=%d status=%ld body=%u headers=%u\n",
+		result, response.status_code, (unsigned int)response.size,
+		(unsigned int)response.headers_size);
+	check(result == CHIAKI_ERR_SUCCESS, "compat HTTP POST transport");
+	check(response.status_code == 200, "compat HTTP POST status");
+	check(response.data && response.size == sizeof(body) - 1
+		&& memcmp(response.data, body, sizeof(body) - 1) == 0,
+		"compat HTTP POST body echo");
+	check(response.headers && strstr(response.headers, "X-Plus-Vita-Echo: ok"),
+		"compat HTTP POST response header");
+	cc_http_response_fini(&response);
+}
+#endif
+
 int main(void)
 {
 #ifdef __vita__
@@ -381,6 +415,9 @@ int main(void)
 #endif
 #if defined(__vita__) && defined(PLUS_VITA_PUBLIC_HTTPS_URL)
 	test_public_https();
+#endif
+#if defined(__vita__) && defined(PLUS_VITA_POST_ECHO_URL)
+	test_post_echo();
 #endif
 	printf("RESULT %s (%d failure%s)\n", failures ? "FAIL" : "PASS", failures,
 		failures == 1 ? "" : "s");

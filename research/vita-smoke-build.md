@@ -172,9 +172,18 @@ only through the earlier low-level probe.
 No Sony endpoint, account credential, token, cookie, or submitted data was
 used by this test.
 
+A following controlled LAN test exercised the same compatibility boundary's
+POST path against a one-request echo server at `192.168.1.4:18080`. The server
+accepted only the predefined 24-byte `plus-vita-post=takion-12` payload with
+the expected content type and `X-Plus-Vita-Test` header, then echoed the body
+and returned `X-Plus-Vita-Echo: ok`. On physical Vita hardware,
+`cc_http_perform()` returned success with HTTP status 200, the exact 24-byte
+echo, and 121 bytes of captured headers. All four POST assertions and the
+complete suite passed with zero failures. The one-request server exited after
+the test; the temporary private-network firewall rule was then removed.
+
 ## Next milestone
 
-Exercise the compatibility backend against a controlled POST echo endpoint,
-then link the first credential-free Pylux cloud module. Authentication and
-Sony service requests remain disabled until those request semantics and module
-integration pass independently.
+Link the first credential-free Pylux cloud module behind the tested HTTP
+boundary. Authentication and Sony service requests remain disabled until that
+module integration passes independently.
