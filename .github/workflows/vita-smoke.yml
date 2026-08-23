@@ -1,0 +1,42 @@
+name: Vita smoke build
+
+on:
+  push:
+    paths:
+      - ".github/workflows/vita-smoke.yml"
+      - ".gitmodules"
+      - "external/pylux"
+      - "vita-client/**"
+  pull_request:
+    paths:
+      - ".github/workflows/vita-smoke.yml"
+      - ".gitmodules"
+      - "external/pylux"
+      - "vita-client/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: vitasdk/vitasdk:latest
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -S vita-client -B build/vita -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build VPK
+        run: cmake --build build/vita --parallel
+
+      - name: Verify package
+        run: test -s build/vita/plus_vita_smoke.vpk
+
+      - name: Upload VPK
+        uses: actions/upload-artifact@v4
+        with:
+          name: plus-vita-smoke
+          path: build/vita/plus_vita_smoke.vpk
+          if-no-files-found: error

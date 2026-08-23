@@ -1,0 +1,3 @@
+[submodule "external/pylux"]
+	path = external/pylux
+	url = https://github.com/ForWard-Technologies-LLC/Pylux.git
