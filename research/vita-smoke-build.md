@@ -22,7 +22,8 @@ The resulting VPK contains exactly the required initial package entries:
 - `eboot.bin`
 - `sce_sys/param.sfo`
 
-The VPK is 29,424 bytes. Build products remain ignored and are not committed.
+The current expanded VPK is 56,934 bytes. Build products remain ignored and
+are not committed.
 
 ## Test coverage
 
@@ -37,8 +38,6 @@ proves the compiler, ARM ABI, pinned Pylux source boundary, Vita SELF tooling,
 and VPK packaging. Execution of the embedded assertions on physical hardware
 remains a separate test.
 
-## Next milestone
-
 ## Takion/nanopb expansion
 
 On 2026-08-23 the target was expanded with Pylux's pinned nanopb runtime and C
@@ -52,8 +51,6 @@ All 15 assertions passed, including encoding and decoding a
 Generated `takion.pb.c/.h` files are committed so Vita builds do not require
 Python or protoc. They must be regenerated whenever the pinned Pylux schema or
 nanopb revision changes.
-
-## Next milestone
 
 ## Vita platform primitives
 
@@ -73,9 +70,22 @@ timeout. Before production recovery logic relies on timed joins, the thread
 backend must migrate that operation to a native SceKernel thread wait with a
 real timeout.
 
+## Network primitives
+
+On 2026-08-23 the Vita target added explicit `SCE_SYSMODULE_NET` ownership,
+one MiB of aligned `sceNetInit()` memory, deterministic shutdown, and Pylux's
+socket nonblocking helper. The Vita ARM target links `SceNet` and
+`SceSysmodule` and packages successfully.
+
+The matching Ubuntu executable passed all 32 assertions. Its network probe
+uses `getaddrinfo()` with `AI_NUMERICHOST` for `127.0.0.1`, creates a TCP
+listener and client, toggles nonblocking mode, and verifies a byte-for-byte
+loopback exchange. This exercises the resolver ABI and socket operations while
+guaranteeing that no DNS query or external connection is made. Physical Vita
+execution remains required to verify runtime behavior on the device.
+
 ## Next milestone
 
-Add Vita socket initialization, DNS, and a local loopback-only transport test.
-Do not contact Sony endpoints yet. HTTPS, catalogue access, account access, and
-credentials remain disabled until the networking primitives are isolated and
-verified.
+Isolate and cross-compile the TLS/HTTP dependency chain required by Pylux,
+starting with certificate verification and an offline in-process TLS test. Do
+not contact Sony endpoints, use account credentials, or persist tokens yet.

@@ -5,15 +5,21 @@
 #include <chiaki/log.h>
 #include <chiaki/random.h>
 #include <chiaki/seqnum.h>
+#include <chiaki/sock.h>
 #include <chiaki/thread.h>
 #include <chiaki/time.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <takion.pb.h>
+#include "platform/network.h"
 
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <netinet/in.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/socket.h>
 
 static int failures;
 
@@ -159,6 +165,76 @@ static void test_platform_primitives(void)
 	check(chiaki_mutex_fini(&mutex) == CHIAKI_ERR_SUCCESS, "mutex fini");
 }
 
+static int run_loopback_probe(void)
+{
+	static const char payload[] = "vita-loopback";
+	struct addrinfo hints = { 0 };
+	struct addrinfo *resolved = NULL;
+	struct sockaddr_in address = { 0 };
+	socklen_t address_size = sizeof(address);
+	chiaki_socket_t server = CHIAKI_INVALID_SOCKET;
+	chiaki_socket_t client = CHIAKI_INVALID_SOCKET;
+	chiaki_socket_t peer = CHIAKI_INVALID_SOCKET;
+	char received[sizeof(payload)] = { 0 };
+	int result = -1;
+
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_NUMERICHOST;
+	if(getaddrinfo("127.0.0.1", NULL, &hints, &resolved) != 0 || !resolved)
+		goto cleanup;
+
+	server = socket(AF_INET, SOCK_STREAM, 0);
+	if(CHIAKI_SOCKET_IS_INVALID(server))
+		goto cleanup;
+	int reuse = 1;
+	if(setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0)
+		goto cleanup;
+	memcpy(&address, resolved->ai_addr, sizeof(address));
+	address.sin_port = 0;
+	if(bind(server, (struct sockaddr *)&address, sizeof(address)) < 0
+		|| getsockname(server, (struct sockaddr *)&address, &address_size) < 0
+		|| listen(server, 1) < 0)
+		goto cleanup;
+
+	client = socket(AF_INET, SOCK_STREAM, 0);
+	if(CHIAKI_SOCKET_IS_INVALID(client)
+		|| connect(client, (struct sockaddr *)&address, sizeof(address)) < 0)
+		goto cleanup;
+	peer = accept(server, NULL, NULL);
+	if(CHIAKI_SOCKET_IS_INVALID(peer))
+		goto cleanup;
+	if(chiaki_socket_set_nonblock(client, true) != CHIAKI_ERR_SUCCESS
+		|| chiaki_socket_set_nonblock(client, false) != CHIAKI_ERR_SUCCESS)
+		goto cleanup;
+	if(send(client, payload, sizeof(payload), 0) != (ssize_t)sizeof(payload)
+		|| recv(peer, received, sizeof(received), 0) != (ssize_t)sizeof(received)
+		|| memcmp(received, payload, sizeof(payload)) != 0)
+		goto cleanup;
+	result = 0;
+
+cleanup:
+	if(!CHIAKI_SOCKET_IS_INVALID(peer))
+		CHIAKI_SOCKET_CLOSE(peer);
+	if(!CHIAKI_SOCKET_IS_INVALID(client))
+		CHIAKI_SOCKET_CLOSE(client);
+	if(!CHIAKI_SOCKET_IS_INVALID(server))
+		CHIAKI_SOCKET_CLOSE(server);
+	if(resolved)
+		freeaddrinfo(resolved);
+	return result;
+}
+
+static void test_network_primitives(void)
+{
+	check(plus_vita_network_init() == CHIAKI_ERR_SUCCESS, "network initialization");
+	check(plus_vita_network_is_initialized(), "network initialized state");
+	if(plus_vita_network_is_initialized())
+		check(run_loopback_probe() == 0, "numeric resolution and loopback exchange");
+	plus_vita_network_fini();
+	check(!plus_vita_network_is_initialized(), "network shutdown state");
+}
+
 int main(void)
 {
 	printf("plus-vita native libchiaki smoke test\n");
@@ -166,6 +242,7 @@ int main(void)
 	test_protocol_primitives();
 	test_takion_protobuf();
 	test_platform_primitives();
+	test_network_primitives();
 	printf("RESULT %s (%d failure%s)\n", failures ? "FAIL" : "PASS", failures,
 		failures == 1 ? "" : "s");
 	return failures ? 1 : 0;

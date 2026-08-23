@@ -3,10 +3,11 @@
 Research and development for a native PlayStation Vita client capable of
 accessing PlayStation Plus cloud gaming with a legitimate user subscription.
 
-The project is currently in the feasibility phase. The first objective is to
-document the official PC client's architecture, authentication flow, session
-negotiation, media transport, codecs, and controller protocol. A desktop
-reference client will be attempted before Vita implementation begins.
+The project is in a native Vita feasibility phase, using the pinned
+Pylux/libchiaki source as its direct-cloud implementation basis. The current
+VitaSDK smoke target packages successfully and covers protocol serialization,
+platform primitives, network lifecycle, and local TCP sockets. It does not yet
+authenticate or contact PlayStation services.
 
 ## Project boundaries
 
@@ -21,8 +22,8 @@ reference client will be attempted before Vita implementation begins.
 
 - `docs/` — architecture decisions, feasibility notes, and roadmap.
 - `research/` — sanitized protocol and client research.
-- `desktop-client/` — future platform-neutral reference client.
-- `vita-client/` — future VitaSDK client.
+- `desktop-client/` — platform-neutral reference experiments.
+- `vita-client/` — native VitaSDK feasibility client.
 - `tools/` — future analysis and development utilities.
 - `local-artifacts/` — ignored location for private local files; never commit it.
 

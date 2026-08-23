@@ -30,11 +30,13 @@ add_executable(${PROJECT_NAME}
   generated/takion.pb.c
   "${PYLUX_ROOT}/lib/src/base64.c"
   "${PYLUX_ROOT}/lib/src/log.c"
+  "${PYLUX_ROOT}/lib/src/sock.c"
   "${PYLUX_ROOT}/lib/src/thread.c"
   "${NANOPB_ROOT}/pb_common.c"
   "${NANOPB_ROOT}/pb_decode.c"
   "${NANOPB_ROOT}/pb_encode.c"
   src/platform/random.c
+  src/platform/network.c
   src/platform/thread_compat.c
   src/platform/time.c
 )
@@ -71,6 +73,8 @@ target_link_options(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE
   pthread
   SceLibKernel_stub
+  SceNet_stub
+  SceSysmodule_stub
 )
 
 vita_create_self(${PROJECT_NAME}.self ${PROJECT_NAME} UNSAFE)
