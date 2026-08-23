@@ -2,6 +2,7 @@
 
 #include <chiaki/base64.h>
 #include <chiaki/common.h>
+#include <chiaki/cloudcatalog.h>
 #include <chiaki/log.h>
 #include <chiaki/random.h>
 #include <chiaki/seqnum.h>
@@ -102,6 +103,21 @@ static void test_protocol_primitives(void)
 	check(chiaki_service_type_is_cloud(CHIAKI_SERVICE_TYPE_PSCLOUD), "PS Cloud is cloud");
 	check(!chiaki_service_type_is_cloud(CHIAKI_SERVICE_TYPE_REMOTE_PLAY),
 		"Remote Play is not cloud");
+}
+
+static void test_cloudcatalog_locale_module(void)
+{
+	char language[8] = { 0 };
+	chiaki_cloud_gaikai_language("DE-de", language, sizeof(language));
+	check(strcmp(language, "de") == 0, "cloud locale Gaikai language");
+	chiaki_cloud_gaikai_language(NULL, language, sizeof(language));
+	check(strcmp(language, "en") == 0, "cloud locale default language");
+	size_t count = chiaki_cloud_supported_locale_count();
+	check(count >= 10, "cloud supported locale count");
+	check(strcmp(chiaki_cloud_supported_locale(0), "en-US") == 0,
+		"cloud supported locale first");
+	check(strcmp(chiaki_cloud_supported_locale(count), "") == 0,
+		"cloud supported locale bounds");
 }
 
 static void test_takion_protobuf(void)
@@ -402,6 +418,7 @@ int main(void)
 	printf("plus-vita native libchiaki smoke test\n");
 	test_base64();
 	test_protocol_primitives();
+	test_cloudcatalog_locale_module();
 	test_takion_protobuf();
 	test_platform_primitives();
 	test_http_request_helpers();

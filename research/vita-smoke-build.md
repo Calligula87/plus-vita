@@ -182,8 +182,23 @@ echo, and 121 bytes of captured headers. All four POST assertions and the
 complete suite passed with zero failures. The one-request server exited after
 the test; the temporary private-network firewall rule was then removed.
 
+## First Pylux cloud module
+
+The unmodified Pylux `cloudcatalog_consts.c` module now links into the Vita
+target through its public `chiaki/cloudcatalog.h` API. This pure module performs
+no HTTP, authentication, cache I/O, or Sony service access. Five assertions on
+physical Vita hardware passed: Gaikai language conversion, default language,
+supported-locale count, first-locale ordering, and out-of-range handling. The
+complete suite again ended with zero failures.
+
+The source's private umbrella header normally imports json-c for its sibling
+catalog modules even though this locale/region module does not use json-c. Its
+body is skipped for this one translation unit through the existing include
+guard, allowing the exact upstream source to compile without introducing a
+fake or unused JSON dependency.
+
 ## Next milestone
 
-Link the first credential-free Pylux cloud module behind the tested HTTP
-boundary. Authentication and Sony service requests remain disabled until that
-module integration passes independently.
+Port json-c to the Vita target and link Pylux's pure catalog JSON helpers and
+merge pipeline. Validate catalog assembly from embedded synthetic fixtures
+before enabling any authenticated fetch or Sony service request.

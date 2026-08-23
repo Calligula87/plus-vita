@@ -38,6 +38,7 @@ add_executable(${PROJECT_NAME}
   src/main.c
   generated/takion.pb.c
   "${PYLUX_ROOT}/lib/src/base64.c"
+  "${PYLUX_ROOT}/lib/src/cloudcatalog_consts.c"
   "${PYLUX_ROOT}/lib/src/log.c"
   "${PYLUX_ROOT}/lib/src/sock.c"
   "${PYLUX_ROOT}/lib/src/thread.c"
@@ -57,6 +58,12 @@ add_executable(${PROJECT_NAME}
 # Keep -Werror for our code and suppress only that upstream diagnostic.
 set_source_files_properties("${PYLUX_ROOT}/lib/src/log.c" PROPERTIES
   COMPILE_OPTIONS "-Wno-error=sign-compare"
+)
+
+# This pure catalog module does not use json-c. Its private umbrella header
+# includes json-c for sibling modules, so skip that header body for this source.
+set_source_files_properties("${PYLUX_ROOT}/lib/src/cloudcatalog_consts.c" PROPERTIES
+  COMPILE_DEFINITIONS "CHIAKI_CLOUDCATALOG_INTERNAL_H=1"
 )
 
 # Supply the Vita-only declaration/redirect for GNU pthread_clockjoin_np.
