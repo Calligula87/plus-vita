@@ -146,7 +146,26 @@ tester.
 
 ## Next milestone
 
-Port Pylux's curl-based request abstraction onto the verified native SceHttp
-backend, beginning with credential-free request construction, bounded response
-buffers, headers, timeouts, and error mapping. Authentication and Sony service
-requests remain disabled until that adapter is independently tested.
+## Pylux-compatible SceHttp backend
+
+On 2026-08-23 the target added a Vita implementation of Pylux's
+`cc_http_perform()` boundary without linking libcurl. It supports the GET and
+POST methods currently used by the cloud modules, request headers and bodies,
+redirect policy, timeout conversion, status codes, raw response headers,
+`Location` extraction, NUL-terminated response bodies, and deterministic
+cleanup. Response bodies are capped at four MiB and headers at 64 KiB so a
+remote response cannot exhaust Vita memory without bound. SceHttp errors map to
+Chiaki transport or timeout errors.
+
+The Vita target builds and packages with warnings treated as errors. The
+matching Ubuntu suite passes all 46 offline assertions, including Pylux-format
+bearer/cookie headers, response ownership cleanup, and invalid request
+rejection. No request, credential, or Sony endpoint is used by this adapter
+milestone.
+
+## Next milestone
+
+Exercise the new compatibility backend itself against a controlled,
+credential-free public GET, then a controlled POST echo endpoint. Only after
+those request semantics pass should the first Pylux cloud module be linked;
+authentication and Sony service requests remain disabled.

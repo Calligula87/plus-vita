@@ -11,6 +11,7 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <takion.pb.h>
+#include <curl_http.h>
 #include "platform/network.h"
 #include "platform/secure_http.h"
 
@@ -18,6 +19,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -171,6 +173,34 @@ static void test_platform_primitives(void)
 		"thread synchronized result");
 
 	check(chiaki_mutex_fini(&mutex) == CHIAKI_ERR_SUCCESS, "mutex fini");
+}
+
+static void test_http_request_helpers(void)
+{
+	char *bearer = NULL;
+	char *cookie = NULL;
+	check(cc_http_make_bearer_header(&bearer, "test-token") == CHIAKI_ERR_SUCCESS,
+		"HTTP bearer header allocation");
+	check(bearer && strcmp(bearer, "Authorization: Bearer test-token") == 0,
+		"HTTP bearer header value");
+	check(cc_http_make_cookie_header(&cookie, "test", "value") == CHIAKI_ERR_SUCCESS,
+		"HTTP cookie header allocation");
+	check(cookie && strcmp(cookie, "Cookie: test=value") == 0,
+		"HTTP cookie header value");
+	free(bearer);
+	free(cookie);
+
+	CCHttpResponse response = {
+		.data = malloc(2), .headers = malloc(2), .redirect_url = malloc(2),
+		.size = 1, .headers_size = 1, .status_code = 200,
+	};
+	cc_http_response_fini(&response);
+	check(!response.data && !response.headers && !response.redirect_url
+		&& response.size == 0 && response.status_code == 0,
+		"HTTP response cleanup");
+	CCHttpRequest invalid_request = { 0 };
+	check(cc_http_perform(NULL, &invalid_request, &response) == CHIAKI_ERR_INVALID_DATA,
+		"HTTP request validation");
 }
 
 static int run_loopback_probe(void)
@@ -332,6 +362,7 @@ int main(void)
 	test_protocol_primitives();
 	test_takion_protobuf();
 	test_platform_primitives();
+	test_http_request_helpers();
 	test_network_primitives();
 	test_secure_http_lifecycle();
 #if defined(__vita__) && defined(PLUS_VITA_TLS_PROBE_URL)

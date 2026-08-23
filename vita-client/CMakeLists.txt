@@ -47,6 +47,7 @@ add_executable(${PROJECT_NAME}
   src/platform/secure_http.c
   src/platform/thread_compat.c
   src/platform/time.c
+  src/platform/vita_cc_http.c
   "${VITASDK_COMMON}/debugScreen.c"
 )
 
@@ -63,6 +64,7 @@ set_source_files_properties("${PYLUX_ROOT}/lib/src/thread.c" PROPERTIES
 
 target_include_directories(${PROJECT_NAME} PRIVATE
   "${PYLUX_ROOT}/lib/include"
+  "${PYLUX_ROOT}/lib/src"
   "${NANOPB_ROOT}"
   "${CMAKE_CURRENT_LIST_DIR}/generated"
   "${VITASDK_COMMON}"
