@@ -22,7 +22,7 @@ The resulting VPK contains exactly the required initial package entries:
 - `eboot.bin`
 - `sce_sys/param.sfo`
 
-The current expanded VPK is 56,934 bytes. Build products remain ignored and
+The current expanded VPK is 57,836 bytes. Build products remain ignored and
 are not committed.
 
 ## Test coverage
@@ -84,8 +84,23 @@ loopback exchange. This exercises the resolver ABI and socket operations while
 guaranteeing that no DNS query or external connection is made. Physical Vita
 execution remains required to verify runtime behavior on the device.
 
+## Native secure HTTP lifecycle
+
+On 2026-08-23 the target added a Vita adapter around Sony's native HTTPS and
+SSL facilities. It loads `SCE_SYSMODULE_HTTPS`, initializes separate one MiB
+HTTP and SSL pools, tracks whether it owns the underlying network lifecycle,
+and tears each layer down in reverse order. The ARM target links
+`SceHttp_stub` and `SceSsl_stub` and packages successfully.
+
+The host lifecycle test verifies both ownership cases: HTTPS releases a network
+instance it created itself, but preserves a network instance supplied by its
+caller. No request, TLS handshake, certificate, hostname, credential, or
+external endpoint is used by this milestone. Actual SceHttp/SceSsl runtime
+initialization still needs confirmation on physical Vita hardware.
+
 ## Next milestone
 
-Isolate and cross-compile the TLS/HTTP dependency chain required by Pylux,
-starting with certificate verification and an offline in-process TLS test. Do
-not contact Sony endpoints, use account credentials, or persist tokens yet.
+Install and run the VPK on a physical Vita to confirm the 40 embedded
+assertions, especially native network and HTTPS/SSL initialization. After that,
+add a certificate-verification test with a controlled local endpoint before
+any PlayStation service request or account credential is enabled.

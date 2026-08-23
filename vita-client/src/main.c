@@ -12,6 +12,7 @@
 #include <pb_encode.h>
 #include <takion.pb.h>
 #include "platform/network.h"
+#include "platform/secure_http.h"
 
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -235,6 +236,25 @@ static void test_network_primitives(void)
 	check(!plus_vita_network_is_initialized(), "network shutdown state");
 }
 
+static void test_secure_http_lifecycle(void)
+{
+	check(plus_vita_secure_http_init() == CHIAKI_ERR_SUCCESS,
+		"secure HTTP initialization");
+	check(plus_vita_secure_http_is_initialized(), "secure HTTP initialized state");
+	check(plus_vita_network_is_initialized(), "secure HTTP network dependency");
+	plus_vita_secure_http_fini();
+	check(!plus_vita_secure_http_is_initialized(), "secure HTTP shutdown state");
+	check(!plus_vita_network_is_initialized(), "secure HTTP releases owned network");
+
+	check(plus_vita_network_init() == CHIAKI_ERR_SUCCESS,
+		"shared network initialization");
+	check(plus_vita_secure_http_init() == CHIAKI_ERR_SUCCESS,
+		"secure HTTP with shared network");
+	plus_vita_secure_http_fini();
+	check(plus_vita_network_is_initialized(), "secure HTTP preserves shared network");
+	plus_vita_network_fini();
+}
+
 int main(void)
 {
 	printf("plus-vita native libchiaki smoke test\n");
@@ -243,6 +263,7 @@ int main(void)
 	test_takion_protobuf();
 	test_platform_primitives();
 	test_network_primitives();
+	test_secure_http_lifecycle();
 	printf("RESULT %s (%d failure%s)\n", failures ? "FAIL" : "PASS", failures,
 		failures == 1 ? "" : "s");
 	return failures ? 1 : 0;

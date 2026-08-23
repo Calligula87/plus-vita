@@ -37,6 +37,7 @@ add_executable(${PROJECT_NAME}
   "${NANOPB_ROOT}/pb_encode.c"
   src/platform/random.c
   src/platform/network.c
+  src/platform/secure_http.c
   src/platform/thread_compat.c
   src/platform/time.c
 )
@@ -74,6 +75,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   pthread
   SceLibKernel_stub
   SceNet_stub
+  SceHttp_stub
+  SceSsl_stub
   SceSysmodule_stub
 )
 
