@@ -22,7 +22,7 @@ The resulting VPK contains exactly the required initial package entries:
 - `eboot.bin`
 - `sce_sys/param.sfo`
 
-The current expanded VPK is 57,836 bytes. Build products remain ignored and
+The current hardware-test VPK is 63,491 bytes. Build products remain ignored and
 are not committed.
 
 ## Test coverage
@@ -104,3 +104,8 @@ Install and run the VPK on a physical Vita to confirm the 40 embedded
 assertions, especially native network and HTTPS/SSL initialization. After that,
 add a certificate-verification test with a controlled local endpoint before
 any PlayStation service request or account credential is enabled.
+
+The hardware build now renders its assertions through VitaSDK's debug-screen
+facility and waits for the Cross button after the final result, allowing the
+tester to photograph failures. Installation and reporting steps are documented
+in `docs/HARDWARE_TEST.md`.

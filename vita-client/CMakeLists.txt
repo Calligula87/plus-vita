@@ -18,6 +18,7 @@ set(VITA_VERSION "00.01")
 
 set(PYLUX_ROOT "${CMAKE_CURRENT_LIST_DIR}/../external/pylux")
 set(NANOPB_ROOT "${PYLUX_ROOT}/third-party/nanopb")
+set(VITASDK_COMMON "$ENV{VITASDK}/share/gcc-arm-vita-eabi/samples/common")
 if(NOT EXISTS "${PYLUX_ROOT}/lib/src/base64.c")
   message(FATAL_ERROR "Pylux submodule is missing; run: git submodule update --init --recursive")
 endif()
@@ -40,6 +41,7 @@ add_executable(${PROJECT_NAME}
   src/platform/secure_http.c
   src/platform/thread_compat.c
   src/platform/time.c
+  "${VITASDK_COMMON}/debugScreen.c"
 )
 
 # Pylux currently has one signed/unsigned comparison in its formatting path.
@@ -57,6 +59,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   "${PYLUX_ROOT}/lib/include"
   "${NANOPB_ROOT}"
   "${CMAKE_CURRENT_LIST_DIR}/generated"
+  "${VITASDK_COMMON}"
 )
 
 target_compile_options(${PROJECT_NAME} PRIVATE
@@ -74,6 +77,10 @@ target_link_options(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE
   pthread
   SceLibKernel_stub
+  SceCtrl_stub
+  SceDisplay_stub
+  SceKernelThreadMgr_stub
+  SceSysmem_stub
   SceNet_stub
   SceHttp_stub
   SceSsl_stub

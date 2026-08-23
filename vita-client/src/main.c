@@ -22,6 +22,13 @@
 #include <string.h>
 #include <sys/socket.h>
 
+#ifdef __vita__
+#include <debugScreen.h>
+#include <psp2/ctrl.h>
+#include <psp2/kernel/threadmgr.h>
+#define printf psvDebugScreenPrintf
+#endif
+
 static int failures;
 
 typedef struct log_capture_t
@@ -257,6 +264,10 @@ static void test_secure_http_lifecycle(void)
 
 int main(void)
 {
+#ifdef __vita__
+	psvDebugScreenInit();
+	sceCtrlSetSamplingMode(SCE_CTRL_MODE_DIGITAL);
+#endif
 	printf("plus-vita native libchiaki smoke test\n");
 	test_base64();
 	test_protocol_primitives();
@@ -266,5 +277,15 @@ int main(void)
 	test_secure_http_lifecycle();
 	printf("RESULT %s (%d failure%s)\n", failures ? "FAIL" : "PASS", failures,
 		failures == 1 ? "" : "s");
+#ifdef __vita__
+	printf("\nPress X to close. Photograph this screen for the test report.\n");
+	SceCtrlData pad = { 0 };
+	do
+	{
+		sceKernelDelayThread(20000);
+		sceCtrlPeekBufferPositive(0, &pad, 1);
+	} while(!(pad.buttons & SCE_CTRL_CROSS));
+	psvDebugScreenFinish();
+#endif
 	return failures ? 1 : 0;
 }
