@@ -16,6 +16,10 @@
 #include "cloudcatalog_internal.h"
 #include "platform/network.h"
 #include "platform/secure_http.h"
+#ifdef __vita__
+#include "platform/catalog_fetch_guard.h"
+#include "platform/vita_cc_http_test.h"
+#endif
 
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -34,6 +38,7 @@
 #endif
 
 static int failures;
+static int checks_run;
 
 typedef struct log_capture_t
 {
@@ -71,6 +76,7 @@ static void capture_log(ChiakiLogLevel level, const char *message, void *user)
 
 static void check(int condition, const char *name)
 {
+	checks_run++;
 	if(condition)
 		printf("PASS %s\n", name);
 	else
@@ -198,6 +204,55 @@ static void test_cloudcatalog_cache_module(void)
 	loaded = cc_cache_read(&log, cache_dir, cache_key, 60L * 60L * 1000L);
 	check(loaded == NULL, "cloud cache removal");
 	if(loaded) json_object_put(loaded);
+}
+
+static void test_cloudcatalog_unified_cache_hit(void)
+{
+	static const char cache_dir[] = "ux0:data/plus-vita-unified-test";
+	LogCapture capture = { 0 };
+	ChiakiLog log;
+	chiaki_log_init(&log, 0, capture_log, &capture);
+	chiaki_cloudcatalog_invalidate_cache(cache_dir);
+	struct json_object *cached = json_tokener_parse(
+		"{\"schemaVersion\":8,\"total\":1,\"nativeMode\":false,"
+		"\"fallbackRegion\":\"US\",\"resolvedStoreLang\":\"\","
+		"\"settledLocale\":\"en-US\",\"warning\":\"\",\"games\":[{"
+		"\"productId\":\"PPSA-OFFLINE_00\",\"name\":\"Offline Fixture\","
+		"\"category\":\"purchaseable\",\"serviceType\":\"pscloud\","
+		"\"platform\":\"ps5\",\"isOwned\":false}]}" );
+	check(cached != NULL, "unified cache fixture parse");
+	check(cached && cc_cache_write(&log, cache_dir, "unified_catalog_v3", cached)
+		== CHIAKI_ERR_SUCCESS, "unified cache seed");
+	if(cached) json_object_put(cached);
+	plus_vita_catalog_fetch_guard_reset();
+	plus_vita_http_test_block_network(true);
+	ChiakiCloudCatalogConfig config = {
+		.locale = "en-US",
+		.cache_dir = cache_dir,
+	};
+	ChiakiCloudCatalogResult result = { 0 };
+	ChiakiErrorCode error = chiaki_cloudcatalog_fetch_unified(&config, &result, &log);
+	check(error == CHIAKI_ERR_SUCCESS && result.json,
+		"unified public API cache hit");
+	check(plus_vita_http_test_network_attempts() == 0,
+		"unified cache hit zero HTTP");
+	check(plus_vita_catalog_fetch_guard_attempts() == 0,
+		"unified cache hit zero fetch");
+	struct json_object *envelope = result.json ? json_tokener_parse(result.json) : NULL;
+	struct json_object *games = envelope ? cc_json_arr(envelope, "games") : NULL;
+	check(envelope && cc_json_int(envelope, "schemaVersion") == 8
+		&& games && json_object_array_length(games) == 1,
+		"unified cache contract");
+	struct json_object *game = games ? json_object_array_get_idx(games, 0) : NULL;
+	check(game && strcmp(cc_json_str(game, "productId"),
+		"PPSA-OFFLINE_00") == 0, "unified cache game content");
+	if(envelope) json_object_put(envelope);
+	chiaki_cloudcatalog_result_fini(&result);
+	chiaki_cloudcatalog_invalidate_cache(cache_dir);
+	plus_vita_http_test_block_network(false);
+	cached = cc_cache_read(&log, cache_dir, "unified_catalog_v3", CC_CACHE_TTL_MS);
+	check(cached == NULL, "unified cache invalidation");
+	if(cached) json_object_put(cached);
 }
 #endif
 
@@ -503,6 +558,7 @@ int main(void)
 	test_cloudcatalog_merge_module();
 #ifdef __vita__
 	test_cloudcatalog_cache_module();
+	test_cloudcatalog_unified_cache_hit();
 #endif
 	test_takion_protobuf();
 	test_platform_primitives();
@@ -521,9 +577,15 @@ int main(void)
 #if defined(__vita__) && defined(PLUS_VITA_POST_ECHO_URL)
 	test_post_echo();
 #endif
-	printf("RESULT %s (%d failure%s)\n", failures ? "FAIL" : "PASS", failures,
-		failures == 1 ? "" : "s");
 #ifdef __vita__
+	printf("\033[2J\033[H");
+	printf("plus-vita hardware test complete\n\n");
+	printf("RESULT %s\n", failures ? "FAIL" : "PASS");
+	printf("Checks: %d   Failures: %d\n\n", checks_run, failures);
+	printf("Unified catalog cache-hit test included.\n");
+	printf("HTTP attempts: %u   Fetch attempts: %u\n",
+		plus_vita_http_test_network_attempts(),
+		plus_vita_catalog_fetch_guard_attempts());
 	printf("\nPress X to close. Photograph this screen for the test report.\n");
 	SceCtrlData pad = { 0 };
 	do
@@ -532,6 +594,9 @@ int main(void)
 		sceCtrlPeekBufferPositive(0, &pad, 1);
 	} while(!(pad.buttons & SCE_CTRL_CROSS));
 	psvDebugScreenFinish();
+#else
+	printf("RESULT %s (%d failure%s)\n", failures ? "FAIL" : "PASS", failures,
+		failures == 1 ? "" : "s");
 #endif
 	return failures ? 1 : 0;
 }

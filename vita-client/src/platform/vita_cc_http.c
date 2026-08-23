@@ -11,6 +11,20 @@
 #define PLUS_VITA_HTTP_DEFAULT_TIMEOUT_MS 30000L
 
 #ifdef __vita__
+static bool test_network_blocked;
+static unsigned int test_network_attempts;
+
+void plus_vita_http_test_block_network(bool blocked)
+{
+	test_network_blocked = blocked;
+	test_network_attempts = 0;
+}
+
+unsigned int plus_vita_http_test_network_attempts(void)
+{
+	return test_network_attempts;
+}
+
 static ChiakiErrorCode append_bytes(char **data, size_t *size, const void *chunk,
 	size_t chunk_size, size_t limit)
 {
@@ -114,6 +128,11 @@ ChiakiErrorCode cc_http_perform(ChiakiLog *log, const CCHttpRequest *request,
 	if(!request || !request->url || !response)
 		return CHIAKI_ERR_INVALID_DATA;
 	memset(response, 0, sizeof(*response));
+	if(test_network_blocked)
+	{
+		test_network_attempts++;
+		return CHIAKI_ERR_CANCELED;
+	}
 	int method = request_method(request->method);
 	if(method < 0)
 		return CHIAKI_ERR_INVALID_DATA;

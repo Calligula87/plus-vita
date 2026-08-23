@@ -64,6 +64,7 @@ add_executable(${PROJECT_NAME}
   "${PYLUX_ROOT}/lib/src/cloudcatalog_cache.c"
   "${PYLUX_ROOT}/lib/src/cloudcatalog_merge.c"
   "${PYLUX_ROOT}/lib/src/cloudcatalog_util.c"
+  "${PYLUX_ROOT}/lib/src/cloudcatalog_unified.c"
   "${PYLUX_ROOT}/lib/src/log.c"
   "${PYLUX_ROOT}/lib/src/sock.c"
   "${PYLUX_ROOT}/lib/src/thread.c"
@@ -71,6 +72,7 @@ add_executable(${PROJECT_NAME}
   "${NANOPB_ROOT}/pb_decode.c"
   "${NANOPB_ROOT}/pb_encode.c"
   src/platform/random.c
+  src/platform/catalog_fetch_guard.c
   src/platform/network.c
   src/platform/secure_http.c
   src/platform/thread_compat.c

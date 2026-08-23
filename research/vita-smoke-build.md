@@ -223,10 +223,27 @@ atomic cache write, cache read, content integrity, and key removal all passed;
 the complete suite ended with zero failures. The test removed its cache file
 before exit and performed no network request or authentication.
 
+## Offline unified-catalog public API
+
+Pylux's unmodified `cloudcatalog_unified.c` coordinator now links into the Vita
+target. The physical test preseeded a complete schema-v8 unified cache, called
+the public `chiaki_cloudcatalog_fetch_unified()` API, parsed its returned JSON,
+verified the contract and game identity, then invalidated the cache. Both the
+coordinator fetch guard and native HTTP boundary recorded exactly zero calls.
+All eight assertions and the complete suite passed with zero failures.
+
+Network-producing fetch implementations are deliberately not linked in this
+milestone. Fail-closed stubs count and reject any coordinator fall-through,
+while the native HTTP adapter independently counts and rejects any request.
+This makes the cache-hit proof robust against an accidental missed branch.
+
+The hardware harness now clears its scrolling diagnostic output at completion
+and presents a compact final screen with result, assertion totals, and network
+attempt counters so future photographs are unambiguous.
+
 ## Next milestone
 
-Link the credential-free portions of Pylux's unified fetch coordinator and
-validate its cache-hit path entirely offline. This should prove that a complete
-preassembled catalog can flow through the public API without invoking HTTP.
-Only after that guard is demonstrated should a public unauthenticated catalog
-request be enabled.
+Replace only the public Apollo fallback guard with its real fetch path while
+keeping authentication, owned-library calls, and Sony account credentials
+disabled. First validate URL escaping and response parsing against controlled
+offline fixtures; then explicitly authorize the first public catalog request.
