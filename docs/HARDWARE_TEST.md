@@ -26,3 +26,17 @@ The expected result is `RESULT PASS (0 failures)`. If the application freezes,
 turns black, or closes by itself, report the last visible line and what the
 network/Wi-Fi state was. Do not enter credentials or launch another game during
 this test.
+
+## Controlled certificate-rejection build
+
+An optional physical test can be enabled at configure time with
+`PLUS_VITA_TLS_PROBE_URL`. The URL must point to a controlled local HTTPS
+server using a deliberately untrusted certificate. This test passes only when
+SceHttps reports `SCE_HTTPS_ERROR_SSL_UNKNOWN_CA`; accepting the certificate,
+failing to connect, or receiving an unrelated TLS error fails the assertion.
+
+The repository includes `tools/local_https_probe_server.ps1`, which generates
+an ephemeral self-signed certificate in memory and serves TLS 1.2. The server
+does not persist its private key or collect request data. Any temporary inbound
+firewall rule must be restricted to the Vita's LAN address and removed after
+the test.

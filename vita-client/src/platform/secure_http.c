@@ -91,3 +91,50 @@ bool plus_vita_secure_http_is_initialized(void)
 {
 	return initialized;
 }
+
+#ifdef __vita__
+ChiakiErrorCode plus_vita_secure_http_probe_untrusted(
+	const char *url, PlusVitaTlsProbeResult *result)
+{
+	if(!initialized || !url || !result)
+		return CHIAKI_ERR_UNINITIALIZED;
+
+	result->send_result = 0;
+	result->ssl_error = 0;
+	result->ssl_detail = 0;
+	int template_id = sceHttpCreateTemplate(
+		"plus-vita-local-cert-probe/1", SCE_HTTP_VERSION_1_1, 0);
+	if(template_id < 0)
+		return CHIAKI_ERR_NETWORK;
+	sceHttpSetConnectTimeOut(template_id, 5000000);
+	sceHttpSetSendTimeOut(template_id, 5000000);
+	sceHttpSetRecvTimeOut(template_id, 5000000);
+
+	int connection_id = sceHttpCreateConnectionWithURL(template_id, url, 0);
+	if(connection_id < 0)
+	{
+		sceHttpDeleteTemplate(template_id);
+		return CHIAKI_ERR_NETWORK;
+	}
+	int request_id = sceHttpCreateRequestWithURL(
+		connection_id, SCE_HTTP_METHOD_GET, url, 0);
+	if(request_id < 0)
+	{
+		sceHttpDeleteConnection(connection_id);
+		sceHttpDeleteTemplate(template_id);
+		return CHIAKI_ERR_NETWORK;
+	}
+
+	result->send_result = sceHttpSendRequest(request_id, NULL, 0);
+	int ssl_result = sceHttpsGetSslError(
+		request_id, &result->ssl_error, &result->ssl_detail);
+	bool rejected_unknown_ca = result->send_result < 0 && ssl_result >= 0
+		&& (result->ssl_detail & SCE_HTTPS_ERROR_SSL_UNKNOWN_CA) != 0;
+
+	sceHttpAbortRequest(request_id);
+	sceHttpDeleteRequest(request_id);
+	sceHttpDeleteConnection(connection_id);
+	sceHttpDeleteTemplate(template_id);
+	return rejected_unknown_ca ? CHIAKI_ERR_SUCCESS : CHIAKI_ERR_INVALID_RESPONSE;
+}
+#endif

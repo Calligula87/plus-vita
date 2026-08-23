@@ -262,6 +262,24 @@ static void test_secure_http_lifecycle(void)
 	plus_vita_network_fini();
 }
 
+#if defined(__vita__) && defined(PLUS_VITA_TLS_PROBE_URL)
+static void test_untrusted_local_certificate(void)
+{
+	static const char probe_url[] = PLUS_VITA_TLS_PROBE_URL;
+	PlusVitaTlsProbeResult result = { 0 };
+	check(plus_vita_secure_http_init() == CHIAKI_ERR_SUCCESS,
+		"local TLS probe initialization");
+	ChiakiErrorCode probe_result = plus_vita_secure_http_probe_untrusted(
+		probe_url, &result);
+	printf("INFO TLS send=0x%08x ssl=0x%08x detail=0x%08x\n",
+		(unsigned int)result.send_result, (unsigned int)result.ssl_error,
+		result.ssl_detail);
+	check(probe_result == CHIAKI_ERR_SUCCESS,
+		"untrusted local certificate rejected");
+	plus_vita_secure_http_fini();
+}
+#endif
+
 int main(void)
 {
 #ifdef __vita__
@@ -275,6 +293,9 @@ int main(void)
 	test_platform_primitives();
 	test_network_primitives();
 	test_secure_http_lifecycle();
+#if defined(__vita__) && defined(PLUS_VITA_TLS_PROBE_URL)
+	test_untrusted_local_certificate();
+#endif
 	printf("RESULT %s (%d failure%s)\n", failures ? "FAIL" : "PASS", failures,
 		failures == 1 ? "" : "s");
 #ifdef __vita__

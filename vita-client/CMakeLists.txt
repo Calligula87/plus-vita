@@ -15,6 +15,8 @@ include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 set(VITA_APP_NAME "plus-vita smoke")
 set(VITA_TITLEID "PLVT00001")
 set(VITA_VERSION "00.01")
+set(PLUS_VITA_TLS_PROBE_URL "" CACHE STRING
+  "Optional controlled HTTPS URL for the physical certificate-rejection test")
 
 set(PYLUX_ROOT "${CMAKE_CURRENT_LIST_DIR}/../external/pylux")
 set(NANOPB_ROOT "${PYLUX_ROOT}/third-party/nanopb")
@@ -69,6 +71,12 @@ target_compile_options(${PROJECT_NAME} PRIVATE
   -ffunction-sections
   -fdata-sections
 )
+
+if(PLUS_VITA_TLS_PROBE_URL)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE
+    PLUS_VITA_TLS_PROBE_URL="${PLUS_VITA_TLS_PROBE_URL}"
+  )
+endif()
 
 target_link_options(${PROJECT_NAME} PRIVATE
   -Wl,--gc-sections
