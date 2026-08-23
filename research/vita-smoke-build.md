@@ -109,3 +109,18 @@ The hardware build now renders its assertions through VitaSDK's debug-screen
 facility and waits for the Cross button after the final result, allowing the
 tester to photograph failures. Installation and reporting steps are documented
 in `docs/HARDWARE_TEST.md`.
+
+## Physical hardware results
+
+On 2026-08-23 all 40 baseline assertions passed on physical Vita hardware.
+Native `sceNetInit`, numeric resolution, TCP loopback, nonblocking sockets,
+`sceHttpInit`, and `sceSslInit` all executed successfully on the device.
+
+A second controlled LAN test connected only to a temporary TLS 1.2 server at
+`192.168.1.4:8443`, presenting an ephemeral self-signed certificate for
+`plus-vita-local.invalid`. The Vita returned HTTP error `0x80431075`, HTTPS
+certificate error `0x80435060`, and verification detail `0x24`. Detail bit
+`0x20` confirms unknown-CA rejection and bit `0x04` confirms hostname mismatch.
+The embedded rejection assertion passed and the final result was zero failures.
+No DNS query, Sony endpoint, account credential, token, or Internet service was
+used. The temporary server was stopped after the test.

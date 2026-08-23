@@ -14,9 +14,20 @@ $request = [System.Security.Cryptography.X509Certificates.CertificateRequest]::n
 $request.CertificateExtensions.Add(
     [System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension]::new(
         $false, $false, 0, $true))
-$certificate = $request.CreateSelfSigned(
+$ephemeralCertificate = $request.CreateSelfSigned(
     [DateTimeOffset]::UtcNow.AddMinutes(-5),
     [DateTimeOffset]::UtcNow.AddHours(2))
+$pfxPassword = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+$pfxBytes = $ephemeralCertificate.Export(
+    [System.Security.Cryptography.X509Certificates.X509ContentType]::Pkcs12,
+    $pfxPassword)
+$certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+    $pfxBytes,
+    $pfxPassword,
+    [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet -bor
+    [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet)
+$ephemeralCertificate.Dispose()
+[Array]::Clear($pfxBytes, 0, $pfxBytes.Length)
 
 $listener = [System.Net.Sockets.TcpListener]::new(
     [System.Net.IPAddress]::Any, $Port)
