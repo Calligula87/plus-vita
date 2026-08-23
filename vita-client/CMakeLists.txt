@@ -77,6 +77,7 @@ add_executable(${PROJECT_NAME}
   "${NANOPB_ROOT}/pb_encode.c"
   src/platform/random.c
   src/platform/catalog_fetch_guard.c
+  src/platform/credential.c
   src/platform/network.c
   src/platform/secure_http.c
   src/platform/thread_compat.c

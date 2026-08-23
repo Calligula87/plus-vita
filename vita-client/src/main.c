@@ -19,6 +19,7 @@
 #include "platform/secure_http.h"
 #ifdef __vita__
 #include "platform/catalog_fetch_guard.h"
+#include "platform/credential.h"
 #include "platform/vita_cc_http_test.h"
 #endif
 
@@ -101,6 +102,29 @@ static void test_base64(void)
 		== CHIAKI_ERR_SUCCESS, "base64 decode result");
 	check(decoded_size == sizeof(plain), "base64 decoded size");
 	check(memcmp(decoded, plain, sizeof(plain)) == 0, "base64 round trip");
+}
+
+static void test_runtime_credential_lifecycle(void)
+{
+	static const char fake[] = "not-a-real-test-credential";
+	PlusVitaCredential credential;
+	plus_vita_credential_init(&credential);
+	check(plus_vita_credential_is_clear(&credential),
+		"credential initialized clear");
+	check(plus_vita_credential_set(&credential, fake, sizeof(fake) - 1),
+		"credential bounded runtime set");
+	check(credential.length == sizeof(fake) - 1
+		&& strcmp(credential.value, fake) == 0,
+		"credential runtime value");
+	char redacted[48] = { 0 };
+	plus_vita_credential_redacted(&credential, redacted, sizeof(redacted));
+	check(strstr(redacted, fake) == NULL && strstr(redacted, "credential:") != NULL,
+		"credential redacted reporting");
+	check(!plus_vita_credential_set(&credential, "has space", 9),
+		"credential rejects whitespace");
+	plus_vita_credential_clear(&credential);
+	check(plus_vita_credential_is_clear(&credential),
+		"credential compiler-resistant wipe");
 }
 
 static void test_protocol_primitives(void)
@@ -601,6 +625,7 @@ int main(void)
 #endif
 	printf("plus-vita native libchiaki smoke test\n");
 	test_base64();
+	test_runtime_credential_lifecycle();
 	test_protocol_primitives();
 	test_cloudcatalog_locale_module();
 	test_cloudcatalog_fetch_parsers();
@@ -635,6 +660,7 @@ int main(void)
 	printf("RESULT %s\n", failures ? "FAIL" : "PASS");
 	printf("Checks: %d   Failures: %d\n\n", checks_run, failures);
 	printf("Unified catalog cache-hit test included.\n");
+	printf("Runtime-only credential lifecycle included.\n");
 #ifdef PLUS_VITA_PUBLIC_APOLLO_TEST
 	printf("Public Apollo region: CH/EU\n");
 	printf("Apollo complete: %s   Titles: %u\n",
