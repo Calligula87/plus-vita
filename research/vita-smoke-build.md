@@ -144,8 +144,6 @@ status parsing, and response-body reads. The request used no Sony endpoint,
 account, token, cookie, or submitted data and was explicitly authorized by the
 tester.
 
-## Next milestone
-
 ## Pylux-compatible SceHttp backend
 
 On 2026-08-23 the target added a Vita implementation of Pylux's
@@ -160,12 +158,23 @@ Chiaki transport or timeout errors.
 The Vita target builds and packages with warnings treated as errors. The
 matching Ubuntu suite passes all 46 offline assertions, including Pylux-format
 bearer/cookie headers, response ownership cleanup, and invalid request
-rejection. No request, credential, or Sony endpoint is used by this adapter
-milestone.
+rejection.
+
+The exact compatibility boundary was then tested on physical Vita hardware
+using the tester-authorized, credential-free `https://example.com/` GET. The
+call to `cc_http_perform()` returned success with HTTP status 200, a 559-byte
+NUL-terminated body, and 299 bytes of captured response headers. Transport,
+status, body, header capture, and cleanup assertions all passed; the complete
+suite ended with zero failures. This confirms that the API consumed by Pylux
+works through the native SceHttp implementation on the device, rather than
+only through the earlier low-level probe.
+
+No Sony endpoint, account credential, token, cookie, or submitted data was
+used by this test.
 
 ## Next milestone
 
-Exercise the new compatibility backend itself against a controlled,
-credential-free public GET, then a controlled POST echo endpoint. Only after
-those request semantics pass should the first Pylux cloud module be linked;
-authentication and Sony service requests remain disabled.
+Exercise the compatibility backend against a controlled POST echo endpoint,
+then link the first credential-free Pylux cloud module. Authentication and
+Sony service requests remain disabled until those request semantics and module
+integration pass independently.

@@ -335,19 +335,27 @@ static void test_trusted_local_certificate(void)
 #if defined(__vita__) && defined(PLUS_VITA_PUBLIC_HTTPS_URL)
 static void test_public_https(void)
 {
-	PlusVitaTlsProbeResult result = { 0 };
-	check(plus_vita_secure_http_init() == CHIAKI_ERR_SUCCESS,
-		"public HTTPS initialization");
-	ChiakiErrorCode probe_result = plus_vita_secure_http_probe_public(
-		PLUS_VITA_PUBLIC_HTTPS_URL, &result);
-	printf("INFO public send=0x%08x ssl=0x%08x detail=0x%08x\n",
-		(unsigned int)result.send_result, (unsigned int)result.ssl_error,
-		result.ssl_detail);
-	printf("INFO public HTTP status=%d statusr=0x%08x read=%d\n",
-		result.http_status, (unsigned int)result.status_result, result.read_result);
-	check(probe_result == CHIAKI_ERR_SUCCESS,
-		"public system-trusted HTTPS response");
-	plus_vita_secure_http_fini();
+	static const char *const headers[] = { "Accept: text/html" };
+	CCHttpRequest request = {
+		.method = "GET",
+		.url = PLUS_VITA_PUBLIC_HTTPS_URL,
+		.headers = headers,
+		.header_count = 1,
+		.follow_redirects = true,
+		.capture_headers = true,
+		.timeout_ms = 10000,
+	};
+	CCHttpResponse response = { 0 };
+	ChiakiErrorCode result = cc_http_perform(NULL, &request, &response);
+	printf("INFO compat GET result=%d status=%ld body=%u headers=%u\n",
+		result, response.status_code, (unsigned int)response.size,
+		(unsigned int)response.headers_size);
+	check(result == CHIAKI_ERR_SUCCESS, "compat HTTP GET transport");
+	check(response.status_code == 200, "compat HTTP GET status");
+	check(response.data && response.size > 0, "compat HTTP GET body");
+	check(response.headers && response.headers_size > 0,
+		"compat HTTP GET response headers");
+	cc_http_response_fini(&response);
 }
 #endif
 
