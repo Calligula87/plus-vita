@@ -78,6 +78,7 @@ add_executable(${PROJECT_NAME}
   src/platform/random.c
   src/platform/catalog_fetch_guard.c
   src/platform/credential.c
+  src/platform/credential_ime.c
   src/platform/network.c
   src/platform/secure_http.c
   src/platform/thread_compat.c
@@ -180,6 +181,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   SceLibKernel_stub
   SceCtrl_stub
   SceDisplay_stub
+  SceGxm_stub
+  SceAppUtil_stub
+  SceCommonDialog_stub
   SceKernelThreadMgr_stub
   SceKernelModulemgr_stub
   SceIofilemgr_stub
