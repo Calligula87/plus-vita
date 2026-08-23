@@ -29,9 +29,25 @@ add_executable(${PROJECT_NAME}
   src/main.c
   generated/takion.pb.c
   "${PYLUX_ROOT}/lib/src/base64.c"
+  "${PYLUX_ROOT}/lib/src/log.c"
+  "${PYLUX_ROOT}/lib/src/thread.c"
   "${NANOPB_ROOT}/pb_common.c"
   "${NANOPB_ROOT}/pb_decode.c"
   "${NANOPB_ROOT}/pb_encode.c"
+  src/platform/random.c
+  src/platform/thread_compat.c
+  src/platform/time.c
+)
+
+# Pylux currently has one signed/unsigned comparison in its formatting path.
+# Keep -Werror for our code and suppress only that upstream diagnostic.
+set_source_files_properties("${PYLUX_ROOT}/lib/src/log.c" PROPERTIES
+  COMPILE_OPTIONS "-Wno-error=sign-compare"
+)
+
+# Supply the Vita-only declaration/redirect for GNU pthread_clockjoin_np.
+set_source_files_properties("${PYLUX_ROOT}/lib/src/thread.c" PROPERTIES
+  COMPILE_OPTIONS "-include;${CMAKE_CURRENT_LIST_DIR}/src/platform/thread_compat.h"
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
@@ -50,6 +66,11 @@ target_compile_options(${PROJECT_NAME} PRIVATE
 
 target_link_options(${PROJECT_NAME} PRIVATE
   -Wl,--gc-sections
+)
+
+target_link_libraries(${PROJECT_NAME} PRIVATE
+  pthread
+  SceLibKernel_stub
 )
 
 vita_create_self(${PROJECT_NAME}.self ${PROJECT_NAME} UNSAFE)

@@ -55,7 +55,27 @@ nanopb revision changes.
 
 ## Next milestone
 
-Add the first Vita platform-adapter layer for logging, monotonic time, random
-entropy, and thread synchronization. Keep sockets, HTTPS, account access, and
-credentials disabled until those primitives build and have deterministic
-tests.
+## Vita platform primitives
+
+On 2026-08-23 the target added Pylux logging and threading plus Vita-specific
+monotonic-clock and cryptographic-entropy adapters. The entropy adapter honors
+Vita's 64-byte `sceKernelGetRandomNumber()` call limit by filling larger
+requests in chunks.
+
+The expanded ARM target again built through VPK packaging. The matching Ubuntu
+executable passed all 28 assertions, covering log filtering/formatting,
+monotonic time, an 80-byte secure entropy request, mutex contention, and an
+actual Chiaki thread create/join cycle with protected shared state.
+
+Vita's pthread implementation lacks GNU `pthread_clockjoin_np`. The current
+compatibility shim preserves correct joining but cannot enforce the requested
+timeout. Before production recovery logic relies on timed joins, the thread
+backend must migrate that operation to a native SceKernel thread wait with a
+real timeout.
+
+## Next milestone
+
+Add Vita socket initialization, DNS, and a local loopback-only transport test.
+Do not contact Sony endpoints yet. HTTPS, catalogue access, account access, and
+credentials remain disabled until the networking primitives are isolated and
+verified.

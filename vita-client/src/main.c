@@ -2,7 +2,11 @@
 
 #include <chiaki/base64.h>
 #include <chiaki/common.h>
+#include <chiaki/log.h>
+#include <chiaki/random.h>
 #include <chiaki/seqnum.h>
+#include <chiaki/thread.h>
+#include <chiaki/time.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <takion.pb.h>
@@ -12,6 +16,40 @@
 #include <string.h>
 
 static int failures;
+
+typedef struct log_capture_t
+{
+	unsigned int calls;
+	ChiakiLogLevel level;
+	char message[64];
+} LogCapture;
+
+typedef struct thread_probe_t
+{
+	ChiakiMutex *mutex;
+	int *value;
+} ThreadProbe;
+
+static int thread_result_marker;
+
+static void *thread_probe_run(void *user)
+{
+	ThreadProbe *probe = user;
+	if(chiaki_mutex_lock(probe->mutex) != CHIAKI_ERR_SUCCESS)
+		return NULL;
+	*probe->value = 42;
+	if(chiaki_mutex_unlock(probe->mutex) != CHIAKI_ERR_SUCCESS)
+		return NULL;
+	return &thread_result_marker;
+}
+
+static void capture_log(ChiakiLogLevel level, const char *message, void *user)
+{
+	LogCapture *capture = user;
+	capture->calls++;
+	capture->level = level;
+	snprintf(capture->message, sizeof(capture->message), "%s", message);
+}
 
 static void check(int condition, const char *name)
 {
@@ -78,12 +116,56 @@ static void test_takion_protobuf(void)
 		"Takion protocol version");
 }
 
+static void test_platform_primitives(void)
+{
+	LogCapture capture = { 0 };
+	ChiakiLog log;
+	chiaki_log_init(&log, CHIAKI_LOG_INFO | CHIAKI_LOG_ERROR, capture_log, &capture);
+	CHIAKI_LOGD(&log, "hidden");
+	CHIAKI_LOGI(&log, "vita platform %d", 1);
+	check(capture.calls == 1, "log level mask");
+	check(capture.level == CHIAKI_LOG_INFO
+		&& strcmp(capture.message, "vita platform 1") == 0, "log formatting");
+
+	uint64_t first = chiaki_time_now_monotonic_us();
+	uint64_t second = chiaki_time_now_monotonic_us();
+	check(first > 0 && second >= first, "monotonic clock");
+
+	uint8_t entropy[80] = { 0 };
+	check(chiaki_random_bytes_crypt(entropy, sizeof(entropy)) == CHIAKI_ERR_SUCCESS,
+		"secure entropy result");
+	unsigned int entropy_or = 0;
+	for(size_t i = 0; i < sizeof(entropy); i++)
+		entropy_or |= entropy[i];
+	check(entropy_or != 0, "secure entropy content");
+
+	ChiakiMutex mutex;
+	check(chiaki_mutex_init(&mutex, false) == CHIAKI_ERR_SUCCESS, "mutex init");
+	check(chiaki_mutex_lock(&mutex) == CHIAKI_ERR_SUCCESS, "mutex lock");
+	check(chiaki_mutex_trylock(&mutex) == CHIAKI_ERR_MUTEX_LOCKED, "mutex contention");
+	check(chiaki_mutex_unlock(&mutex) == CHIAKI_ERR_SUCCESS, "mutex unlock");
+
+	int protected_value = 0;
+	ThreadProbe probe = { .mutex = &mutex, .value = &protected_value };
+	ChiakiThread thread;
+	void *thread_result = NULL;
+	check(chiaki_thread_create(&thread, thread_probe_run, &probe) == CHIAKI_ERR_SUCCESS,
+		"thread create");
+	check(chiaki_thread_join(&thread, &thread_result) == CHIAKI_ERR_SUCCESS,
+		"thread join");
+	check(protected_value == 42 && thread_result == &thread_result_marker,
+		"thread synchronized result");
+
+	check(chiaki_mutex_fini(&mutex) == CHIAKI_ERR_SUCCESS, "mutex fini");
+}
+
 int main(void)
 {
 	printf("plus-vita native libchiaki smoke test\n");
 	test_base64();
 	test_protocol_primitives();
 	test_takion_protobuf();
+	test_platform_primitives();
 	printf("RESULT %s (%d failure%s)\n", failures ? "FAIL" : "PASS", failures,
 		failures == 1 ? "" : "s");
 	return failures ? 1 : 0;
