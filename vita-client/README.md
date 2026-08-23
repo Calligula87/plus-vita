@@ -13,10 +13,11 @@ git submodule update --init --recursive
 
 ## Current smoke target
 
-The target compiles Pylux's C base64 implementation and header-only protocol
-sequence/service primitives. On launch it runs deterministic tests and returns
-nonzero if any test fails. It performs no network access and accepts no account
-data.
+The target compiles Pylux's C base64 implementation, protocol sequence/service
+primitives, nanopb runtime, and generated Takion message schema. On launch it
+runs deterministic tests—including a Takion protocol-negotiation encode/decode
+round trip—and returns nonzero if any test fails. It performs no network access
+and accepts no account data.
 
 This deliberately small link proves the compiler, Pylux source boundary, ARM
 ABI, Vita SELF generation, and VPK packaging before larger dependencies are
@@ -37,9 +38,8 @@ same build in the official `vitasdk/vitasdk` container.
 ## Next increments
 
 1. Add Pylux logging, time, random, and crypto primitives.
-2. Add nanopb and Takion protocol messages.
-3. Add Vita socket/thread/entropy platform adapters.
-4. Add mbedTLS, curl, and json-c for HTTPS and catalogue access.
-5. Add cloud provisioning without logging or persisting credentials.
-6. Add H.264 hardware decode, Opus audio, and Vita controls.
+2. Add Vita socket/thread/entropy platform adapters.
+3. Add mbedTLS, curl, and json-c for HTTPS and catalogue access.
+4. Add cloud provisioning without logging or persisting credentials.
+5. Add H.264 hardware decode, Opus audio, and Vita controls.
 

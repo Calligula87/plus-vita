@@ -3,6 +3,9 @@
 #include <chiaki/base64.h>
 #include <chiaki/common.h>
 #include <chiaki/seqnum.h>
+#include <pb_decode.h>
+#include <pb_encode.h>
+#include <takion.pb.h>
 
 #include <stdint.h>
 #include <stdio.h>
@@ -47,11 +50,40 @@ static void test_protocol_primitives(void)
 		"Remote Play is not cloud");
 }
 
+static void test_takion_protobuf(void)
+{
+	uint8_t wire[64] = { 0 };
+	tkproto_TakionMessage message = tkproto_TakionMessage_init_zero;
+	tkproto_TakionMessage decoded = tkproto_TakionMessage_init_zero;
+
+	message.type = tkproto_TakionMessage_PayloadType_TAKIONPROTOCOLREQUESTACK;
+	message.has_takion_protocol_request_ack = true;
+	message.takion_protocol_request_ack.has_takion_protocol_version = true;
+	message.takion_protocol_request_ack.takion_protocol_version = 12;
+
+	pb_ostream_t output = pb_ostream_from_buffer(wire, sizeof(wire));
+	check(pb_encode(&output, tkproto_TakionMessage_fields, &message),
+		"Takion protobuf encode");
+	check(output.bytes_written > 0 && output.bytes_written <= sizeof(wire),
+		"Takion protobuf wire size");
+
+	pb_istream_t input = pb_istream_from_buffer(wire, output.bytes_written);
+	check(pb_decode(&input, tkproto_TakionMessage_fields, &decoded),
+		"Takion protobuf decode");
+	check(decoded.type == tkproto_TakionMessage_PayloadType_TAKIONPROTOCOLREQUESTACK,
+		"Takion payload type");
+	check(decoded.has_takion_protocol_request_ack
+		&& decoded.takion_protocol_request_ack.has_takion_protocol_version
+		&& decoded.takion_protocol_request_ack.takion_protocol_version == 12,
+		"Takion protocol version");
+}
+
 int main(void)
 {
 	printf("plus-vita native libchiaki smoke test\n");
 	test_base64();
 	test_protocol_primitives();
+	test_takion_protobuf();
 	printf("RESULT %s (%d failure%s)\n", failures ? "FAIL" : "PASS", failures,
 		failures == 1 ? "" : "s");
 	return failures ? 1 : 0;

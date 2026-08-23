@@ -39,7 +39,23 @@ remains a separate test.
 
 ## Next milestone
 
-Expand the reduced native target with nanopb and selected Takion message
-primitives, still without networking or account data. This will test the first
-generated-code dependency and more of the real streaming protocol before Vita
-platform adapters are introduced.
+## Takion/nanopb expansion
+
+On 2026-08-23 the target was expanded with Pylux's pinned nanopb runtime and C
+code generated from Pylux's `takion.proto` schema. The Vita cross-build again
+completed through VPK packaging with warnings treated as errors.
+
+The same source set was also compiled and executed natively under Ubuntu 26.04.
+All 15 assertions passed, including encoding and decoding a
+`TAKIONPROTOCOLREQUESTACK` message and preserving protocol version `12`.
+
+Generated `takion.pb.c/.h` files are committed so Vita builds do not require
+Python or protoc. They must be regenerated whenever the pinned Pylux schema or
+nanopb revision changes.
+
+## Next milestone
+
+Add the first Vita platform-adapter layer for logging, monotonic time, random
+entropy, and thread synchronization. Keep sockets, HTTPS, account access, and
+credentials disabled until those primitives build and have deterministic
+tests.

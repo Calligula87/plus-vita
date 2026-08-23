@@ -17,17 +17,27 @@ set(VITA_TITLEID "PLVT00001")
 set(VITA_VERSION "00.01")
 
 set(PYLUX_ROOT "${CMAKE_CURRENT_LIST_DIR}/../external/pylux")
+set(NANOPB_ROOT "${PYLUX_ROOT}/third-party/nanopb")
 if(NOT EXISTS "${PYLUX_ROOT}/lib/src/base64.c")
   message(FATAL_ERROR "Pylux submodule is missing; run: git submodule update --init --recursive")
+endif()
+if(NOT EXISTS "${NANOPB_ROOT}/pb_encode.c")
+  message(FATAL_ERROR "Pylux nanopb submodule is missing; run: git submodule update --init --recursive")
 endif()
 
 add_executable(${PROJECT_NAME}
   src/main.c
+  generated/takion.pb.c
   "${PYLUX_ROOT}/lib/src/base64.c"
+  "${NANOPB_ROOT}/pb_common.c"
+  "${NANOPB_ROOT}/pb_decode.c"
+  "${NANOPB_ROOT}/pb_encode.c"
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
   "${PYLUX_ROOT}/lib/include"
+  "${NANOPB_ROOT}"
+  "${CMAKE_CURRENT_LIST_DIR}/generated"
 )
 
 target_compile_options(${PROJECT_NAME} PRIVATE
