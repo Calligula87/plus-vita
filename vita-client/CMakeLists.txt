@@ -17,6 +17,10 @@ set(VITA_TITLEID "PLVT00001")
 set(VITA_VERSION "00.01")
 set(PLUS_VITA_TLS_PROBE_URL "" CACHE STRING
   "Optional controlled HTTPS URL for the physical certificate-rejection test")
+set(PLUS_VITA_TLS_TRUSTED_CA_FILE "" CACHE FILEPATH
+  "Optional DER test CA packaged for the controlled trusted-HTTPS test")
+set(PLUS_VITA_PUBLIC_HTTPS_URL "" CACHE STRING
+  "Optional credential-free public HTTPS URL for a system-trust test")
 
 set(PYLUX_ROOT "${CMAKE_CURRENT_LIST_DIR}/../external/pylux")
 set(NANOPB_ROOT "${PYLUX_ROOT}/third-party/nanopb")
@@ -78,6 +82,21 @@ if(PLUS_VITA_TLS_PROBE_URL)
   )
 endif()
 
+set(PLUS_VITA_VPK_FILES)
+if(PLUS_VITA_TLS_TRUSTED_CA_FILE)
+  if(NOT EXISTS "${PLUS_VITA_TLS_TRUSTED_CA_FILE}")
+    message(FATAL_ERROR "Trusted test CA does not exist: ${PLUS_VITA_TLS_TRUSTED_CA_FILE}")
+  endif()
+  target_compile_definitions(${PROJECT_NAME} PRIVATE PLUS_VITA_TLS_TRUSTED_PROBE=1)
+  list(APPEND PLUS_VITA_VPK_FILES FILE
+    "${PLUS_VITA_TLS_TRUSTED_CA_FILE}" "local_probe_ca.der")
+endif()
+if(PLUS_VITA_PUBLIC_HTTPS_URL)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE
+    PLUS_VITA_PUBLIC_HTTPS_URL="${PLUS_VITA_PUBLIC_HTTPS_URL}"
+  )
+endif()
+
 target_link_options(${PROJECT_NAME} PRIVATE
   -Wl,--gc-sections
 )
@@ -90,6 +109,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   SceKernelThreadMgr_stub
   SceSysmem_stub
   SceNet_stub
+  SceNetCtl_stub
   SceHttp_stub
   SceSsl_stub
   SceSysmodule_stub
@@ -99,4 +119,5 @@ vita_create_self(${PROJECT_NAME}.self ${PROJECT_NAME} UNSAFE)
 vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
   VERSION ${VITA_VERSION}
   NAME ${VITA_APP_NAME}
+  ${PLUS_VITA_VPK_FILES}
 )

@@ -40,3 +40,8 @@ an ephemeral self-signed certificate in memory and serves TLS 1.2. The server
 does not persist its private key or collect request data. Any temporary inbound
 firewall rule must be restricted to the Vita's LAN address and removed after
 the test.
+
+The optional `PLUS_VITA_PUBLIC_HTTPS_URL` setting builds a credential-free
+system-trust probe. It performs a GET, requires a verified TLS connection, HTTP
+status 200, and a nonempty response body. Use it only with a URL explicitly
+approved for the test; it must never inject credentials, cookies, or tokens.

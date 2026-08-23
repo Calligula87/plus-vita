@@ -124,3 +124,29 @@ certificate error `0x80435060`, and verification detail `0x24`. Detail bit
 The embedded rejection assertion passed and the final result was zero failures.
 No DNS query, Sony endpoint, account credential, token, or Internet service was
 used. The temporary server was stopped after the test.
+
+The follow-up custom-CA experiment showed that `sceHttpsLoadCert()` could make
+the controlled certificate pass verification, but SceHttp returned
+`0x80431060` before transmitting HTTP request bytes. This optional path remains
+diagnostic only and is not the production trust strategy.
+
+The first public hostname request initially failed before TLS with
+`0x80412101`. Comparing the adapter with VitaSDK's official HTTPS sample exposed
+the missing `sceNetCtlInit()` lifecycle. After adding `SceNetCtl_stub`, NetCtl
+initialization, and reverse-order shutdown, a credential-free request to
+`https://example.com/` passed on physical hardware: `sceHttpSendRequest()`
+returned zero, certificate detail was zero, HTTP status was 200, and the first
+256 response bytes were read successfully. The complete embedded suite ended
+with zero failures.
+
+This proves native DNS, Internet routing, the Vita system CA store, TLS, HTTP
+status parsing, and response-body reads. The request used no Sony endpoint,
+account, token, cookie, or submitted data and was explicitly authorized by the
+tester.
+
+## Next milestone
+
+Port Pylux's curl-based request abstraction onto the verified native SceHttp
+backend, beginning with credential-free request construction, bounded response
+buffers, headers, timeouts, and error mapping. Authentication and Sony service
+requests remain disabled until that adapter is independently tested.

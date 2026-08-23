@@ -16,9 +16,19 @@ typedef struct plus_vita_tls_probe_result_t
 	int send_result;
 	int ssl_error;
 	unsigned int ssl_detail;
+	int http_status;
+	int body_size;
+	int content_length_result;
+	unsigned long long content_length;
+	int status_result;
+	int read_result;
 } PlusVitaTlsProbeResult;
 
 ChiakiErrorCode plus_vita_secure_http_probe_untrusted(
+	const char *url, PlusVitaTlsProbeResult *result);
+ChiakiErrorCode plus_vita_secure_http_probe_trusted(
+	const char *url, const char *ca_path, PlusVitaTlsProbeResult *result);
+ChiakiErrorCode plus_vita_secure_http_probe_public(
 	const char *url, PlusVitaTlsProbeResult *result);
 #endif
 

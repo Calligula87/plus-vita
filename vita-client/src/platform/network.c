@@ -6,6 +6,7 @@ static bool initialized;
 
 #ifdef __vita__
 #include <psp2/net/net.h>
+#include <psp2/net/netctl.h>
 #include <psp2/sysmodule.h>
 
 #define PLUS_VITA_NET_MEMORY_SIZE (1024 * 1024)
@@ -41,6 +42,16 @@ ChiakiErrorCode plus_vita_network_init(void)
 		}
 		return CHIAKI_ERR_NETWORK;
 	}
+	if(sceNetCtlInit() < 0)
+	{
+		sceNetTerm();
+		if(module_owned)
+		{
+			sceSysmoduleUnloadModule(SCE_SYSMODULE_NET);
+			module_owned = false;
+		}
+		return CHIAKI_ERR_NETWORK;
+	}
 #endif
 
 	initialized = true;
@@ -53,6 +64,7 @@ void plus_vita_network_fini(void)
 		return;
 
 #ifdef __vita__
+	sceNetCtlTerm();
 	sceNetTerm();
 	if(module_owned)
 	{

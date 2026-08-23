@@ -280,6 +280,47 @@ static void test_untrusted_local_certificate(void)
 }
 #endif
 
+#if defined(__vita__) && defined(PLUS_VITA_TLS_TRUSTED_PROBE)
+static void test_trusted_local_certificate(void)
+{
+	PlusVitaTlsProbeResult result = { 0 };
+	check(plus_vita_secure_http_init() == CHIAKI_ERR_SUCCESS,
+		"trusted TLS probe initialization");
+	ChiakiErrorCode probe_result = plus_vita_secure_http_probe_trusted(
+		PLUS_VITA_TLS_PROBE_URL, "app0:local_probe_ca.der", &result);
+	printf("INFO trusted TLS send=0x%08x ssl=0x%08x detail=0x%08x\n",
+		(unsigned int)result.send_result, (unsigned int)result.ssl_error,
+		result.ssl_detail);
+	printf("INFO trusted HTTP status=%d body=%d\n",
+		result.http_status, result.body_size);
+	printf("INFO HTTP lenr=0x%08x len=%llu statusr=0x%08x read=%d\n",
+		(unsigned int)result.content_length_result, result.content_length,
+		(unsigned int)result.status_result, result.read_result);
+	check(probe_result == CHIAKI_ERR_SUCCESS,
+		"trusted local HTTPS response");
+	plus_vita_secure_http_fini();
+}
+#endif
+
+#if defined(__vita__) && defined(PLUS_VITA_PUBLIC_HTTPS_URL)
+static void test_public_https(void)
+{
+	PlusVitaTlsProbeResult result = { 0 };
+	check(plus_vita_secure_http_init() == CHIAKI_ERR_SUCCESS,
+		"public HTTPS initialization");
+	ChiakiErrorCode probe_result = plus_vita_secure_http_probe_public(
+		PLUS_VITA_PUBLIC_HTTPS_URL, &result);
+	printf("INFO public send=0x%08x ssl=0x%08x detail=0x%08x\n",
+		(unsigned int)result.send_result, (unsigned int)result.ssl_error,
+		result.ssl_detail);
+	printf("INFO public HTTP status=%d statusr=0x%08x read=%d\n",
+		result.http_status, (unsigned int)result.status_result, result.read_result);
+	check(probe_result == CHIAKI_ERR_SUCCESS,
+		"public system-trusted HTTPS response");
+	plus_vita_secure_http_fini();
+}
+#endif
+
 int main(void)
 {
 #ifdef __vita__
@@ -295,6 +336,12 @@ int main(void)
 	test_secure_http_lifecycle();
 #if defined(__vita__) && defined(PLUS_VITA_TLS_PROBE_URL)
 	test_untrusted_local_certificate();
+#endif
+#if defined(__vita__) && defined(PLUS_VITA_TLS_TRUSTED_PROBE)
+	test_trusted_local_certificate();
+#endif
+#if defined(__vita__) && defined(PLUS_VITA_PUBLIC_HTTPS_URL)
+	test_public_https();
 #endif
 	printf("RESULT %s (%d failure%s)\n", failures ? "FAIL" : "PASS", failures,
 		failures == 1 ? "" : "s");
