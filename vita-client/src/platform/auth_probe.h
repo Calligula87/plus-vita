@@ -17,6 +17,7 @@ typedef struct plus_vita_auth_probe_result_t
 	bool session_created;
 	bool store_transport_ok;
 	bool store_resolved;
+	bool native_catalog_complete;
 	long http_status;
 	long session_http_status;
 	long store_http_status;
@@ -24,6 +25,8 @@ typedef struct plus_vita_auth_probe_result_t
 	char language[8];
 	char store_country[8];
 	char store_language[8];
+	unsigned int native_category_count;
+	unsigned int native_title_count;
 } PlusVitaAuthProbeResult;
 
 void plus_vita_auth_probe(const PlusVitaCredential *credential,

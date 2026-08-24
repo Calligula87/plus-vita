@@ -663,6 +663,7 @@ int main(void)
 	check(auth_result.session_created, "PS Now session region accepted");
 	check(auth_result.store_transport_ok, "PS Now store TLS transport");
 	check(auth_result.store_resolved, "PS Now native store route resolved");
+	check(auth_result.native_catalog_complete, "PS Now native catalog traversal");
 #endif
 	test_base64();
 	test_runtime_credential_lifecycle();
@@ -716,6 +717,9 @@ int main(void)
 		auth_result.store_http_status,
 		auth_result.store_country[0] ? auth_result.store_country : "--",
 		auth_result.store_language[0] ? auth_result.store_language : "--");
+	printf("Native catalog: %s Categories: %u Titles: %u\n",
+		auth_result.native_catalog_complete ? "complete" : "failed",
+		auth_result.native_category_count, auth_result.native_title_count);
 	printf("NPSSO entered length: %u (expected 64)\n",
 		(unsigned int)ime_result.entered_length);
 #ifdef PLUS_VITA_PUBLIC_APOLLO_TEST

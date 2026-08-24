@@ -21,6 +21,7 @@
 #define KAMAJI_ORIGIN "https://psnow.playstation.com"
 #define KAMAJI_REFERER "https://psnow.playstation.com/app/2.2.0/133/5cdcc037d/"
 #define KAMAJI_UA "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) playstation-now/0.0.0 Chrome/83.0.4103.104 Electron/9.0.4 Safari/537.36 gkApollo"
+#define GENERIC_UA "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
 static void secure_clear(void *value, size_t size)
 {
@@ -98,7 +99,8 @@ static bool extract_jsessionid(const char *headers, char *out, size_t out_size)
 }
 
 static bool parse_store_route(const CCHttpResponse *response,
-	char *country, size_t country_size, char *language, size_t language_size)
+	char *country, size_t country_size, char *language, size_t language_size,
+	char *base_url, size_t base_url_size)
 {
 	if(!response->data || !response->size)
 		return false;
@@ -111,6 +113,8 @@ static bool parse_store_route(const CCHttpResponse *response,
 		&& json_object_object_get_ex(root, "data", &data)
 		&& json_object_object_get_ex(data, "base_url", &base_obj);
 	const char *base = ok ? json_object_get_string(base_obj) : NULL;
+	if(base)
+		snprintf(base_url, base_url_size, "%s", base);
 	const char *p = base ? strstr(base, "/container/") : NULL;
 	if(p)
 	{
@@ -132,6 +136,101 @@ static bool parse_store_route(const CCHttpResponse *response,
 	if(root)
 		json_object_put(root);
 	return ok && country[0] && language[0];
+}
+
+static bool is_alpha_category(const char *name)
+{
+	static const char *const names[] = {
+		"A - B", "C - D", "E - G", "H - L", "M - O", "P - R", "S", "T", "U - Z", NULL
+	};
+	for(size_t i = 0; names[i]; i++)
+		if(strcmp(name, names[i]) == 0)
+			return true;
+	return false;
+}
+
+static bool fetch_native_catalog(const char *base_url, const char *jsession,
+	unsigned int *category_count, unsigned int *title_count)
+{
+	char url[1200];
+	snprintf(url, sizeof(url), "%s?size=100", base_url);
+	char *cookie = NULL;
+	if(cc_http_make_cookie_header(&cookie, "JSESSIONID", jsession)
+		!= CHIAKI_ERR_SUCCESS)
+		return false;
+	const char *root_headers[] = {
+		"User-Agent: " KAMAJI_UA, cookie, "Origin: " KAMAJI_ORIGIN,
+		"Referer: " KAMAJI_REFERER, "Accept: application/json",
+	};
+	CCHttpRequest root_request = {
+		.url = url, .headers = root_headers, .header_count = 5, .timeout_ms = 30000,
+	};
+	CCHttpResponse root_response = { 0 };
+	bool ok = cc_http_perform(NULL, &root_request, &root_response) == CHIAKI_ERR_SUCCESS
+		&& root_response.status_code == 200;
+	secure_clear(cookie, strlen(cookie));
+	free(cookie);
+	struct json_object *root = ok && root_response.data
+		? json_tokener_parse(root_response.data) : NULL;
+	char category_urls[16][1024] = { { 0 } };
+	unsigned int count = 0;
+	struct json_object *links = NULL;
+	if(root && json_object_object_get_ex(root, "links", &links)
+		&& json_object_get_type(links) == json_type_array)
+	{
+		size_t length = json_object_array_length(links);
+		for(size_t i = 0; i < length && count < 16; i++)
+		{
+			struct json_object *link = json_object_array_get_idx(links, i);
+			struct json_object *name_obj = NULL, *url_obj = NULL;
+			if(link && json_object_object_get_ex(link, "name", &name_obj)
+				&& json_object_object_get_ex(link, "url", &url_obj)
+				&& is_alpha_category(json_object_get_string(name_obj)))
+				snprintf(category_urls[count++], sizeof(category_urls[0]), "%s",
+					json_object_get_string(url_obj));
+		}
+	}
+	if(root) json_object_put(root);
+	wipe_response(&root_response);
+	secure_clear(url, sizeof(url));
+	if(!ok || count == 0)
+	{
+		secure_clear(category_urls, sizeof(category_urls));
+		return false;
+	}
+
+	*category_count = count;
+	*title_count = 0;
+	for(unsigned int i = 0; i < count; i++)
+	{
+		snprintf(url, sizeof(url), strchr(category_urls[i], '?')
+			? "%s&start=0&size=500" : "%s?start=0&size=500", category_urls[i]);
+		const char *headers[] = {
+			"Content-Type: application/json", "Accept: application/json",
+			"User-Agent: " GENERIC_UA,
+		};
+		CCHttpRequest request = {
+			.url = url, .headers = headers, .header_count = 3, .timeout_ms = 30000,
+		};
+		CCHttpResponse response = { 0 };
+		ok = cc_http_perform(NULL, &request, &response) == CHIAKI_ERR_SUCCESS
+			&& response.status_code == 200;
+		struct json_object *page = ok && response.data
+			? json_tokener_parse(response.data) : NULL;
+		links = NULL;
+		if(page && json_object_object_get_ex(page, "links", &links)
+			&& json_object_get_type(links) == json_type_array)
+			*title_count += (unsigned int)json_object_array_length(links);
+		else
+			ok = false;
+		if(page) json_object_put(page);
+		wipe_response(&response);
+		secure_clear(url, sizeof(url));
+		if(!ok)
+			break;
+	}
+	secure_clear(category_urls, sizeof(category_urls));
+	return ok && *title_count > 0;
 }
 
 void plus_vita_auth_probe(const PlusVitaCredential *credential,
@@ -244,6 +343,7 @@ void plus_vita_auth_probe(const PlusVitaCredential *credential,
 		.timeout_ms = 30000,
 	};
 	CCHttpResponse store_response = { 0 };
+	char store_base_url[1024] = { 0 };
 	result->store_transport_ok = cc_http_perform(NULL, &store_request,
 		&store_response) == CHIAKI_ERR_SUCCESS;
 	result->store_http_status = store_response.status_code;
@@ -251,10 +351,14 @@ void plus_vita_auth_probe(const PlusVitaCredential *credential,
 		&& store_response.status_code == 200
 		&& parse_store_route(&store_response, result->store_country,
 			sizeof(result->store_country), result->store_language,
-			sizeof(result->store_language));
+			sizeof(result->store_language), store_base_url, sizeof(store_base_url));
 	secure_clear(session_cookie, strlen(session_cookie));
 	free(session_cookie);
 	wipe_response(&store_response);
+	if(result->store_resolved)
+		result->native_catalog_complete = fetch_native_catalog(store_base_url,
+			jsession, &result->native_category_count, &result->native_title_count);
+	secure_clear(store_base_url, sizeof(store_base_url));
 
 cleanup_session:
 	secure_clear(jsession, sizeof(jsession));
