@@ -661,6 +661,8 @@ int main(void)
 	check(auth_result.authorized, "NPSSO authorization accepted");
 	check(auth_result.session_transport_ok, "PS Now session TLS transport");
 	check(auth_result.session_created, "PS Now session region accepted");
+	check(auth_result.store_transport_ok, "PS Now store TLS transport");
+	check(auth_result.store_resolved, "PS Now native store route resolved");
 #endif
 	test_base64();
 	test_runtime_credential_lifecycle();
@@ -709,6 +711,11 @@ int main(void)
 		auth_result.session_http_status,
 		auth_result.country[0] ? auth_result.country : "--",
 		auth_result.language[0] ? auth_result.language : "--");
+	printf("Native store: %s (HTTP %ld) Route: %s/%s\n",
+		auth_result.store_resolved ? "resolved" : "failed",
+		auth_result.store_http_status,
+		auth_result.store_country[0] ? auth_result.store_country : "--",
+		auth_result.store_language[0] ? auth_result.store_language : "--");
 	printf("NPSSO entered length: %u (expected 64)\n",
 		(unsigned int)ime_result.entered_length);
 #ifdef PLUS_VITA_PUBLIC_APOLLO_TEST

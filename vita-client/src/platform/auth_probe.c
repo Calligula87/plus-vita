@@ -15,6 +15,7 @@
 #define AUTH_URL_PREFIX "https://ca.account.sony.com/api/v1/oauth/authorize?smcid=pc%3Apsnow&applicationId=psnow&response_type=code&scope=kamaji%3Acommerce_native%20kamaji%3Acommerce_container%20kamaji%3Alists%20kamaji%3As2s.subscriptionsPremium.get&client_id=bc6b0777-abb5-40da-92ca-e133cf18e989&redirect_uri=https%3A%2F%2Fpsnow.playstation.com%2Fapp%2F2.2.0%2F133%2F5cdcc037d%2Fgrc-response.html&service_entity=urn%3Aservice-entity%3Apsn&prompt=none&renderMode=mobilePortrait&hidePageElements=forgotPasswordLink&displayFooter=none&disableLinks=qriocityLink&mid=PSNOW&duid="
 #define AUTH_URL_SUFFIX "&layout_type=popup&service_logo=ps&tp_psn=true&noEVBlock=true"
 #define SESSION_URL "https://psnow.playstation.com/kamaji/api/pcnow/00_09_000/user/session"
+#define STORES_URL "https://psnow.playstation.com/kamaji/api/pcnow/00_09_000/user/stores"
 #define PSNOW_CLIENT_ID "bc6b0777-abb5-40da-92ca-e133cf18e989"
 #define KAMAJI_REDIRECT "https://psnow.playstation.com/app/2.2.0/133/5cdcc037d/grc-response.html"
 #define KAMAJI_ORIGIN "https://psnow.playstation.com"
@@ -74,6 +75,60 @@ static bool parse_session_region(const CCHttpResponse *response,
 		snprintf(country, country_size, "%s", json_object_get_string(country_obj));
 	if(ok && json_object_object_get_ex(data, "language", &language_obj))
 		snprintf(language, language_size, "%s", json_object_get_string(language_obj));
+	if(root)
+		json_object_put(root);
+	return ok && country[0] && language[0];
+}
+
+static bool extract_jsessionid(const char *headers, char *out, size_t out_size)
+{
+	out[0] = 0;
+	if(!headers)
+		return false;
+	const char *p = strstr(headers, "JSESSIONID=");
+	if(!p)
+		return false;
+	p += strlen("JSESSIONID=");
+	size_t length = 0;
+	while(*p && *p != ';' && *p != '\r' && *p != '\n'
+		&& length + 1 < out_size)
+		out[length++] = *p++;
+	out[length] = 0;
+	return length > 0;
+}
+
+static bool parse_store_route(const CCHttpResponse *response,
+	char *country, size_t country_size, char *language, size_t language_size)
+{
+	if(!response->data || !response->size)
+		return false;
+	struct json_object *root = json_tokener_parse(response->data);
+	struct json_object *header = NULL, *status = NULL, *data = NULL, *base_obj = NULL;
+	bool ok = root
+		&& json_object_object_get_ex(root, "header", &header)
+		&& json_object_object_get_ex(header, "status_code", &status)
+		&& strcmp(json_object_get_string(status), "0x0000") == 0
+		&& json_object_object_get_ex(root, "data", &data)
+		&& json_object_object_get_ex(data, "base_url", &base_obj);
+	const char *base = ok ? json_object_get_string(base_obj) : NULL;
+	const char *p = base ? strstr(base, "/container/") : NULL;
+	if(p)
+	{
+		p += strlen("/container/");
+		const char *slash = strchr(p, '/');
+		if(slash && slash > p && (size_t)(slash - p) < country_size)
+		{
+			memcpy(country, p, (size_t)(slash - p));
+			country[slash - p] = 0;
+			p = slash + 1;
+			slash = strchr(p, '/');
+			if(slash && slash > p && (size_t)(slash - p) < language_size)
+			{
+				memcpy(language, p, (size_t)(slash - p));
+				language[slash - p] = 0;
+			}
+		}
+	}
 	if(root)
 		json_object_put(root);
 	return ok && country[0] && language[0];
@@ -157,15 +212,52 @@ void plus_vita_auth_probe(const PlusVitaCredential *credential,
 		.timeout_ms = 30000,
 	};
 	CCHttpResponse session_response = { 0 };
+	char jsession[512] = { 0 };
 	result->session_transport_ok = cc_http_perform(NULL, &session_request,
 		&session_response) == CHIAKI_ERR_SUCCESS;
 	result->session_http_status = session_response.status_code;
 	result->session_created = result->session_transport_ok
 		&& session_response.status_code == 200
 		&& parse_session_region(&session_response, result->country,
-			sizeof(result->country), result->language, sizeof(result->language));
+			sizeof(result->country), result->language, sizeof(result->language))
+		&& extract_jsessionid(session_response.headers, jsession, sizeof(jsession));
 	wipe_response(&session_response);
 	secure_clear(body, sizeof(body));
+	if(!result->session_created)
+		goto cleanup_session;
+
+	char *session_cookie = NULL;
+	if(cc_http_make_cookie_header(&session_cookie, "JSESSIONID", jsession)
+		!= CHIAKI_ERR_SUCCESS)
+		goto cleanup_session;
+	const char *store_headers[] = {
+		"User-Agent: " KAMAJI_UA,
+		session_cookie,
+		"Origin: " KAMAJI_ORIGIN,
+		"Referer: " KAMAJI_REFERER,
+		"Accept: application/json",
+	};
+	CCHttpRequest store_request = {
+		.url = STORES_URL,
+		.headers = store_headers,
+		.header_count = 5,
+		.timeout_ms = 30000,
+	};
+	CCHttpResponse store_response = { 0 };
+	result->store_transport_ok = cc_http_perform(NULL, &store_request,
+		&store_response) == CHIAKI_ERR_SUCCESS;
+	result->store_http_status = store_response.status_code;
+	result->store_resolved = result->store_transport_ok
+		&& store_response.status_code == 200
+		&& parse_store_route(&store_response, result->store_country,
+			sizeof(result->store_country), result->store_language,
+			sizeof(result->store_language));
+	secure_clear(session_cookie, strlen(session_cookie));
+	free(session_cookie);
+	wipe_response(&store_response);
+
+cleanup_session:
+	secure_clear(jsession, sizeof(jsession));
 
 cleanup:
 	secure_clear(code, sizeof(code));
