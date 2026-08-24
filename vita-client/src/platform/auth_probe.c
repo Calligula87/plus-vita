@@ -174,7 +174,9 @@ static const char *infer_catalog_platform(const char *id)
 	if(strstr(id, "CUSA")) return "PS4";
 	if(strstr(id, "PPSA")) return "PS5";
 	if(strstr(id, "NPUB") || strstr(id, "NPEB") || strstr(id, "NPJB")
-		|| strstr(id, "NPHA") || strstr(id, "NPJA") || strstr(id, "NPUA"))
+		|| strstr(id, "NPHA") || strstr(id, "NPJA") || strstr(id, "NPUA")
+		|| strstr(id, "BLES") || strstr(id, "BLUS") || strstr(id, "BCES")
+		|| strstr(id, "BCUS") || strstr(id, "BLJM") || strstr(id, "BLAS"))
 		return "PS3";
 	return "Unknown";
 }

@@ -642,11 +642,49 @@ static void clear_catalog_screen(void)
 	psvDebugScreenSetCoordsXY(&x, &y);
 }
 
+static void launch_manifest_ui(const PlusVitaAuthProbeResult *result,
+	const PlusVitaCatalogEntry *entry)
+{
+	wait_buttons_released();
+	clear_catalog_screen();
+	bool platform_ready = strcmp(entry->platform, "Unknown") != 0;
+	bool ready = entry->launch_id_valid && platform_ready
+		&& result->store_country[0] && result->store_language[0];
+	printf("PLUS VITA  |  Provisioning manifest\n");
+	printf("---------------------------------------------------------------\n\n");
+	printf("%s\n\n", entry->name);
+	printf("Service:       psnow\n");
+	printf("Product ID:    %s\n", entry->id);
+	printf("Platform:      %s\n", entry->platform);
+	printf("Store route:   %s/%s\n", result->store_country,
+		result->store_language);
+	printf("Video profile: 960x544 target / 720p service request\n");
+	printf("Frame rate:    60 fps target\n");
+	printf("Bitrate:       8000 kbps initial\n");
+	printf("Datacenter:    Auto (latency selection required)\n\n");
+	printf("Identifier:    %s\n", entry->launch_id_valid ? "READY" : "BLOCKED");
+	printf("Platform:      %s\n", platform_ready ? "READY" : "RESOLVER REQUIRED");
+	printf("Store locale:  %s\n", result->store_country[0]
+		&& result->store_language[0] ? "READY" : "BLOCKED");
+	printf("MANIFEST:      %s\n\n", ready ? "READY" : "INCOMPLETE");
+	printf("No entitlement or server was requested.\n");
+	printf("CIRCLE: Back to title details\n");
+	for(;;)
+	{
+		SceCtrlData pad = { 0 };
+		sceKernelDelayThread(20000);
+		sceCtrlPeekBufferPositive(0, &pad, 1);
+		if(pad.buttons & SCE_CTRL_CIRCLE) return;
+	}
+}
+
 static void catalog_detail_ui(const PlusVitaAuthProbeResult *result,
 	unsigned int selected)
 {
 	const PlusVitaCatalogEntry *entry = &result->native_titles[selected];
 	wait_buttons_released();
+
+redraw:
 	clear_catalog_screen();
 	printf("PLUS VITA  |  Title details\n");
 	printf("---------------------------------------------------------------\n\n");
@@ -666,13 +704,22 @@ static void catalog_detail_ui(const PlusVitaAuthProbeResult *result,
 	printf("LOCAL PREFLIGHT %s\n", entry->launch_id_valid ? "READY" : "BLOCKED");
 	printf("PROVISIONING  NOT YET IMPLEMENTED\n");
 	printf("STREAM        DISABLED\n\n");
-	printf("CIRCLE: Back to catalogue\n");
+	printf("X: Provisioning manifest   CIRCLE: Back to catalogue\n");
+	unsigned int previous = 0;
 	for(;;)
 	{
 		SceCtrlData pad = { 0 };
 		sceKernelDelayThread(20000);
 		sceCtrlPeekBufferPositive(0, &pad, 1);
-		if(pad.buttons & SCE_CTRL_CIRCLE) return;
+		unsigned int pressed = pad.buttons & ~previous;
+		previous = pad.buttons;
+		if(pressed & SCE_CTRL_CIRCLE) return;
+		if(pressed & SCE_CTRL_CROSS)
+		{
+			launch_manifest_ui(result, entry);
+			wait_buttons_released();
+			goto redraw;
+		}
 	}
 }
 
