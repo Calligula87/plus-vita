@@ -14,6 +14,8 @@ typedef struct plus_vita_catalog_entry_t
 {
 	char name[PLUS_VITA_CATALOG_NAME_MAX];
 	char id[PLUS_VITA_CATALOG_ID_MAX];
+	char platform[8];
+	bool launch_id_valid;
 } PlusVitaCatalogEntry;
 
 typedef struct plus_vita_auth_probe_result_t

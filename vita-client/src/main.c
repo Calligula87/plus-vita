@@ -655,11 +655,15 @@ static void catalog_detail_ui(const PlusVitaAuthProbeResult *result,
 		result->native_titles_count);
 	printf("Region: %s/%s\n", result->store_country, result->store_language);
 	printf("Source: PlayStation cloud native catalogue\n\n");
+	printf("Platform: %s%s\n", entry->platform,
+		strcmp(entry->platform, "Unknown") == 0 ? " (resolver required)" : "");
 	printf("Service identifier:\n");
 	printf("%.70s\n", entry->id);
 	if(strlen(entry->id) > 70) printf("%.70s\n", entry->id + 70);
 	printf("\nSESSION       READY\n");
 	printf("CATALOGUE     READY\n");
+	printf("TITLE ID      %s\n", entry->launch_id_valid ? "VALID" : "INVALID");
+	printf("LOCAL PREFLIGHT %s\n", entry->launch_id_valid ? "READY" : "BLOCKED");
 	printf("PROVISIONING  NOT YET IMPLEMENTED\n");
 	printf("STREAM        DISABLED\n\n");
 	printf("CIRCLE: Back to catalogue\n");

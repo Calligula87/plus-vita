@@ -168,11 +168,23 @@ static const char *catalog_string(struct json_object *item, const char *const *k
 	return NULL;
 }
 
+static const char *infer_catalog_platform(const char *id)
+{
+	if(!id) return "Unknown";
+	if(strstr(id, "CUSA")) return "PS4";
+	if(strstr(id, "PPSA")) return "PS5";
+	if(strstr(id, "NPUB") || strstr(id, "NPEB") || strstr(id, "NPJB")
+		|| strstr(id, "NPHA") || strstr(id, "NPJA") || strstr(id, "NPUA"))
+		return "PS3";
+	return "Unknown";
+}
+
 static bool append_catalog_entry(PlusVitaAuthProbeResult *result,
 	struct json_object *item)
 {
 	static const char *const name_keys[] = { "name", "title", "displayName", NULL };
 	static const char *const id_keys[] = { "productId", "product_id", "id", "titleId", "url", NULL };
+	static const char *const platform_keys[] = { "platform", "platformType", "console", NULL };
 	if(!item || json_object_get_type(item) != json_type_object) return false;
 	PlusVitaCatalogEntry *grown = realloc(result->native_titles,
 		(result->native_titles_count + 1) * sizeof(*grown));
@@ -182,8 +194,26 @@ static bool append_catalog_entry(PlusVitaAuthProbeResult *result,
 	memset(entry, 0, sizeof(*entry));
 	const char *name = catalog_string(item, name_keys);
 	const char *id = catalog_string(item, id_keys);
+	const char *platform = catalog_string(item, platform_keys);
+	if(id)
+	{
+		const char *slash = strrchr(id, '/');
+		if(slash && slash[1]) id = slash + 1;
+		const char *query = strchr(id, '?');
+		size_t id_len = query ? (size_t)(query - id) : strlen(id);
+		if(id_len >= sizeof(entry->id)) id_len = sizeof(entry->id) - 1;
+		memcpy(entry->id, id, id_len);
+		entry->id[id_len] = 0;
+	}
 	snprintf(entry->name, sizeof(entry->name), "%s", name ? name : "Untitled entry");
-	snprintf(entry->id, sizeof(entry->id), "%s", id ? id : "No identifier");
+	if(!entry->id[0]) snprintf(entry->id, sizeof(entry->id), "No identifier");
+	snprintf(entry->platform, sizeof(entry->platform), "%s",
+		platform ? platform : infer_catalog_platform(entry->id));
+	entry->launch_id_valid = strlen(entry->id) >= 8 && strlen(entry->id) < sizeof(entry->id);
+	for(size_t i = 0; entry->launch_id_valid && entry->id[i]; i++)
+		if(!isalnum((unsigned char)entry->id[i]) && entry->id[i] != '-'
+			&& entry->id[i] != '_' && entry->id[i] != '.')
+			entry->launch_id_valid = false;
 	return true;
 }
 
