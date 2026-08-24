@@ -642,6 +642,36 @@ static void clear_catalog_screen(void)
 	psvDebugScreenSetCoordsXY(&x, &y);
 }
 
+static void catalog_detail_ui(const PlusVitaAuthProbeResult *result,
+	unsigned int selected)
+{
+	const PlusVitaCatalogEntry *entry = &result->native_titles[selected];
+	wait_buttons_released();
+	clear_catalog_screen();
+	printf("PLUS VITA  |  Title details\n");
+	printf("---------------------------------------------------------------\n\n");
+	printf("%s\n\n", entry->name);
+	printf("Catalogue position: %u / %u\n", selected + 1,
+		result->native_titles_count);
+	printf("Region: %s/%s\n", result->store_country, result->store_language);
+	printf("Source: PlayStation cloud native catalogue\n\n");
+	printf("Service identifier:\n");
+	printf("%.70s\n", entry->id);
+	if(strlen(entry->id) > 70) printf("%.70s\n", entry->id + 70);
+	printf("\nSESSION       READY\n");
+	printf("CATALOGUE     READY\n");
+	printf("PROVISIONING  NOT YET IMPLEMENTED\n");
+	printf("STREAM        DISABLED\n\n");
+	printf("CIRCLE: Back to catalogue\n");
+	for(;;)
+	{
+		SceCtrlData pad = { 0 };
+		sceKernelDelayThread(20000);
+		sceCtrlPeekBufferPositive(0, &pad, 1);
+		if(pad.buttons & SCE_CTRL_CIRCLE) return;
+	}
+}
+
 static void catalog_ui(const PlusVitaAuthProbeResult *result)
 {
 	const unsigned int rows = 18;
@@ -668,7 +698,7 @@ static void catalog_ui(const PlusVitaAuthProbeResult *result)
 		const PlusVitaCatalogEntry *entry = &result->native_titles[selected];
 		printf("\n%u / %u  %s\n", selected + 1, result->native_titles_count,
 			entry->id);
-		printf("UP/DOWN select   L/R page   CIRCLE back\n");
+		printf("UP/DOWN select   L/R page   X details   CIRCLE back\n");
 		printf("Launch is intentionally disabled in this milestone.\n");
 
 		for(;;)
@@ -683,6 +713,13 @@ static void catalog_ui(const PlusVitaAuthProbeResult *result)
 			if(pad.ly >= 96 && pad.ly <= 160) analog_latched = false;
 			else if(analog_up || analog_down) analog_latched = true;
 			if(pressed & SCE_CTRL_CIRCLE) return;
+			if(pressed & SCE_CTRL_CROSS)
+			{
+				catalog_detail_ui(result, selected);
+				wait_buttons_released();
+				previous = 0;
+				break;
+			}
 			if(((pressed & SCE_CTRL_UP) || analog_up) && selected > 0)
 				{ selected--; break; }
 			if(((pressed & SCE_CTRL_DOWN) || analog_down)
