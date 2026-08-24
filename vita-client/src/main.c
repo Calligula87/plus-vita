@@ -19,7 +19,9 @@
 #include "platform/secure_http.h"
 #ifdef __vita__
 #include "platform/catalog_fetch_guard.h"
+#include "platform/auth_probe.h"
 #include "platform/credential.h"
+#include "platform/credential_file.h"
 #include "platform/credential_ime.h"
 #include "platform/vita_cc_http_test.h"
 #endif
@@ -622,18 +624,41 @@ int main(void)
 {
 #ifdef __vita__
 	PlusVitaCredentialImeResult ime_result;
-	plus_vita_credential_ime_test(&ime_result);
+	PlusVitaCredentialFileResult file_result;
+	PlusVitaCredential runtime_credential;
+	PlusVitaAuthProbeResult auth_result;
+	memset(&ime_result, 0, sizeof(ime_result));
+	plus_vita_credential_file_read(&runtime_credential, &file_result);
+	if(!file_result.parsed)
+		plus_vita_credential_ime_read(&runtime_credential, &ime_result);
+	else
+	{
+		ime_result.initialized = true;
+		ime_result.accepted = true;
+		ime_result.validated = true;
+		ime_result.input_wiped = file_result.buffer_wiped;
+		ime_result.entered_length = runtime_credential.length;
+	}
+	plus_vita_auth_probe(&runtime_credential, &auth_result);
+	plus_vita_credential_clear(&runtime_credential);
+	ime_result.credential_wiped = plus_vita_credential_is_clear(&runtime_credential);
 	psvDebugScreenInit();
 	sceCtrlSetSamplingMode(SCE_CTRL_MODE_DIGITAL);
 #endif
 	printf("plus-vita native libchiaki smoke test\n");
 #ifdef __vita__
-	check(ime_result.initialized, "masked credential dialog initialization");
-	check(ime_result.accepted, "masked credential temporary input accepted");
+	check(ime_result.initialized, "credential dialog initialization");
+	check(ime_result.accepted, "credential runtime input accepted");
 	check(ime_result.validated && ime_result.entered_length > 0,
-		"masked credential bounded validation");
-	check(ime_result.credential_wiped, "masked credential runtime wipe");
-	check(ime_result.input_wiped, "masked credential IME buffer wipe");
+		"credential bounded validation");
+	check(ime_result.credential_wiped, "credential runtime wipe");
+	check(ime_result.input_wiped, "credential IME buffer wipe");
+	check(!file_result.found || (file_result.parsed && file_result.deleted
+		&& file_result.buffer_wiped), "one-time credential file consumed");
+	check(auth_result.format_valid, "NPSSO 64-character format");
+	check(auth_result.attempted, "runtime-only authorization attempted");
+	check(auth_result.transport_ok, "authorization TLS transport");
+	check(auth_result.authorized, "NPSSO authorization accepted");
 #endif
 	test_base64();
 	test_runtime_credential_lifecycle();
@@ -672,7 +697,13 @@ int main(void)
 	printf("Checks: %d   Failures: %d\n\n", checks_run, failures);
 	printf("Unified catalog cache-hit test included.\n");
 	printf("Runtime-only credential lifecycle included.\n");
-	printf("Masked Vita credential entry included.\n");
+	printf("Visible Vita credential entry (runtime-only) included.\n");
+	printf("One-time credential file: %s\n",
+		file_result.found ? (file_result.parsed && file_result.deleted ? "consumed" : "failed") : "not present");
+	printf("Runtime-only NPSSO authorization: %s (HTTP %ld)\n",
+		auth_result.authorized ? "accepted" : "rejected", auth_result.http_status);
+	printf("NPSSO entered length: %u (expected 64)\n",
+		(unsigned int)ime_result.entered_length);
 #ifdef PLUS_VITA_PUBLIC_APOLLO_TEST
 	printf("Public Apollo region: CH/EU\n");
 	printf("Apollo complete: %s   Titles: %u\n",

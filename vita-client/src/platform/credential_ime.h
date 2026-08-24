@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "credential.h"
+
 typedef struct plus_vita_credential_ime_result_t
 {
 	bool initialized;
@@ -16,6 +18,7 @@ typedef struct plus_vita_credential_ime_result_t
 	size_t entered_length;
 } PlusVitaCredentialImeResult;
 
-void plus_vita_credential_ime_test(PlusVitaCredentialImeResult *result);
+void plus_vita_credential_ime_read(PlusVitaCredential *credential,
+	PlusVitaCredentialImeResult *result);
 
 #endif

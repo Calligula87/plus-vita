@@ -121,22 +121,19 @@ static void display_term(void)
 	memset(display_buffers, 0, sizeof(display_buffers));
 }
 
-void plus_vita_credential_ime_test(PlusVitaCredentialImeResult *result)
+void plus_vita_credential_ime_read(PlusVitaCredential *credential,
+	PlusVitaCredentialImeResult *result)
 {
 	static const uint16_t title[] = {
-		'T','e','m','p','o','r','a','r','y',' ','c','r','e','d','e','n','t','i','a','l',' ','t','e','s','t',0
-	};
-	static const uint16_t fake_initial[] = {
-		'v','i','t','a','-','f','a','k','e','-','t','e','s','t',0
+		'N','P','S','S','O',' ','v','i','s','i','b','l','e',' ','-',' ','n','o','t',' ','s','a','v','e','d',0
 	};
 	uint16_t input[SCE_IME_DIALOG_MAX_TEXT_LENGTH + 1] = { 0 };
-	PlusVitaCredential credential;
 	bool app_initialized = false;
 	bool gxm_initialized = false;
 	bool dialog_initialized = false;
 
 	memset(result, 0, sizeof(*result));
-	plus_vita_credential_init(&credential);
+	plus_vita_credential_init(credential);
 	for(unsigned int i = 0; i < DISPLAY_BUFFER_COUNT; i++)
 		display_buffers[i].uid = -1;
 
@@ -158,10 +155,10 @@ void plus_vita_credential_ime_test(PlusVitaCredentialImeResult *result)
 	param.type = SCE_IME_TYPE_BASIC_LATIN;
 	param.option = SCE_IME_OPTION_NO_AUTO_CAPITALIZATION | SCE_IME_OPTION_NO_ASSISTANCE;
 	param.dialogMode = SCE_IME_DIALOG_DIALOG_MODE_WITH_CANCEL;
-	param.textBoxMode = SCE_IME_DIALOG_TEXTBOX_MODE_PASSWORD;
+	param.textBoxMode = SCE_IME_DIALOG_TEXTBOX_MODE_DEFAULT;
 	param.title = title;
 	param.maxTextLength = PLUS_VITA_CREDENTIAL_MAX;
-	param.initialText = (uint16_t *)fake_initial;
+	param.initialText = NULL;
 	param.inputTextBuffer = input;
 	if(sceImeDialogInit(&param) < 0)
 		goto cleanup;
@@ -201,15 +198,16 @@ void plus_vita_credential_ime_test(PlusVitaCredentialImeResult *result)
 		}
 		result->entered_length = length;
 		result->validated = input[length] == 0
-			&& plus_vita_credential_set(&credential, ascii, length);
+			&& plus_vita_credential_set(credential, ascii, length);
 		secure_clear(ascii, sizeof(ascii));
 	}
 
 cleanup:
 	if(dialog_initialized)
 		sceImeDialogTerm();
-	plus_vita_credential_clear(&credential);
-	result->credential_wiped = plus_vita_credential_is_clear(&credential);
+	if(!result->validated)
+		plus_vita_credential_clear(credential);
+	result->credential_wiped = plus_vita_credential_is_clear(credential);
 	secure_clear(input, sizeof(input));
 	result->input_wiped = memory_is_clear(input, sizeof(input));
 	if(gxm_initialized)
