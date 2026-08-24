@@ -7,6 +7,15 @@
 
 #include "credential.h"
 
+#define PLUS_VITA_CATALOG_NAME_MAX 96
+#define PLUS_VITA_CATALOG_ID_MAX 64
+
+typedef struct plus_vita_catalog_entry_t
+{
+	char name[PLUS_VITA_CATALOG_NAME_MAX];
+	char id[PLUS_VITA_CATALOG_ID_MAX];
+} PlusVitaCatalogEntry;
+
 typedef struct plus_vita_auth_probe_result_t
 {
 	bool attempted;
@@ -32,9 +41,12 @@ typedef struct plus_vita_auth_probe_result_t
 	unsigned int owned_page_count;
 	unsigned int owned_entitlement_count;
 	unsigned int owned_game_count;
+	PlusVitaCatalogEntry *native_titles;
+	unsigned int native_titles_count;
 } PlusVitaAuthProbeResult;
 
 void plus_vita_auth_probe(const PlusVitaCredential *credential,
 	PlusVitaAuthProbeResult *result);
+void plus_vita_auth_probe_result_fini(PlusVitaAuthProbeResult *result);
 
 #endif

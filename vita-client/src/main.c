@@ -620,6 +620,84 @@ static void test_post_echo(void)
 }
 #endif
 
+#ifdef __vita__
+static void wait_buttons_released(void)
+{
+	SceCtrlData pad = { 0 };
+	do
+	{
+		sceKernelDelayThread(20000);
+		sceCtrlPeekBufferPositive(0, &pad, 1);
+	} while(pad.buttons);
+}
+
+static void clear_catalog_screen(void)
+{
+	int x = 0, y = 0;
+	psvDebugScreenSetCoordsXY(&x, &y);
+	for(unsigned int row = 0; row < 34; row++)
+		printf("                                                                                \n");
+	x = 0;
+	y = 0;
+	psvDebugScreenSetCoordsXY(&x, &y);
+}
+
+static void catalog_ui(const PlusVitaAuthProbeResult *result)
+{
+	const unsigned int rows = 18;
+	unsigned int selected = 0;
+	unsigned int previous = 0;
+	bool analog_latched = false;
+	wait_buttons_released();
+	for(;;)
+	{
+		unsigned int first = selected >= rows ? selected - rows + 1 : 0;
+		clear_catalog_screen();
+		printf("PLUS VITA  |  Cloud catalogue  |  %s/%s\n",
+			result->store_country, result->store_language);
+		printf("%u native titles  |  %u owned games  |  READ ONLY\n\n",
+			result->native_titles_count, result->owned_game_count);
+		for(unsigned int row = 0; row < rows; row++)
+		{
+			unsigned int index = first + row;
+			if(index >= result->native_titles_count) break;
+			const PlusVitaCatalogEntry *entry = &result->native_titles[index];
+			printf(index == selected ? "\033[7m> %-63.63s\033[0m\n"
+				: "  %-63.63s\n", entry->name);
+		}
+		const PlusVitaCatalogEntry *entry = &result->native_titles[selected];
+		printf("\n%u / %u  %s\n", selected + 1, result->native_titles_count,
+			entry->id);
+		printf("UP/DOWN select   L/R page   CIRCLE back\n");
+		printf("Launch is intentionally disabled in this milestone.\n");
+
+		for(;;)
+		{
+			SceCtrlData pad = { 0 };
+			sceKernelDelayThread(20000);
+			sceCtrlPeekBufferPositive(0, &pad, 1);
+			unsigned int pressed = pad.buttons & ~previous;
+			previous = pad.buttons;
+			bool analog_up = !analog_latched && pad.ly < 72;
+			bool analog_down = !analog_latched && pad.ly > 184;
+			if(pad.ly >= 96 && pad.ly <= 160) analog_latched = false;
+			else if(analog_up || analog_down) analog_latched = true;
+			if(pressed & SCE_CTRL_CIRCLE) return;
+			if(((pressed & SCE_CTRL_UP) || analog_up) && selected > 0)
+				{ selected--; break; }
+			if(((pressed & SCE_CTRL_DOWN) || analog_down)
+				&& selected + 1 < result->native_titles_count)
+				{ selected++; break; }
+			if(pressed & SCE_CTRL_LTRIGGER)
+				{ selected = selected > rows ? selected - rows : 0; break; }
+			if(pressed & SCE_CTRL_RTRIGGER)
+				{ selected = selected + rows < result->native_titles_count
+					? selected + rows : result->native_titles_count - 1; break; }
+		}
+	}
+}
+#endif
+
 int main(void)
 {
 #ifdef __vita__
@@ -643,7 +721,7 @@ int main(void)
 	plus_vita_credential_clear(&runtime_credential);
 	ime_result.credential_wiped = plus_vita_credential_is_clear(&runtime_credential);
 	psvDebugScreenInit();
-	sceCtrlSetSamplingMode(SCE_CTRL_MODE_DIGITAL);
+	sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
 #endif
 	printf("plus-vita native libchiaki smoke test\n");
 #ifdef __vita__
@@ -747,13 +825,20 @@ int main(void)
 		(unsigned int)plus_vita_http_test_last_ssl_error(),
 		plus_vita_http_test_last_ssl_detail());
 #endif
-	printf("\nPress X to close. Photograph this screen for the test report.\n");
+	printf("\nPress X to browse catalogue. CIRCLE to close.\n");
 	SceCtrlData pad = { 0 };
-	do
+	for(;;)
 	{
 		sceKernelDelayThread(20000);
 		sceCtrlPeekBufferPositive(0, &pad, 1);
-	} while(!(pad.buttons & SCE_CTRL_CROSS));
+		if((pad.buttons & SCE_CTRL_CROSS) && auth_result.native_titles_count)
+		{
+			catalog_ui(&auth_result);
+			break;
+		}
+		if(pad.buttons & SCE_CTRL_CIRCLE) break;
+	}
+	plus_vita_auth_probe_result_fini(&auth_result);
 	psvDebugScreenFinish();
 #else
 	printf("RESULT %s (%d failure%s)\n", failures ? "FAIL" : "PASS", failures,

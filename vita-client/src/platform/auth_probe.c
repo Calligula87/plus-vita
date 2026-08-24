@@ -154,8 +154,41 @@ static bool is_alpha_category(const char *name)
 	return false;
 }
 
+static const char *catalog_string(struct json_object *item, const char *const *keys)
+{
+	for(size_t i = 0; keys[i]; i++)
+	{
+		struct json_object *value = NULL;
+		if(json_object_object_get_ex(item, keys[i], &value))
+		{
+			const char *text = json_object_get_string(value);
+			if(text && text[0]) return text;
+		}
+	}
+	return NULL;
+}
+
+static bool append_catalog_entry(PlusVitaAuthProbeResult *result,
+	struct json_object *item)
+{
+	static const char *const name_keys[] = { "name", "title", "displayName", NULL };
+	static const char *const id_keys[] = { "productId", "product_id", "id", "titleId", "url", NULL };
+	if(!item || json_object_get_type(item) != json_type_object) return false;
+	PlusVitaCatalogEntry *grown = realloc(result->native_titles,
+		(result->native_titles_count + 1) * sizeof(*grown));
+	if(!grown) return false;
+	result->native_titles = grown;
+	PlusVitaCatalogEntry *entry = &grown[result->native_titles_count++];
+	memset(entry, 0, sizeof(*entry));
+	const char *name = catalog_string(item, name_keys);
+	const char *id = catalog_string(item, id_keys);
+	snprintf(entry->name, sizeof(entry->name), "%s", name ? name : "Untitled entry");
+	snprintf(entry->id, sizeof(entry->id), "%s", id ? id : "No identifier");
+	return true;
+}
+
 static bool fetch_native_catalog(const char *base_url, const char *jsession,
-	unsigned int *category_count, unsigned int *title_count)
+	PlusVitaAuthProbeResult *result)
 {
 	char url[1200];
 	snprintf(url, sizeof(url), "%s?size=100", base_url);
@@ -204,8 +237,8 @@ static bool fetch_native_catalog(const char *base_url, const char *jsession,
 		return false;
 	}
 
-	*category_count = count;
-	*title_count = 0;
+	result->native_category_count = count;
+	result->native_title_count = 0;
 	for(unsigned int i = 0; i < count; i++)
 	{
 		snprintf(url, sizeof(url), strchr(category_urls[i], '?')
@@ -225,7 +258,16 @@ static bool fetch_native_catalog(const char *base_url, const char *jsession,
 		links = NULL;
 		if(page && json_object_object_get_ex(page, "links", &links)
 			&& json_object_get_type(links) == json_type_array)
-			*title_count += (unsigned int)json_object_array_length(links);
+		{
+			size_t length = json_object_array_length(links);
+			result->native_title_count += (unsigned int)length;
+			for(size_t j = 0; j < length; j++)
+				if(!append_catalog_entry(result, json_object_array_get_idx(links, j)))
+				{
+					ok = false;
+					break;
+				}
+		}
 		else
 			ok = false;
 		if(page) json_object_put(page);
@@ -235,7 +277,8 @@ static bool fetch_native_catalog(const char *base_url, const char *jsession,
 			break;
 	}
 	secure_clear(category_urls, sizeof(category_urls));
-	return ok && *title_count > 0;
+	return ok && result->native_title_count > 0
+		&& result->native_titles_count == result->native_title_count;
 }
 
 static bool entitlement_is_game(struct json_object *entitlement)
@@ -452,7 +495,7 @@ void plus_vita_auth_probe(const PlusVitaCredential *credential,
 	wipe_response(&store_response);
 	if(result->store_resolved)
 		result->native_catalog_complete = fetch_native_catalog(store_base_url,
-			jsession, &result->native_category_count, &result->native_title_count);
+			jsession, result);
 	secure_clear(store_base_url, sizeof(store_base_url));
 	if(result->native_catalog_complete)
 		fetch_owned_entitlements(credential, result);
@@ -464,4 +507,12 @@ cleanup:
 	secure_clear(code, sizeof(code));
 	secure_clear(duid, sizeof(duid));
 	secure_clear(url, sizeof(url));
+}
+
+void plus_vita_auth_probe_result_fini(PlusVitaAuthProbeResult *result)
+{
+	if(!result) return;
+	free(result->native_titles);
+	result->native_titles = NULL;
+	result->native_titles_count = 0;
 }
