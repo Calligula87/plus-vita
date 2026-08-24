@@ -664,6 +664,8 @@ int main(void)
 	check(auth_result.store_transport_ok, "PS Now store TLS transport");
 	check(auth_result.store_resolved, "PS Now native store route resolved");
 	check(auth_result.native_catalog_complete, "PS Now native catalog traversal");
+	check(auth_result.owned_authorized, "owned entitlement authorization");
+	check(auth_result.owned_complete, "owned entitlement traversal");
 #endif
 	test_base64();
 	test_runtime_credential_lifecycle();
@@ -720,6 +722,10 @@ int main(void)
 	printf("Native catalog: %s Categories: %u Titles: %u\n",
 		auth_result.native_catalog_complete ? "complete" : "failed",
 		auth_result.native_category_count, auth_result.native_title_count);
+	printf("Owned: %s Pages: %u Entitlements: %u Games: %u\n",
+		auth_result.owned_complete ? "complete" : "failed",
+		auth_result.owned_page_count, auth_result.owned_entitlement_count,
+		auth_result.owned_game_count);
 	printf("NPSSO entered length: %u (expected 64)\n",
 		(unsigned int)ime_result.entered_length);
 #ifdef PLUS_VITA_PUBLIC_APOLLO_TEST

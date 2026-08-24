@@ -22,6 +22,8 @@
 #define KAMAJI_REFERER "https://psnow.playstation.com/app/2.2.0/133/5cdcc037d/"
 #define KAMAJI_UA "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) playstation-now/0.0.0 Chrome/83.0.4103.104 Electron/9.0.4 Safari/537.36 gkApollo"
 #define GENERIC_UA "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+#define OWNED_AUTH_URL "https://ca.account.sony.com/api/v1/oauth/authorize?response_type=token&scope=kamaji%3Aget_internal_entitlements%20user%3Aaccount.attributes.validate&client_id=dc523cc2-b51b-4190-bff0-3397c06871b3&redirect_uri=https%3A%2F%2Fpsnow.playstation.com%2Fapp%2F2.2.0%2F133%2F5cdcc037d%2Fgrc-response.html&service_entity=urn%3Aservice-entity%3Apsn&prompt=none"
+#define OWNED_PAGE_SIZE 300
 
 static void secure_clear(void *value, size_t size)
 {
@@ -30,17 +32,20 @@ static void secure_clear(void *value, size_t size)
 		*p++ = 0;
 }
 
-static bool extract_code(const char *url, char *out, size_t out_size)
+static bool extract_parameter(const char *url, const char *name,
+	char *out, size_t out_size)
 {
 	out[0] = 0;
 	if(!url)
 		return false;
-	const char *p = strstr(url, "code=");
+	char pattern[64];
+	snprintf(pattern, sizeof(pattern), "%s=", name);
+	const char *p = strstr(url, pattern);
 	while(p && !(p == url || p[-1] == '?' || p[-1] == '&' || p[-1] == '#'))
-		p = strstr(p + 1, "code=");
+		p = strstr(p + 1, pattern);
 	if(!p)
 		return false;
-	p += 5;
+	p += strlen(pattern);
 	size_t length = 0;
 	while(*p && *p != '&' && length + 1 < out_size)
 		out[length++] = *p++;
@@ -233,6 +238,96 @@ static bool fetch_native_catalog(const char *base_url, const char *jsession,
 	return ok && *title_count > 0;
 }
 
+static bool entitlement_is_game(struct json_object *entitlement)
+{
+	struct json_object *game_meta = NULL, *active = NULL, *product = NULL, *feature = NULL;
+	if(!entitlement || json_object_get_type(entitlement) != json_type_object
+		|| !json_object_object_get_ex(entitlement, "game_meta", &game_meta)
+		|| json_object_get_type(game_meta) != json_type_object
+		|| !json_object_object_get_ex(entitlement, "active_flag", &active)
+		|| !json_object_get_boolean(active)
+		|| !json_object_object_get_ex(entitlement, "product_id", &product)
+		|| !json_object_object_get_ex(entitlement, "feature_type", &feature)
+		|| json_object_get_int(feature) == 0)
+		return false;
+	const char *product_id = json_object_get_string(product);
+	return product_id && strncmp(product_id, "IP", 2) != 0
+		&& strncmp(product_id, "SUB", 3) != 0;
+}
+
+static void fetch_owned_entitlements(const PlusVitaCredential *credential,
+	PlusVitaAuthProbeResult *result)
+{
+	char *cookie = NULL;
+	if(cc_http_make_cookie_header(&cookie, "npsso", credential->value)
+		!= CHIAKI_ERR_SUCCESS)
+		return;
+	const char *headers[] = { cookie, "User-Agent: " GENERIC_UA };
+	CCHttpRequest auth_request = {
+		.url = OWNED_AUTH_URL, .headers = headers, .header_count = 2,
+		.capture_headers = true, .timeout_ms = 30000,
+	};
+	CCHttpResponse auth_response = { 0 };
+	char token[2048] = { 0 };
+	bool transport_ok = cc_http_perform(NULL, &auth_request, &auth_response)
+		== CHIAKI_ERR_SUCCESS;
+	result->owned_authorized = transport_ok && auth_response.status_code == 302
+		&& extract_parameter(auth_response.redirect_url, "access_token", token,
+			sizeof(token));
+	secure_clear(cookie, strlen(cookie));
+	free(cookie);
+	wipe_response(&auth_response);
+	if(!result->owned_authorized)
+		goto cleanup;
+
+	char *bearer = NULL;
+	if(cc_http_make_bearer_header(&bearer, token) != CHIAKI_ERR_SUCCESS)
+		goto cleanup;
+	result->owned_complete = true;
+	for(unsigned int page = 0; page < 200; page++)
+	{
+		char url[512];
+		snprintf(url, sizeof(url),
+			"https://commerce.api.np.km.playstation.net/commerce/api/v1/users/me/internal_entitlements?fields=game_meta&entitlement_type=5&start=%u&size=%u",
+			result->owned_entitlement_count, OWNED_PAGE_SIZE);
+		const char *page_headers[] = { bearer, "Accept: application/json" };
+		CCHttpRequest request = {
+			.url = url, .headers = page_headers, .header_count = 2, .timeout_ms = 30000,
+		};
+		CCHttpResponse response = { 0 };
+		bool ok = cc_http_perform(NULL, &request, &response) == CHIAKI_ERR_SUCCESS
+			&& response.status_code == 200;
+		struct json_object *root = ok && response.data
+			? json_tokener_parse(response.data) : NULL;
+		struct json_object *entitlements = NULL;
+		if(!root || !json_object_object_get_ex(root, "entitlements", &entitlements)
+			|| json_object_get_type(entitlements) != json_type_array)
+			ok = false;
+		unsigned int page_count = ok
+			? (unsigned int)json_object_array_length(entitlements) : 0;
+		for(unsigned int i = 0; i < page_count; i++)
+			if(entitlement_is_game(json_object_array_get_idx(entitlements, i)))
+				result->owned_game_count++;
+		result->owned_entitlement_count += page_count;
+		result->owned_page_count++;
+		if(root) json_object_put(root);
+		wipe_response(&response);
+		secure_clear(url, sizeof(url));
+		if(!ok)
+		{
+			result->owned_complete = false;
+			break;
+		}
+		if(page_count < OWNED_PAGE_SIZE)
+			break;
+	}
+	secure_clear(bearer, strlen(bearer));
+	free(bearer);
+
+cleanup:
+	secure_clear(token, sizeof(token));
+}
+
 void plus_vita_auth_probe(const PlusVitaCredential *credential,
 	PlusVitaAuthProbeResult *result)
 {
@@ -282,7 +377,7 @@ void plus_vita_auth_probe(const PlusVitaCredential *credential,
 	result->http_status = response.status_code;
 	char code[1024] = { 0 };
 	result->authorized = result->transport_ok && response.status_code == 302
-		&& extract_code(response.redirect_url, code, sizeof(code));
+		&& extract_parameter(response.redirect_url, "code", code, sizeof(code));
 
 	secure_clear(cookie, strlen(cookie));
 	free(cookie);
@@ -359,6 +454,8 @@ void plus_vita_auth_probe(const PlusVitaCredential *credential,
 		result->native_catalog_complete = fetch_native_catalog(store_base_url,
 			jsession, &result->native_category_count, &result->native_title_count);
 	secure_clear(store_base_url, sizeof(store_base_url));
+	if(result->native_catalog_complete)
+		fetch_owned_entitlements(credential, result);
 
 cleanup_session:
 	secure_clear(jsession, sizeof(jsession));
