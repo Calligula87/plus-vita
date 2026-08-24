@@ -659,6 +659,8 @@ int main(void)
 	check(auth_result.attempted, "runtime-only authorization attempted");
 	check(auth_result.transport_ok, "authorization TLS transport");
 	check(auth_result.authorized, "NPSSO authorization accepted");
+	check(auth_result.session_transport_ok, "PS Now session TLS transport");
+	check(auth_result.session_created, "PS Now session region accepted");
 #endif
 	test_base64();
 	test_runtime_credential_lifecycle();
@@ -702,6 +704,11 @@ int main(void)
 		file_result.found ? (file_result.parsed && file_result.deleted ? "consumed" : "failed") : "not present");
 	printf("Runtime-only NPSSO authorization: %s (HTTP %ld)\n",
 		auth_result.authorized ? "accepted" : "rejected", auth_result.http_status);
+	printf("PS Now session: %s (HTTP %ld) Region: %s/%s\n",
+		auth_result.session_created ? "created" : "failed",
+		auth_result.session_http_status,
+		auth_result.country[0] ? auth_result.country : "--",
+		auth_result.language[0] ? auth_result.language : "--");
 	printf("NPSSO entered length: %u (expected 64)\n",
 		(unsigned int)ime_result.entered_length);
 #ifdef PLUS_VITA_PUBLIC_APOLLO_TEST

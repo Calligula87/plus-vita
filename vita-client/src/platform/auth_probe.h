@@ -13,7 +13,12 @@ typedef struct plus_vita_auth_probe_result_t
 	bool format_valid;
 	bool transport_ok;
 	bool authorized;
+	bool session_transport_ok;
+	bool session_created;
 	long http_status;
+	long session_http_status;
+	char country[8];
+	char language[8];
 } PlusVitaAuthProbeResult;
 
 void plus_vita_auth_probe(const PlusVitaCredential *credential,

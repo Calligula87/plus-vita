@@ -19,6 +19,9 @@ secrets/
 .env
 .env.*
 auth/
+secret.json
+plus-vita-auth.json
+*npsso*.json
 
 # Build products.
 build/
