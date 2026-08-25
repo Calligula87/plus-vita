@@ -16,6 +16,7 @@
 #include <curl/curl.h>
 #include "cloudcatalog_internal.h"
 #include "platform/network.h"
+#include "platform/provision_probe.h"
 #include "platform/secure_http.h"
 #ifdef __vita__
 #include "platform/catalog_fetch_guard.h"
@@ -643,7 +644,7 @@ static void clear_catalog_screen(void)
 }
 
 static void launch_manifest_ui(const PlusVitaAuthProbeResult *result,
-	const PlusVitaCatalogEntry *entry)
+	const PlusVitaCatalogEntry *entry, const PlusVitaCredential *credential)
 {
 	wait_buttons_released();
 	clear_catalog_screen();
@@ -668,18 +669,51 @@ static void launch_manifest_ui(const PlusVitaAuthProbeResult *result,
 		&& result->store_language[0] ? "READY" : "BLOCKED");
 	printf("MANIFEST:      %s\n\n", ready ? "READY" : "INCOMPLETE");
 	printf("No entitlement or server was requested.\n");
-	printf("CIRCLE: Back to title details\n");
+	printf("X: Verify allocation authorization   CIRCLE: Back\n");
+	unsigned int previous = 0;
 	for(;;)
 	{
 		SceCtrlData pad = { 0 };
 		sceKernelDelayThread(20000);
 		sceCtrlPeekBufferPositive(0, &pad, 1);
-		if(pad.buttons & SCE_CTRL_CIRCLE) return;
+		unsigned int pressed = pad.buttons & ~previous;
+		previous = pad.buttons;
+		if(pressed & SCE_CTRL_CIRCLE) return;
+		if((pressed & SCE_CTRL_CROSS) && ready)
+		{
+			clear_catalog_screen();
+			printf("PLUS VITA  |  Allocation authorization\n");
+			printf("---------------------------------------------------------------\n\n");
+			printf("Checking account authorization for an allocation request...\n");
+			PlusVitaProvisionProbeResult probe;
+			plus_vita_provision_authorize(credential, &probe);
+			clear_catalog_screen();
+			printf("PLUS VITA  |  Allocation authorization\n");
+			printf("---------------------------------------------------------------\n\n");
+			printf("%s\n\n", entry->name);
+			printf("Transport:     %s\n", probe.transport_ok ? "READY" : "FAILED");
+			printf("Authorization: %s (HTTP %ld)\n",
+				probe.authorized ? "ACCEPTED" : "REJECTED", probe.http_status);
+			printf("Allocation:    NOT REQUESTED\n");
+			printf("Server slot:   NOT REQUESTED\n\n");
+			printf("%s\n\n", probe.authorized
+				? "ALLOCATION GATE READY"
+				: "ALLOCATION GATE BLOCKED");
+			printf("CIRCLE: Back to title details\n");
+			wait_buttons_released();
+			for(;;)
+			{
+				SceCtrlData result_pad = { 0 };
+				sceKernelDelayThread(20000);
+				sceCtrlPeekBufferPositive(0, &result_pad, 1);
+				if(result_pad.buttons & SCE_CTRL_CIRCLE) return;
+			}
+		}
 	}
 }
 
 static void catalog_detail_ui(const PlusVitaAuthProbeResult *result,
-	unsigned int selected)
+	unsigned int selected, const PlusVitaCredential *credential)
 {
 	const PlusVitaCatalogEntry *entry = &result->native_titles[selected];
 	wait_buttons_released();
@@ -716,14 +750,15 @@ redraw:
 		if(pressed & SCE_CTRL_CIRCLE) return;
 		if(pressed & SCE_CTRL_CROSS)
 		{
-			launch_manifest_ui(result, entry);
+			launch_manifest_ui(result, entry, credential);
 			wait_buttons_released();
 			goto redraw;
 		}
 	}
 }
 
-static void catalog_ui(const PlusVitaAuthProbeResult *result)
+static void catalog_ui(const PlusVitaAuthProbeResult *result,
+	const PlusVitaCredential *credential)
 {
 	const unsigned int rows = 18;
 	unsigned int selected = 0;
@@ -766,7 +801,7 @@ static void catalog_ui(const PlusVitaAuthProbeResult *result)
 			if(pressed & SCE_CTRL_CIRCLE) return;
 			if(pressed & SCE_CTRL_CROSS)
 			{
-				catalog_detail_ui(result, selected);
+				catalog_detail_ui(result, selected, credential);
 				wait_buttons_released();
 				previous = 0;
 				break;
@@ -806,8 +841,6 @@ int main(void)
 		ime_result.entered_length = runtime_credential.length;
 	}
 	plus_vita_auth_probe(&runtime_credential, &auth_result);
-	plus_vita_credential_clear(&runtime_credential);
-	ime_result.credential_wiped = plus_vita_credential_is_clear(&runtime_credential);
 	psvDebugScreenInit();
 	sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
 #endif
@@ -817,7 +850,8 @@ int main(void)
 	check(ime_result.accepted, "credential runtime input accepted");
 	check(ime_result.validated && ime_result.entered_length > 0,
 		"credential bounded validation");
-	check(ime_result.credential_wiped, "credential runtime wipe");
+	check(!plus_vita_credential_is_clear(&runtime_credential),
+		"credential retained in RAM for explicit launch authorization");
 	check(ime_result.input_wiped, "credential IME buffer wipe");
 	check(!file_result.found || (file_result.parsed && file_result.deleted
 		&& file_result.buffer_wiped), "one-time credential file consumed");
@@ -921,11 +955,13 @@ int main(void)
 		sceCtrlPeekBufferPositive(0, &pad, 1);
 		if((pad.buttons & SCE_CTRL_CROSS) && auth_result.native_titles_count)
 		{
-			catalog_ui(&auth_result);
+			catalog_ui(&auth_result, &runtime_credential);
 			break;
 		}
 		if(pad.buttons & SCE_CTRL_CIRCLE) break;
 	}
+	plus_vita_credential_clear(&runtime_credential);
+	ime_result.credential_wiped = plus_vita_credential_is_clear(&runtime_credential);
 	plus_vita_auth_probe_result_fini(&auth_result);
 	psvDebugScreenFinish();
 #else

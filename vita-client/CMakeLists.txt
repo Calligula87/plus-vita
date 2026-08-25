@@ -82,6 +82,7 @@ add_executable(${PROJECT_NAME}
   src/platform/credential_file.c
   src/platform/credential_ime.c
   src/platform/network.c
+  src/platform/provision_probe.c
   src/platform/secure_http.c
   src/platform/thread_compat.c
   src/platform/time.c
