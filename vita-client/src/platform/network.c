@@ -9,7 +9,10 @@ static bool initialized;
 #include <psp2/net/netctl.h>
 #include <psp2/sysmodule.h>
 
-#define PLUS_VITA_NET_MEMORY_SIZE (1024 * 1024)
+/* Takion requests a 4 MiB UDP receive window. SceNet allocates socket buffers
+ * from this pool, so retain enough space for that window plus network-stack,
+ * DNS, and additional socket overhead used during cloud provisioning. */
+#define PLUS_VITA_NET_MEMORY_SIZE (8 * 1024 * 1024)
 
 static unsigned char net_memory[PLUS_VITA_NET_MEMORY_SIZE] __attribute__((aligned(64)));
 static bool module_owned;

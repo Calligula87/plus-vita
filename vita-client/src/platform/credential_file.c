@@ -74,7 +74,12 @@ void plus_vita_credential_file_read(PlusVitaCredential *credential,
 		result->parsed = parse_npsso(buffer, (size_t)read_size, credential);
 	secure_clear(buffer, sizeof(buffer));
 	result->buffer_wiped = memory_is_clear(buffer, sizeof(buffer));
-	result->deleted = sceIoRemove(CREDENTIAL_FILE) >= 0;
-	if(!result->parsed)
+	if(result->parsed)
+		result->retained = true;
+	else
+	{
+		/* Do not leave a malformed credential file blocking a replacement. */
+		sceIoRemove(CREDENTIAL_FILE);
 		plus_vita_credential_clear(credential);
+	}
 }

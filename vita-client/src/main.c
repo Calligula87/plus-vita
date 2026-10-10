@@ -3,6 +3,7 @@
 #include <chiaki/base64.h>
 #include <chiaki/common.h>
 #include <chiaki/cloudcatalog.h>
+#include <chiaki/cloudsession.h>
 #include <chiaki/log.h>
 #include <chiaki/random.h>
 #include <chiaki/seqnum.h>
@@ -18,12 +19,14 @@
 #include "platform/network.h"
 #include "platform/provision_probe.h"
 #include "platform/secure_http.h"
+#include "platform/stream_probe.h"
 #ifdef __vita__
 #include "platform/catalog_fetch_guard.h"
 #include "platform/auth_probe.h"
 #include "platform/credential.h"
 #include "platform/credential_file.h"
 #include "platform/credential_ime.h"
+#include "platform/diagnostic_log.h"
 #include "platform/vita_cc_http_test.h"
 #endif
 
@@ -643,6 +646,168 @@ static void clear_catalog_screen(void)
 	psvDebugScreenSetCoordsXY(&x, &y);
 }
 
+typedef struct plus_vita_allocation_progress_t
+{
+	const char *title;
+} PlusVitaAllocationProgress;
+
+static void allocation_progress(const char *stage, void *user)
+{
+	const PlusVitaAllocationProgress *progress = user;
+	plus_vita_diagnostic_progress(stage);
+	clear_catalog_screen();
+	printf("PLUS VITA  |  Cloud allocation\n");
+	printf("---------------------------------------------------------------\n\n");
+	printf("%s\n\n", progress->title);
+	printf("%s\n", stage ? stage : "Working...");
+}
+
+static void wipe_dynamic_string(char *value)
+{
+	if(!value) return;
+	volatile char *wipe = value;
+	size_t length = strlen(value);
+	for(size_t i = 0; i < length; i++) wipe[i] = 0;
+}
+
+static void allocation_ui(const PlusVitaAuthProbeResult *result,
+	const PlusVitaCatalogEntry *entry, const PlusVitaCredential *credential)
+{
+	if(PLUS_VITA_STREAM_PROBE_REPLAY)
+	{
+		bool ready = plus_vita_diagnostic_begin();
+		ChiakiLog replay_log;
+		chiaki_log_init(&replay_log, CHIAKI_LOG_INFO | CHIAKI_LOG_WARNING | CHIAKI_LOG_ERROR,
+			plus_vita_diagnostic_chiaki_log, NULL);
+		clear_catalog_screen();
+		printf("PLUS VITA | Audited 720p sample replay\nBuild: %s\n", PLUS_VITA_STREAM_PROBE_BUILD);
+		printf("Recorded sample only. No new cloud session requested.\n");
+		plus_vita_diagnostic_event("replay.begin", 0);
+		ChiakiErrorCode replay_err = plus_vita_stream_probe(NULL, &replay_log, NULL);
+		plus_vita_diagnostic_event("replay.complete", (int)replay_err);
+		plus_vita_diagnostic_end();
+		clear_catalog_screen();
+		printf("PLUS VITA | Audited 720p sample replay\nBuild: %s\n\n", PLUS_VITA_STREAM_PROBE_BUILD);
+		printf("%s\n", replay_err == CHIAKI_ERR_SUCCESS ? "720P SAMPLE REPLAY PASSED" : "720P SAMPLE REPLAY FAILED");
+		printf("Live streaming not tested. See %s\n", ready ? "ux0:data/plus-vita-allocation.log" : "unavailable diagnostic log");
+		printf("\nCIRCLE: Back to title details\n");
+		wait_buttons_released();
+		for(;;)
+		{
+			SceCtrlData pad = { 0 };
+			sceKernelDelayThread(20000);
+			sceCtrlPeekBufferPositive(0, &pad, 1);
+			if(pad.buttons & SCE_CTRL_CIRCLE) return;
+		}
+	}
+retry_allocation: ;
+	bool diagnostic_ready = plus_vita_diagnostic_begin();
+	plus_vita_diagnostic_event("allocation.begin", 0);
+	PlusVitaAllocationProgress progress = { .title = entry->name };
+	ChiakiCloudProvisionConfig config = {
+		.service_type = "psnow",
+		.game_identifier = entry->id,
+		.game_name = entry->name,
+		.npsso = credential->value,
+		.store_country = result->store_country,
+		.store_lang = result->store_language,
+		.owned_entitlement_id = "",
+		.owned_platform = "",
+		.catalog_is_foreign = false,
+		.skip_account_attr_check = true,
+		.forced_datacenter = "Auto",
+		.prior_datacenters_json = "",
+		.game_language = result->language,
+		.resolution = 720,
+		.bitrate_kbps = 8000,
+		.progress = allocation_progress,
+		.user = &progress,
+	};
+	ChiakiCloudProvisionResult provision = { 0 };
+	ChiakiLog allocation_log;
+	chiaki_log_init(&allocation_log,
+		CHIAKI_LOG_INFO | CHIAKI_LOG_WARNING | CHIAKI_LOG_ERROR,
+		plus_vita_diagnostic_chiaki_log, NULL);
+	bool network_owned = !plus_vita_network_is_initialized();
+	ChiakiErrorCode err = plus_vita_network_init();
+	ChiakiErrorCode stream_err = CHIAKI_ERR_UNINITIALIZED;
+	bool user_stopped = false;
+	plus_vita_diagnostic_event("allocation.network.init", (int)err);
+	if(err == CHIAKI_ERR_SUCCESS)
+	{
+		allocation_progress("Requesting a PlayStation cloud session...", &progress);
+		err = chiaki_cloud_provision_session(&config, &provision,
+			&allocation_log);
+		if(err == CHIAKI_ERR_SUCCESS)
+		{
+			allocation_progress("Streaming (hold START + SELECT for 2 seconds to end)...", &progress);
+			plus_vita_diagnostic_event("stream_probe.begin", 0);
+			stream_err = plus_vita_stream_probe(&provision, &allocation_log,
+				&user_stopped);
+			plus_vita_diagnostic_event("stream_probe.complete", (int)stream_err);
+		}
+		if(network_owned)
+		{
+			plus_vita_network_fini();
+			plus_vita_diagnostic_event("allocation.network.release", 0);
+		}
+	}
+	else
+	{
+		allocation_progress("Network initialization failed", &progress);
+	}
+	plus_vita_diagnostic_event("allocation.complete", (int)err);
+	plus_vita_diagnostic_end();
+	clear_catalog_screen();
+	printf("PLUS VITA  |  Cloud allocation result\n");
+	printf("Build: %s\n", PLUS_VITA_STREAM_PROBE_BUILD);
+	printf("---------------------------------------------------------------\n\n");
+	printf("%s\n\n", entry->name);
+	printf("Diagnostic: %s\n", diagnostic_ready
+		? "ux0:data/plus-vita-allocation.log"
+		: "UNAVAILABLE");
+	if(err == CHIAKI_ERR_SUCCESS)
+	{
+		printf("Allocation: READY\n");
+		printf("Platform:   %s\n", provision.platform);
+		printf("Endpoint:   %s:%d\n", provision.server_ip, provision.server_port);
+		printf("Latency:    %llu us\n", (unsigned long long)provision.rtt_us);
+		printf("MTU:        %u in / %u out\n", provision.mtu_in, provision.mtu_out);
+		printf("Transport:  %s\n\n", stream_err == CHIAKI_ERR_SUCCESS
+			? (user_stopped ? "ENDED BY USER" : "LIVE VIDEO + AUDIO PASSED")
+			: "LIVE VIDEO + AUDIO FAILED");
+		printf("%s\n", stream_err == CHIAKI_ERR_SUCCESS
+			? (user_stopped ? "Controller released; stream disconnected."
+				: "Bounded live video and audio preview completed.")
+			: "See diagnostic log for guard, transport, or decoder failure");
+	}
+	else
+	{
+		printf("Allocation: FAILED\n");
+		printf("Error code: %d\n", (int)err);
+		printf("Detail:     %s\n", provision.error_message
+			? provision.error_message : "No server detail returned");
+	}
+	wipe_dynamic_string(provision.handshake_key);
+	wipe_dynamic_string(provision.launch_spec);
+	wipe_dynamic_string(provision.session_id);
+	chiaki_cloud_provision_result_fini(&provision);
+	printf("\nX: Connect again (new session)   CIRCLE: Title details\n");
+	wait_buttons_released();
+	for(;;)
+	{
+		SceCtrlData pad = { 0 };
+		sceKernelDelayThread(20000);
+		sceCtrlPeekBufferPositive(0, &pad, 1);
+		if(pad.buttons & SCE_CTRL_CIRCLE) return;
+		if(pad.buttons & SCE_CTRL_CROSS)
+		{
+			wait_buttons_released();
+			goto retry_allocation;
+		}
+	}
+}
+
 static void launch_manifest_ui(const PlusVitaAuthProbeResult *result,
 	const PlusVitaCatalogEntry *entry, const PlusVitaCredential *credential)
 {
@@ -659,9 +824,10 @@ static void launch_manifest_ui(const PlusVitaAuthProbeResult *result,
 	printf("Platform:      %s\n", entry->platform);
 	printf("Store route:   %s/%s\n", result->store_country,
 		result->store_language);
-	printf("Video profile: 960x544 target / 720p service request\n");
+	printf("Video test:    guarded live 720p / up to 10 minutes\n");
+	printf("Exit stream:   hold START + SELECT for 2 seconds\n");
 	printf("Frame rate:    60 fps target\n");
-	printf("Bitrate:       8000 kbps initial\n");
+	printf("Bitrate:       8000 kbps known-good allocation\n");
 	printf("Datacenter:    Auto (latency selection required)\n\n");
 	printf("Identifier:    %s\n", entry->launch_id_valid ? "READY" : "BLOCKED");
 	printf("Platform:      %s\n", platform_ready ? "READY" : "RESOLVER REQUIRED");
@@ -699,14 +865,22 @@ static void launch_manifest_ui(const PlusVitaAuthProbeResult *result,
 			printf("%s\n\n", probe.authorized
 				? "ALLOCATION GATE READY"
 				: "ALLOCATION GATE BLOCKED");
-			printf("CIRCLE: Back to title details\n");
+			printf("X: Request cloud allocation   CIRCLE: Back\n");
 			wait_buttons_released();
+			unsigned int result_previous = 0;
 			for(;;)
 			{
 				SceCtrlData result_pad = { 0 };
 				sceKernelDelayThread(20000);
 				sceCtrlPeekBufferPositive(0, &result_pad, 1);
-				if(result_pad.buttons & SCE_CTRL_CIRCLE) return;
+				unsigned int result_pressed = result_pad.buttons & ~result_previous;
+				result_previous = result_pad.buttons;
+				if(result_pressed & SCE_CTRL_CIRCLE) return;
+				if(result_pressed & SCE_CTRL_CROSS)
+				{
+					allocation_ui(result, entry, credential);
+					return;
+				}
 			}
 		}
 	}
@@ -736,8 +910,8 @@ redraw:
 	printf("CATALOGUE     READY\n");
 	printf("TITLE ID      %s\n", entry->launch_id_valid ? "VALID" : "INVALID");
 	printf("LOCAL PREFLIGHT %s\n", entry->launch_id_valid ? "READY" : "BLOCKED");
-	printf("PROVISIONING  NOT YET IMPLEMENTED\n");
-	printf("STREAM        DISABLED\n\n");
+	printf("PROVISIONING  ON REQUEST\n");
+	printf("STREAM        ON REQUEST\n\n");
 	printf("X: Provisioning manifest   CIRCLE: Back to catalogue\n");
 	unsigned int previous = 0;
 	for(;;)
@@ -785,7 +959,7 @@ static void catalog_ui(const PlusVitaAuthProbeResult *result,
 		printf("\n%u / %u  %s\n", selected + 1, result->native_titles_count,
 			entry->id);
 		printf("UP/DOWN select   L/R page   X details   CIRCLE back\n");
-		printf("Launch is intentionally disabled in this milestone.\n");
+		printf("X opens the title's cloud-session test.\n");
 
 		for(;;)
 		{
@@ -853,8 +1027,8 @@ int main(void)
 	check(!plus_vita_credential_is_clear(&runtime_credential),
 		"credential retained in RAM for explicit launch authorization");
 	check(ime_result.input_wiped, "credential IME buffer wipe");
-	check(!file_result.found || (file_result.parsed && file_result.deleted
-		&& file_result.buffer_wiped), "one-time credential file consumed");
+	check(!file_result.found || (file_result.parsed && file_result.retained
+		&& file_result.buffer_wiped), "credential file retained for later launches");
 	check(auth_result.format_valid, "NPSSO 64-character format");
 	check(auth_result.attempted, "runtime-only authorization attempted");
 	check(auth_result.transport_ok, "authorization TLS transport");
@@ -905,8 +1079,8 @@ int main(void)
 	printf("Unified catalog cache-hit test included.\n");
 	printf("Runtime-only credential lifecycle included.\n");
 	printf("Visible Vita credential entry (runtime-only) included.\n");
-	printf("One-time credential file: %s\n",
-		file_result.found ? (file_result.parsed && file_result.deleted ? "consumed" : "failed") : "not present");
+	printf("Credential file: %s\n",
+		file_result.found ? (file_result.parsed && file_result.retained ? "retained" : "invalid") : "not present");
 	printf("Runtime-only NPSSO authorization: %s (HTTP %ld)\n",
 		auth_result.authorized ? "accepted" : "rejected", auth_result.http_status);
 	printf("PS Now session: %s (HTTP %ld) Region: %s/%s\n",

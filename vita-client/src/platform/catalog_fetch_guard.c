@@ -3,6 +3,9 @@
 #include "catalog_fetch_guard.h"
 #include "cloudcatalog_internal.h"
 
+#include <chiaki/random.h>
+
+#include <stdio.h>
 #include <string.h>
 
 static unsigned int attempts;
@@ -65,6 +68,19 @@ CCOwnedResult cc_fetch_owned(ChiakiLog *log, const char *npsso,
 ChiakiErrorCode chiaki_holepunch_generate_client_device_uid(
 	char *out, size_t *out_size)
 {
-	(void)out; (void)out_size;
-	return CHIAKI_ERR_CANCELED;
+	if(!out || !out_size || *out_size < 49)
+		return CHIAKI_ERR_BUF_TOO_SMALL;
+	uint8_t random_bytes[16];
+	ChiakiErrorCode err = chiaki_random_bytes_crypt(random_bytes,
+		sizeof(random_bytes));
+	if(err != CHIAKI_ERR_SUCCESS)
+		return err;
+	snprintf(out, *out_size, "0000000700410080");
+	for(size_t i = 0; i < sizeof(random_bytes); i++)
+		snprintf(out + 16 + i * 2, 3, "%02x", random_bytes[i]);
+	volatile uint8_t *wipe = random_bytes;
+	for(size_t i = 0; i < sizeof(random_bytes); i++)
+		wipe[i] = 0;
+	*out_size = 48;
+	return CHIAKI_ERR_SUCCESS;
 }

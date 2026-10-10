@@ -11,7 +11,7 @@ typedef struct plus_vita_credential_file_result_t
 {
 	bool found;
 	bool parsed;
-	bool deleted;
+	bool retained;
 	bool buffer_wiped;
 } PlusVitaCredentialFileResult;
 
