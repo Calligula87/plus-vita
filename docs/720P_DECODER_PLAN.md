@@ -348,3 +348,42 @@ default-stack callback to dedicated256KiB worker. Details/provenance/hash in
 docs/AUDIO_PLAYBACK_TEST.md. Built/uploaded/readback verified, NPSSO unchanged;
 native video and recovery untouched. Awaiting hardware verification, not yet
 claimed fixed on device.
+
+2026-10-10: Live 720p video, audio, full controller/touch mappings and clean
+stop/reallocation have progressed through hardware tests. Input-7 completed
+ten minutes with 45 successful IDR recoveries and no false timeout; input-8
+removed automatic audio sample recording after the user accepted audio quality.
+The next approved step is video FEC reconstruction using Pylux's existing
+Cauchy backend, with all current reference guards retained. See
+`docs/VIDEO_FEC_TEST.md` for implementation, host test results and the pending
+hardware gate. Do not treat host reconstruction tests as a hardware fluidity
+pass or relax the audited decoder/reference assumptions.
+
+2026-10-10: First video FEC hardware run completed ten minutes cleanly, repaired
+536 frames with zero repair failures, but still incurred 46 recovery episodes
+and about 22 seconds total recovery wait. User approved the next targeted step:
+three-frame assembly/reordering with a 20ms successor-triggered grace. Retain
+late source/parity, release complete AUs strictly in order, and retain the
+existing validated-IDR fallback for actual loss. Host ordering/timer/FEC tests
+and VitaSDK packaging passed for `live-720p-refs5-video-reorder-1`; hardware
+fluidity gate is pending. Details and metric limitations are in
+`docs/VIDEO_FEC_TEST.md`. Display catch-up pacing is a separate subsequent step,
+not bundled into this build; accepted audio, controls and recording-off stay.
+
+2026-10-13: Reorder hardware gate passed for the tested 6m36s run: one 114ms
+recovery, seven late-completed assemblies, no native/audio/FEC failure, clean
+user stop. Network loss was also lighter; do not attribute all aggregate gains
+to reordering. User approved the next display-pacing step. Implemented build
+`live-720p-refs5-display-worker-1`: separate display worker, three screen buffers,
+explicit pinned scanout ownership and protected recovery picture; no compressed
+reference AU dropping, no decoder/reference/audio/receiver/credential changes.
+Memory/UB/thread sanitizer tests and VitaSDK packaging passed, but the hardware
+gate FAILED: the compressed preview queue filled after roughly 37 seconds.
+The log does not prove the cause of the scheduling/arrival stall. User chose
+to restore the tested reorder baseline, not continue this pacing experiment.
+On 2026-10-13, restored `live-720p-refs5-video-reorder-1` source and the exact
+preserved VPK; FTP readback matched the working hash. Accepted audio, controls,
+FEC/reorder and decoder/reference guards are retained. Display remains the
+original synchronous two-buffer implementation. See `docs/DISPLAY_PACING_TEST.md`
+for the failure/rollback record. Further display experiments are deferred;
+they require a new user decision and must not replace the accepted baseline.

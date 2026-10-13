@@ -36,6 +36,7 @@ set(PYLUX_ROOT "${CMAKE_CURRENT_LIST_DIR}/../external/pylux")
 set(NANOPB_ROOT "${PYLUX_ROOT}/third-party/nanopb")
 set(JSONC_ROOT "${CMAKE_CURRENT_LIST_DIR}/../external/json-c")
 set(VITASDK_COMMON "$ENV{VITASDK}/share/gcc-arm-vita-eabi/samples/common")
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/video_fec_backend.cmake")
 if(NOT EXISTS "${PYLUX_ROOT}/lib/src/base64.c")
   message(FATAL_ERROR "Pylux submodule is missing; run: git submodule update --init --recursive")
 endif()
@@ -502,6 +503,7 @@ add_executable(${PROJECT_NAME}
   "${PYLUX_ROOT}/lib/src/bitstream.c"
   "${PYLUX_ROOT}/lib/src/controller.c"
   "${PYLUX_ROOT}/lib/src/feedback.c"
+  "${PYLUX_ROOT}/lib/src/fec.c"
   "${PLUS_VITA_FEEDBACK_SOURCE}"
   "${PLUS_VITA_ECDH_SOURCE}"
   "${PLUS_VITA_GKCRYPT_SOURCE}"
@@ -524,6 +526,8 @@ add_executable(${PROJECT_NAME}
   src/platform/socket_vita.c
   src/platform/h264_config.c
   src/platform/stream_probe.c
+  src/platform/video_fec.c
+  src/platform/video_reorder.c
   src/platform/audio_playback_vita.c
   src/platform/video_decoder_vita.c
   src/platform/video_present_vita.c
@@ -553,6 +557,9 @@ add_executable(${PROJECT_NAME}
 
 set_source_files_properties("${PYLUX_ROOT}/lib/src/bitstream.c" PROPERTIES
   COMPILE_OPTIONS "-Wno-error=shift-negative-value;-Wno-error=sign-compare"
+)
+set_source_files_properties("${PYLUX_ROOT}/lib/src/fec.c" PROPERTIES
+  COMPILE_OPTIONS "-Wno-error=sign-compare"
 )
 
 # Pylux currently has one signed/unsigned comparison in its formatting path.
@@ -643,6 +650,10 @@ list(APPEND PLUS_VITA_VPK_FILES FILE
   "${CMAKE_CURRENT_LIST_DIR}/cacert.pem" "cacert.pem")
 list(APPEND PLUS_VITA_VPK_FILES FILE
   "${CMAKE_CURRENT_LIST_DIR}/../external/opus-1.6.1/COPYING" "licenses/opus.txt")
+list(APPEND PLUS_VITA_VPK_FILES FILE
+  "${PLUS_VITA_GF_ROOT}/License.txt" "licenses/gf-complete.txt")
+list(APPEND PLUS_VITA_VPK_FILES FILE
+  "${PLUS_VITA_JERASURE_ROOT}/License.txt" "licenses/jerasure.txt")
 if(PLUS_VITA_TLS_TRUSTED_CA_FILE)
   if(NOT EXISTS "${PLUS_VITA_TLS_TRUSTED_CA_FILE}")
     message(FATAL_ERROR "Trusted test CA does not exist: ${PLUS_VITA_TLS_TRUSTED_CA_FILE}")
@@ -671,6 +682,7 @@ target_link_options(${PROJECT_NAME} PRIVATE
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
+	plus_vita_jerasure
 	opus
 	SceAudio_stub
 	json-c

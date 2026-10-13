@@ -371,3 +371,7 @@ the 20 ms block duration; the log also reports 17 output-gap stalls above its
 30 ms threshold. This successful run validates the new playback settings on
 the tested Vita and game. The two output-setting changes have not been isolated
 from each other, so it does not establish which one cured the audible artifact.
+
+## Audio recordings retired
+
+After the successful input-7 ten-minute test on 2026-10-10, the user requested that automatic audio samples stop. Build `live-720p-refs5-input-8-no-audio-capture` removes the recording buffers, sample copies, and WAV/Opus packet file writes. Playback settings and diagnostic counters stay in the normal allocation log. Six generated WAV files and their six companion `.opuspack` files were backed up to `build/debug/audio-captures-backup-20261010/` and removed from `ux0:data`.

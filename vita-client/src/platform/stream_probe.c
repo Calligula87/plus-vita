@@ -5,6 +5,8 @@
 #include "video_decoder_vita.h"
 #include "video_present_vita.h"
 #include "audio_playback_vita.h"
+#include "video_fec.h"
+#include "video_reorder.h"
 #include <psp2/ctrl.h>
 #include <psp2/touch.h>
 #include <psp2/kernel/processmgr.h>
@@ -60,9 +62,19 @@ typedef struct probe_video_assembly_t
 	uint16_t units_fec;
 	uint16_t units_source;
 	uint16_t units_received;
+	uint16_t parity_received;
+	bool fec_attempted;
+	bool late_received;
+	size_t stored_bytes;
 	uint8_t *unit_data[PROBE_VIDEO_UNITS_MAX];
 	size_t unit_size[PROBE_VIDEO_UNITS_MAX];
 } ProbeVideoAssembly;
+
+typedef struct {
+	unsigned int profile;
+	uint16_t expected, received;
+	bool units[PROBE_VIDEO_UNITS_MAX];
+} ProbeReceptionFrame;
 
 typedef enum plus_vita_stream_probe_state_t
 {
@@ -89,6 +101,10 @@ typedef struct plus_vita_stream_probe_t
 	unsigned int video_packets;
 	unsigned int audio_packets;
 	unsigned int video_frames;
+	unsigned int fec_frames_advertised;
+	unsigned int fec_packets_seen;
+	unsigned int fec_attempts, fec_repaired_frames, fec_repaired_units, fec_failed;
+	uint64_t fec_total_us, fec_max_us;
 	unsigned int audio_frames;
 	PlusVitaAudioPlayback *audio_playback;
 	bool video_keyframe;
@@ -119,12 +135,8 @@ typedef struct plus_vita_stream_probe_t
 	unsigned int last_profile_index;
 	bool last_profile_valid;
 	/* Wire reception counts, independent of the selected decoder profile. */
-	bool feedback_frame_valid;
-	ChiakiSeqNum16 feedback_frame_index;
-	unsigned int feedback_profile;
-	uint16_t feedback_expected;
-	uint16_t feedback_received;
-	bool feedback_units[PROBE_VIDEO_UNITS_MAX];
+	PlusVitaVideoReorder feedback_window;
+	ProbeReceptionFrame feedback_frames[PLUS_VITA_VIDEO_REORDER_SLOTS];
 	uint32_t feedback_pending_received;
 	uint32_t feedback_pending_lost;
 	unsigned int feedback_reports;
@@ -139,7 +151,14 @@ typedef struct plus_vita_stream_probe_t
 	unsigned int queue_peak;
 	unsigned int incomplete_frames;
 	unsigned int stale_packets;
-	ProbeVideoAssembly video_assembly;
+	ProbeVideoAssembly video_assembly[PLUS_VITA_VIDEO_REORDER_SLOTS];
+	PlusVitaVideoReorder video_reorder;
+	unsigned int reorder_late_packets, reorder_saved_frames, reorder_expired_frames;
+	unsigned int reorder_missing_frames, reorder_pressure_drops, reorder_peak;
+	unsigned int reorder_retired_packets;
+	unsigned int reorder_waits;
+	uint64_t reorder_wait_total_us, reorder_wait_max_us;
+	uint64_t reorder_held_total_us, reorder_held_max_us;
 	uint8_t *capture_data;
 	size_t capture_size;
 	unsigned int capture_frames;
@@ -274,9 +293,8 @@ static void probe_capture_frame(PlusVitaStreamProbe *probe,
 }
 
 static ChiakiErrorCode probe_video_start_frame(PlusVitaStreamProbe *probe,
-	ChiakiTakionAVPacket *packet)
+	ProbeVideoAssembly *assembly, ChiakiTakionAVPacket *packet)
 {
-	ProbeVideoAssembly *assembly = &probe->video_assembly;
 	if(packet->units_in_frame_total < packet->units_in_frame_fec
 		|| packet->units_in_frame_total > PROBE_VIDEO_UNITS_MAX)
 		return CHIAKI_ERR_INVALID_DATA;
@@ -289,7 +307,28 @@ static ChiakiErrorCode probe_video_start_frame(PlusVitaStreamProbe *probe,
 		- packet->units_in_frame_fec;
 	if(!assembly->units_source)
 		return CHIAKI_ERR_INVALID_DATA;
+	if(assembly->units_fec)
+		probe->fec_frames_advertised++;
 	return CHIAKI_ERR_SUCCESS;
+}
+
+static void probe_reception_flush(PlusVitaStreamProbe *probe, bool pressure)
+{
+	for(;;)
+	{
+		/* Never mark these slots ready: congestion accounting keeps actual
+		 * source AND parity receipts until the same bounded late-packet grace
+		 * expires, even if the decoder has already received a complete AU. */
+		PlusVitaVideoReorderEvent event = plus_vita_video_reorder_poll(
+			&probe->feedback_window, sceKernelGetProcessTimeWide(), pressure);
+		if(event.action == PLUS_VITA_VIDEO_REORDER_WAIT) return;
+		if(event.slot < 0) continue; /* unknown geometry: do not invent loss */
+		ProbeReceptionFrame *frame = &probe->feedback_frames[event.slot];
+		probe->feedback_pending_received += frame->received;
+		probe->feedback_pending_lost += frame->expected - frame->received;
+		memset(frame, 0, sizeof(*frame));
+		pressure = false; /* one free slot is enough; retain the other frames */
+	}
 }
 
 static ChiakiErrorCode probe_record_reception(PlusVitaStreamProbe *probe,
@@ -300,33 +339,35 @@ static ChiakiErrorCode probe_record_reception(PlusVitaStreamProbe *probe,
 		|| packet->units_in_frame_fec > packet->units_in_frame_total
 		|| packet->unit_index >= packet->units_in_frame_total)
 		return CHIAKI_ERR_INVALID_DATA;
-	if(probe->feedback_frame_valid
-		&& packet->frame_index != probe->feedback_frame_index
-		&& !chiaki_seq_num_16_gt(packet->frame_index, probe->feedback_frame_index))
-		return CHIAKI_ERR_SUCCESS;
-	if(!probe->feedback_frame_valid
-		|| packet->frame_index != probe->feedback_frame_index
-		|| packet->adaptive_stream_index != probe->feedback_profile)
+	probe_reception_flush(probe, false);
+	int slot = plus_vita_video_reorder_admit(&probe->feedback_window,
+		packet->frame_index, sceKernelGetProcessTimeWide());
+	if(slot == PLUS_VITA_VIDEO_REORDER_FULL)
 	{
-		if(probe->feedback_frame_valid)
-		{
-			probe->feedback_pending_received += probe->feedback_received;
-			probe->feedback_pending_lost += probe->feedback_expected
-				- probe->feedback_received;
-		}
-		probe->feedback_frame_valid = true;
-		probe->feedback_frame_index = packet->frame_index;
-		probe->feedback_profile = packet->adaptive_stream_index;
-		probe->feedback_expected = packet->units_in_frame_total;
-		probe->feedback_received = 0;
-		memset(probe->feedback_units, 0, sizeof(probe->feedback_units));
+		probe_reception_flush(probe, true);
+		slot = plus_vita_video_reorder_admit(&probe->feedback_window,
+			packet->frame_index, sceKernelGetProcessTimeWide());
 	}
-	if(packet->units_in_frame_total != probe->feedback_expected)
-		return CHIAKI_ERR_INVALID_DATA;
-	if(!probe->feedback_units[packet->unit_index])
+	if(slot == PLUS_VITA_VIDEO_REORDER_STALE) return CHIAKI_ERR_SUCCESS;
+	if(slot < 0) return CHIAKI_ERR_OVERFLOW;
+	ProbeReceptionFrame *frame = &probe->feedback_frames[slot];
+	if(frame->expected && frame->profile != packet->adaptive_stream_index)
 	{
-		probe->feedback_units[packet->unit_index] = true;
-		probe->feedback_received++;
+		probe->feedback_pending_received += frame->received;
+		probe->feedback_pending_lost += frame->expected - frame->received;
+		memset(frame, 0, sizeof(*frame));
+	}
+	if(!frame->expected)
+	{
+		frame->expected = packet->units_in_frame_total;
+		frame->profile = packet->adaptive_stream_index;
+	}
+	if(packet->units_in_frame_total != frame->expected)
+		return CHIAKI_ERR_INVALID_DATA;
+	if(!frame->units[packet->unit_index])
+	{
+		frame->units[packet->unit_index] = true;
+		frame->received++;
 	}
 	return CHIAKI_ERR_SUCCESS;
 }
@@ -337,6 +378,63 @@ static ChiakiErrorCode probe_send_protobuf(PlusVitaStreamProbe *probe,
 static bool probe_wire_next(ChiakiSeqNum16 previous, ChiakiSeqNum16 current)
 {
 	return current == (ChiakiSeqNum16)(previous + 1);
+}
+
+static ChiakiErrorCode probe_video_submit(PlusVitaStreamProbe *probe,
+	ProbeVideoAssembly *assembly);
+
+/* Caller holds the same mutex as the receive callback. A timer in the main
+ * loop also drains this window, so a missing packet cannot wait indefinitely.
+ * Retirement never advances decoder/reference state: submit still detects
+ * any real wire gap and requests a validated IDR. */
+static ChiakiErrorCode probe_video_drain(PlusVitaStreamProbe *probe, bool pressure)
+{
+	for(;;)
+	{
+		PlusVitaVideoReorderEvent event = plus_vita_video_reorder_poll(
+			&probe->video_reorder, sceKernelGetProcessTimeWide(), pressure);
+		if(event.action == PLUS_VITA_VIDEO_REORDER_WAIT) return CHIAKI_ERR_SUCCESS;
+		if(event.wait_us)
+		{
+			probe->reorder_waits++;
+			probe->reorder_wait_total_us += event.wait_us;
+			if(event.wait_us > probe->reorder_wait_max_us)
+				probe->reorder_wait_max_us = event.wait_us;
+		}
+		if(event.action == PLUS_VITA_VIDEO_REORDER_DROP)
+		{
+			if(event.slot >= 0)
+			{
+				probe->incomplete_frames++;
+				probe->reorder_expired_frames++;
+				probe_video_assembly_reset(&probe->video_assembly[event.slot]);
+				pressure = false;
+			}
+			else probe->reorder_missing_frames += event.skipped;
+			if(event.pressure) probe->reorder_pressure_drops++;
+			if(probe->capture_frames && !probe->capture_done)
+				probe->capture_gap = probe->capture_done = true;
+			CHIAKI_LOGW(probe->log,
+				"Stream probe reorder expired wire_frame=%u skipped=%u partial=%d pressure=%d wait_us=%llu",
+				(unsigned int)event.index, (unsigned int)event.skipped,
+				event.slot >= 0 ? 1 : 0, event.pressure ? 1 : 0,
+				(unsigned long long)event.wait_us);
+			continue;
+		}
+		ProbeVideoAssembly *assembly = &probe->video_assembly[event.slot];
+		if(assembly->late_received)
+		{
+			probe->reorder_saved_frames++;
+			CHIAKI_LOGI(probe->log, "Stream probe reorder saved wire_frame=%u wait_us=%llu",
+				(unsigned int)event.index, (unsigned long long)event.wait_us);
+		}
+		probe->reorder_held_total_us += event.held_us;
+		if(event.held_us > probe->reorder_held_max_us)
+			probe->reorder_held_max_us = event.held_us;
+		ChiakiErrorCode err = probe_video_submit(probe, assembly);
+		if(err != CHIAKI_ERR_SUCCESS) return err;
+		pressure = false;
+	}
 }
 
 static ChiakiErrorCode probe_video_packet(PlusVitaStreamProbe *probe,
@@ -367,51 +465,132 @@ static ChiakiErrorCode probe_video_packet(PlusVitaStreamProbe *probe,
 			return CHIAKI_ERR_INVALID_DATA;
 		}
 		if(probe->capture_frames && !probe->capture_done) probe->capture_gap = probe->capture_done = true;
-		if(probe->video_assembly.active)
-			probe_video_assembly_reset(&probe->video_assembly);
+		for(unsigned int i = 0; i < PLUS_VITA_VIDEO_REORDER_SLOTS; i++)
+			probe_video_assembly_reset(&probe->video_assembly[i]);
+		memset(&probe->video_reorder, 0, sizeof(probe->video_reorder));
 		return CHIAKI_ERR_SUCCESS;
 	}
-	ProbeVideoAssembly *assembly = &probe->video_assembly;
-	if(probe->video_frame_completed_valid
-		&& !chiaki_seq_num_16_gt(packet->frame_index, probe->video_frame_completed))
-		return CHIAKI_ERR_SUCCESS;
-	if(assembly->active && packet->frame_index != assembly->frame_index
-		&& !chiaki_seq_num_16_gt(packet->frame_index, assembly->frame_index))
+	if(packet->unit_index >= packet->units_in_frame_total
+		- packet->units_in_frame_fec)
+		probe->fec_packets_seen++;
+	ChiakiErrorCode drain_err = probe_video_drain(probe, false);
+	if(drain_err != CHIAKI_ERR_SUCCESS) return drain_err;
+	int slot = plus_vita_video_reorder_admit(&probe->video_reorder,
+		packet->frame_index, sceKernelGetProcessTimeWide());
+	if(slot == PLUS_VITA_VIDEO_REORDER_FULL)
 	{
-		probe->stale_packets++;
+		drain_err = probe_video_drain(probe, true);
+		if(drain_err != CHIAKI_ERR_SUCCESS) return drain_err;
+		slot = plus_vita_video_reorder_admit(&probe->video_reorder,
+			packet->frame_index, sceKernelGetProcessTimeWide());
+	}
+	if(slot == PLUS_VITA_VIDEO_REORDER_STALE)
+	{
+		probe->reorder_retired_packets++;
+		/* Parity arriving after an already completed frame is normal and was
+		 * not included in the old stale counter. Keep that comparison useful. */
+		if(!probe->video_frame_completed_valid
+			|| chiaki_seq_num_16_gt(packet->frame_index, probe->video_frame_completed))
+			probe->stale_packets++;
 		return CHIAKI_ERR_SUCCESS;
 	}
-	if(!assembly->active || assembly->frame_index != packet->frame_index)
+	if(slot < 0) return CHIAKI_ERR_OVERFLOW;
+	ProbeVideoAssembly *assembly = &probe->video_assembly[slot];
+	if(!assembly->active)
 	{
-		if(assembly->active && assembly->units_received < assembly->units_source)
-		{
-			probe->incomplete_frames++;
-			if(probe->capture_frames && !probe->capture_done) probe->capture_gap = probe->capture_done = true;
-		}
-		ChiakiErrorCode err = probe_video_start_frame(probe, packet);
+		ChiakiErrorCode err = probe_video_start_frame(probe, assembly, packet);
 		if(err != CHIAKI_ERR_SUCCESS)
 			return err;
+		unsigned int occupied = 0;
+		for(unsigned int i = 0; i < PLUS_VITA_VIDEO_REORDER_SLOTS; i++)
+			if(probe->video_reorder.slots[i].used) occupied++;
+		if(occupied > probe->reorder_peak) probe->reorder_peak = occupied;
 	}
 	if(packet->units_in_frame_total != assembly->units_total
 		|| packet->units_in_frame_fec != assembly->units_fec
 		|| packet->unit_index >= assembly->units_total)
 		return CHIAKI_ERR_INVALID_DATA;
-	if(packet->unit_index >= assembly->units_source)
-		return CHIAKI_ERR_SUCCESS;
 	if(packet->data_size < 2)
 		return CHIAKI_ERR_BUF_TOO_SMALL;
 	if(assembly->unit_data[packet->unit_index])
 		return CHIAKI_ERR_SUCCESS;
+	/* Three slots must remain a fixed memory budget even for malformed wire
+	 * geometry. Includes parity and packet prefixes, unlike the AU size cap. */
+	if(packet->data_size > 65536u
+		|| packet->data_size > 2u * PROBE_FRAME_BYTES_MAX - assembly->stored_bytes)
+		return CHIAKI_ERR_OVERFLOW;
+	if(probe->video_reorder.slots[slot].ready) return CHIAKI_ERR_SUCCESS;
+	for(unsigned int i = 0; i < PLUS_VITA_VIDEO_REORDER_SLOTS; i++)
+	{
+		if(probe->video_reorder.slots[i].used
+			&& chiaki_seq_num_16_gt(probe->video_reorder.slots[i].index, packet->frame_index))
+		{
+			assembly->late_received = true;
+			probe->reorder_late_packets++;
+			break;
+		}
+	}
 	uint8_t *unit = malloc(packet->data_size);
 	if(!unit)
 		return CHIAKI_ERR_MEMORY;
 	memcpy(unit, packet->data, packet->data_size);
 	assembly->unit_data[packet->unit_index] = unit;
 	assembly->unit_size[packet->unit_index] = packet->data_size;
-	assembly->units_received++;
+	assembly->stored_bytes += packet->data_size;
+	if(packet->unit_index < assembly->units_source)
+		assembly->units_received++;
+	else
+		assembly->parity_received++;
+	if(assembly->units_received < assembly->units_source
+		&& assembly->units_received + assembly->parity_received >= assembly->units_source
+		&& !assembly->fec_attempted)
+	{
+		assembly->fec_attempted = true;
+		probe->fec_attempts++;
+		unsigned repaired = 0;
+		uint64_t fec_started = sceKernelGetProcessTimeWide();
+		ChiakiErrorCode repair_err = plus_vita_video_fec_repair(
+			assembly->unit_data, assembly->unit_size, assembly->units_source,
+			assembly->units_fec, &repaired);
+		uint64_t fec_us = sceKernelGetProcessTimeWide() - fec_started;
+		probe->fec_total_us += fec_us;
+		if(fec_us > probe->fec_max_us) probe->fec_max_us = fec_us;
+		if(repair_err == CHIAKI_ERR_SUCCESS)
+		{
+			assembly->stored_bytes = 0;
+			for(unsigned int i = 0; i < assembly->units_total; i++)
+			{
+				if(assembly->unit_size[i] > 2u * PROBE_FRAME_BYTES_MAX - assembly->stored_bytes)
+					return CHIAKI_ERR_OVERFLOW;
+				assembly->stored_bytes += assembly->unit_size[i];
+			}
+			assembly->units_received += repaired;
+			probe->fec_repaired_frames++;
+			probe->fec_repaired_units += repaired;
+			CHIAKI_LOGI(probe->log,
+				"Stream probe FEC repaired wire_frame=%u units=%u source=%u parity=%u repair_us=%llu",
+				(unsigned int)assembly->frame_index, repaired,
+				(unsigned int)assembly->units_source, (unsigned int)assembly->units_fec,
+				(unsigned long long)fec_us);
+		}
+		else
+		{
+			probe->fec_failed++;
+			CHIAKI_LOGW(probe->log,
+				"Stream probe FEC repair failed wire_frame=%u error=%d; waiting for source units or validated-IDR recovery",
+				(unsigned int)assembly->frame_index, (int)repair_err);
+			if(repair_err == CHIAKI_ERR_MEMORY) return repair_err;
+		}
+	}
 	if(assembly->units_received < assembly->units_source)
-		return CHIAKI_ERR_SUCCESS;
+		return probe_video_drain(probe, false);
+	plus_vita_video_reorder_ready(&probe->video_reorder, slot, sceKernelGetProcessTimeWide());
+	return probe_video_drain(probe, false);
+}
 
+static ChiakiErrorCode probe_video_submit(PlusVitaStreamProbe *probe,
+	ProbeVideoAssembly *assembly)
+{
 	size_t frame_size = 0;
 	for(unsigned int i = 0; i < assembly->units_source; i++)
 	{
@@ -1257,19 +1436,25 @@ static void probe_vita_controller_state(const SceCtrlData *pad,
 	state->right_y = probe_vita_axis(pad->ry);
 }
 
-static void probe_vita_rear_triggers(const SceTouchData *touch,
-	int rear_mid_x, ChiakiControllerState *state)
+static void probe_vita_rear_controls(const SceTouchData *touch,
+	int rear_mid_x, int rear_mid_y, ChiakiControllerState *state)
 {
-	/* Treat each half as a digital trigger. Multiple contacts on a side keep
-	 * that trigger down until the final contact is lifted. */
+	/* Rear top corners are L2/R2; lower corners are stick clicks L3/R3.
+	 * Multiple contacts may hold different controls at the same time. */
 	unsigned int count = touch->reportNum;
 	if(count > SCE_TOUCH_MAX_REPORT) count = SCE_TOUCH_MAX_REPORT;
 	for(unsigned int i = 0; i < count; i++)
 	{
-		if(touch->report[i].x < rear_mid_x)
+		bool left = touch->report[i].x < rear_mid_x;
+		bool upper = touch->report[i].y < rear_mid_y;
+		if(upper && left)
 			state->l2_state = 255;
-		else
+		else if(upper)
 			state->r2_state = 255;
+		else if(left)
+			state->buttons |= CHIAKI_CONTROLLER_BUTTON_L3;
+		else
+			state->buttons |= CHIAKI_CONTROLLER_BUTTON_R3;
 	}
 }
 
@@ -1356,6 +1541,7 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 		: rear_info_result;
 	bool rear_ready = rear_info_result >= 0 && rear_start_result >= 0;
 	int rear_mid_x = ((int)rear_info.minAaX + (int)rear_info.maxAaX) / 2;
+	int rear_mid_y = ((int)rear_info.minAaY + (int)rear_info.maxAaY) / 2;
 	SceTouchSamplingState front_sampling_prev = SCE_TOUCH_SAMPLING_STATE_STOP;
 	bool front_sampling_known = sceTouchGetSamplingState(
 		SCE_TOUCH_PORT_FRONT, &front_sampling_prev) >= 0;
@@ -1366,9 +1552,10 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 		: front_info_result;
 	bool front_ready = front_info_result >= 0 && front_start_result >= 0;
 	chiaki_mutex_lock(&probe->mutex);
-	CHIAKI_LOGI(probe->log, "Stream probe rear touch ready=%d panel_x=%d..%d mid=%d sampling_prev=%d",
+	CHIAKI_LOGI(probe->log, "Stream probe rear touch ready=%d panel_x=%d..%d mid_x=%d panel_y=%d..%d mid_y=%d sampling_prev=%d",
 		rear_ready ? 1 : 0, (int)rear_info.minAaX, (int)rear_info.maxAaX,
-		rear_mid_x, rear_sampling_known ? (int)rear_sampling_prev : -1);
+		rear_mid_x, (int)rear_info.minAaY, (int)rear_info.maxAaY,
+		rear_mid_y, rear_sampling_known ? (int)rear_sampling_prev : -1);
 	CHIAKI_LOGI(probe->log, "Stream probe front touch ready=%d panel_x=%d..%d panel_y=%d..%d sampling_prev=%d",
 		front_ready ? 1 : 0, (int)front_info.minAaX, (int)front_info.maxAaX,
 		(int)front_info.minAaY, (int)front_info.maxAaY,
@@ -1406,7 +1593,7 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 					break;
 				}
 				controller_feedback_ready = true;
-				CHIAKI_LOGI(probe->log, "Stream probe Vita gameplay input enabled rear_L2_R2=%d front_touchpad=%d",
+				CHIAKI_LOGI(probe->log, "Stream probe Vita gameplay input enabled rear_L2_R2_L3_R3=%d front_touchpad=%d",
 					rear_ready ? 1 : 0, front_ready ? 1 : 0);
 			}
 			SceCtrlData pad = { 0 };
@@ -1454,7 +1641,8 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 				{
 					SceTouchData rear_touch = { 0 };
 					if(sceTouchPeek(SCE_TOUCH_PORT_BACK, &rear_touch, 1) > 0)
-						probe_vita_rear_triggers(&rear_touch, rear_mid_x, &state);
+						probe_vita_rear_controls(&rear_touch, rear_mid_x,
+							rear_mid_y, &state);
 				}
 				if(front_ready)
 				{
@@ -1499,6 +1687,7 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 		}
 		if(probe->state == PROBE_EXPECT_MEDIA && now - last_feedback >= 200)
 		{
+			probe_reception_flush(probe, false);
 			/* Match upstream's 200ms congestion report using completed frame
 			 * generations. Count FEC and source units once, never manufacture
 			 * loss for profiles intentionally not submitted to our decoder. */
@@ -1527,13 +1716,26 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 				break;
 			}
 		}
+		/* Input and congestion sends temporarily release the mutex. The
+		 * receive callback can advance recovery timestamps during those sends,
+		 * so sample the clock again while holding the mutex before deadlines. */
+		now = sceKernelGetProcessTimeWide() / 1000u;
+		if(probe->state == PROBE_EXPECT_MEDIA)
+		{
+			err = probe_video_drain(probe, false);
+			if(err != CHIAKI_ERR_SUCCESS) break;
+			/* Draining can request recovery and advance its timestamps. */
+			now = sceKernelGetProcessTimeWide() / 1000u;
+		}
 		if(now - started >= PROBE_TIMEOUT_MS + PROBE_PREVIEW_MS)
 		{
 			CHIAKI_LOGE(probe->log, "Stream probe bounded preview deadline expired");
 			err = CHIAKI_ERR_TIMEOUT;
 			break;
 		}
-		if(probe->awaiting_recovery_idr && now - probe->recovery_started_ms >= 5000)
+		if(probe->awaiting_recovery_idr
+			&& now >= probe->recovery_started_ms
+			&& now - probe->recovery_started_ms >= 5000)
 		{
 			CHIAKI_LOGE(probe->log, "Stream probe recovery IDR_TIMEOUT after 5000ms; dependent frames not decoded");
 			err = CHIAKI_ERR_TIMEOUT;
@@ -1554,16 +1756,23 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 		uint64_t output_deadline_base = last_display;
 		if(probe->recovery_resumed_ms > output_deadline_base)
 			output_deadline_base = probe->recovery_resumed_ms;
+		uint64_t output_idle_ms = now >= output_deadline_base
+			? now - output_deadline_base : 0;
 		if((!first_display && now - started >= PROBE_TIMEOUT_MS)
-			|| (first_display && !probe->awaiting_recovery_idr && now - output_deadline_base >= 3000))
+			|| (first_display && !probe->awaiting_recovery_idr && output_idle_ms >= 3000))
 		{
-			CHIAKI_LOGE(probe->log, "Stream probe preview frame deadline expired");
+			CHIAKI_LOGE(probe->log,
+				"Stream probe preview frame deadline expired started=%d output_idle_ms=%llu recovery_output_pending=%d queue=%u",
+				first_display ? 1 : 0, (unsigned long long)output_idle_ms,
+				probe->recovery_output_pending ? 1 : 0, probe->queue_count);
 			err = CHIAKI_ERR_TIMEOUT;
 			break;
 		}
 		if(!probe->queue_count)
 		{
-			err = chiaki_cond_timedwait(&probe->cond, &probe->mutex, 50);
+			/* Keep controller polling responsive even when video pauses while
+			 * waiting for a lost frame or a recovery IDR. */
+			err = chiaki_cond_timedwait(&probe->cond, &probe->mutex, 8);
 			if(err == CHIAKI_ERR_TIMEOUT)
 				err = CHIAKI_ERR_SUCCESS;
 			continue;
@@ -1678,8 +1887,26 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 		probe->audio_frames, native_result, (int)err);
 	CHIAKI_LOGI(probe->log, "Stream probe recovery summary: episodes=%u dropped_dependent=%u awaiting_idr=%d validated_idrs=%u",
 		probe->recovery_count, probe->recovery_dropped, probe->awaiting_recovery_idr ? 1 : 0, probe->reference_guard.idr_count);
+	CHIAKI_LOGI(probe->log, "Stream probe FEC telemetry: advertised_frames=%u parity_packets_seen=%u incomplete_frames=%u reconstruction=on",
+		probe->fec_frames_advertised, probe->fec_packets_seen,
+		probe->incomplete_frames);
+	CHIAKI_LOGI(probe->log,
+		"Stream probe FEC summary: attempts=%u repaired_frames=%u repaired_units=%u failed=%u repair_total_us=%llu repair_max_us=%llu",
+		probe->fec_attempts, probe->fec_repaired_frames, probe->fec_repaired_units,
+		probe->fec_failed, (unsigned long long)probe->fec_total_us,
+		(unsigned long long)probe->fec_max_us);
 	CHIAKI_LOGI(probe->log, "Stream probe recovery test: injected=%d resumes=%u enabled=%d duration_ms=%u",
 		probe->recovery_fault_injected ? 1 : 0, probe->recovery_resumes, PROBE_RECOVERY_FAULT_TEST, PROBE_PREVIEW_MS);
+	CHIAKI_LOGI(probe->log,
+		"Stream probe reorder summary: slots=%u grace_us=%u peak=%u late_packets=%u saved_frames=%u expired_partial=%u missing_frames=%u pressure_drops=%u retired_packets=%u waits=%u wait_total_us=%llu wait_max_us=%llu ready_hold_total_us=%llu ready_hold_max_us=%llu",
+		PLUS_VITA_VIDEO_REORDER_SLOTS, PLUS_VITA_VIDEO_REORDER_GRACE_US,
+		probe->reorder_peak, probe->reorder_late_packets, probe->reorder_saved_frames,
+		probe->reorder_expired_frames, probe->reorder_missing_frames,
+		probe->reorder_pressure_drops, probe->reorder_retired_packets, probe->reorder_waits,
+		(unsigned long long)probe->reorder_wait_total_us,
+		(unsigned long long)probe->reorder_wait_max_us,
+		(unsigned long long)probe->reorder_held_total_us,
+		(unsigned long long)probe->reorder_held_max_us);
 	CHIAKI_LOGI(probe->log,
 		"Stream probe observed video profile packets: index0=%u index1=%u index2=%u other=%u selected=%u",
 		probe->profile_packet_counts[0], probe->profile_packet_counts[1],
@@ -1885,6 +2112,12 @@ ChiakiErrorCode plus_vita_stream_probe(const ChiakiCloudProvisionResult *provisi
 	if(PLUS_VITA_STREAM_PROBE_REPLAY) return probe_replay(log);
 	ChiakiErrorCode guard_test = probe_replay(log);
 	if(guard_test != CHIAKI_ERR_SUCCESS) return guard_test;
+	if(!plus_vita_video_fec_selftest())
+	{
+		CHIAKI_LOGE(log, "Stream probe FEC self-test failed");
+		return CHIAKI_ERR_FEC_FAILED;
+	}
+	CHIAKI_LOGI(log, "Stream probe FEC self-test passed: two missing source units restored with exact bytes and padding lengths");
 	if(!provision || !provision->handshake_key || !provision->launch_spec
 		|| !provision->session_id || provision->server_port <= 0)
 		return CHIAKI_ERR_INVALID_DATA;
@@ -2002,7 +2235,8 @@ ChiakiErrorCode plus_vita_stream_probe(const ChiakiCloudProvisionResult *provisi
 	}
 	for(unsigned int i = 0; i < PROBE_QUEUE_MAX; i++)
 		free(probe.queue[i].data);
-	probe_video_assembly_reset(&probe.video_assembly);
+	for(unsigned int i = 0; i < PLUS_VITA_VIDEO_REORDER_SLOTS; i++)
+		probe_video_assembly_reset(&probe.video_assembly[i]);
 	chiaki_gkcrypt_free(probe.crypt_remote);
 	chiaki_gkcrypt_free(probe.crypt_local);
 done_ecdh:
