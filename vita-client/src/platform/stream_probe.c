@@ -9,6 +9,7 @@
 #include "video_reorder.h"
 #include "diagnostic_log.h"
 #include "feedback_latency.h"
+#include "input_vita.h"
 #include <psp2/ctrl.h>
 #include <psp2/touch.h>
 #include <psp2/kernel/processmgr.h>
@@ -205,7 +206,7 @@ static void probe_latency_dump(PlusVitaStreamProbe *probe)
 {
 	ProbeLatency *p = &probe->latency;
 	CHIAKI_LOGI(probe->log,
-		"Stream probe latency summary: version=1 mode=baseline poll_failures=%llu published=%llu consumed=%llu coalesced=%llu send_failures=%llu units=us percentiles=bucket-upper local-only=1",
+		"Stream probe latency summary: version=1 mode=" PLUS_VITA_STREAM_PROBE_MODE " poll_failures=%llu published=%llu consumed=%llu coalesced=%llu send_failures=%llu units=us percentiles=bucket-upper local-only=1",
 		(unsigned long long)p->input_poll_failures,
 		(unsigned long long)p->feedback.published, (unsigned long long)p->feedback.consumed,
 		(unsigned long long)p->feedback.coalesced, (unsigned long long)p->feedback.send_failures);
@@ -1500,119 +1501,6 @@ static ChiakiErrorCode probe_send_big(PlusVitaStreamProbe *probe)
 	return err;
 }
 
-static int16_t probe_vita_axis(uint8_t value)
-{
-	/* Vita sticks are unsigned 0..255; Chiaki expects signed centered axes.
-	 * Ignore the small hardware-center wobble to avoid redundant feedback. */
-	if(value >= 120 && value <= 135) return 0;
-	return (int16_t)((int)value * 257 - 32768);
-}
-
-static void probe_vita_controller_state(const SceCtrlData *pad,
-	ChiakiControllerState *state)
-{
-	chiaki_controller_state_set_idle(state);
-	uint32_t buttons = pad->buttons;
-	if(buttons & SCE_CTRL_CROSS) state->buttons |= CHIAKI_CONTROLLER_BUTTON_CROSS;
-	if(buttons & SCE_CTRL_CIRCLE) state->buttons |= CHIAKI_CONTROLLER_BUTTON_MOON;
-	if(buttons & SCE_CTRL_SQUARE) state->buttons |= CHIAKI_CONTROLLER_BUTTON_BOX;
-	if(buttons & SCE_CTRL_TRIANGLE) state->buttons |= CHIAKI_CONTROLLER_BUTTON_PYRAMID;
-	if(buttons & SCE_CTRL_LEFT) state->buttons |= CHIAKI_CONTROLLER_BUTTON_DPAD_LEFT;
-	if(buttons & SCE_CTRL_RIGHT) state->buttons |= CHIAKI_CONTROLLER_BUTTON_DPAD_RIGHT;
-	if(buttons & SCE_CTRL_UP) state->buttons |= CHIAKI_CONTROLLER_BUTTON_DPAD_UP;
-	if(buttons & SCE_CTRL_DOWN) state->buttons |= CHIAKI_CONTROLLER_BUTTON_DPAD_DOWN;
-	if(buttons & SCE_CTRL_LTRIGGER) state->buttons |= CHIAKI_CONTROLLER_BUTTON_L1;
-	if(buttons & SCE_CTRL_RTRIGGER) state->buttons |= CHIAKI_CONTROLLER_BUTTON_R1;
-	if(buttons & SCE_CTRL_START) state->buttons |= CHIAKI_CONTROLLER_BUTTON_OPTIONS;
-	if(buttons & SCE_CTRL_SELECT) state->buttons |= CHIAKI_CONTROLLER_BUTTON_SHARE;
-	state->left_x = probe_vita_axis(pad->lx);
-	state->left_y = probe_vita_axis(pad->ly);
-	state->right_x = probe_vita_axis(pad->rx);
-	state->right_y = probe_vita_axis(pad->ry);
-}
-
-static void probe_vita_rear_controls(const SceTouchData *touch,
-	int rear_mid_x, int rear_mid_y, ChiakiControllerState *state)
-{
-	/* Rear top corners are L2/R2; lower corners are stick clicks L3/R3.
-	 * Multiple contacts may hold different controls at the same time. */
-	unsigned int count = touch->reportNum;
-	if(count > SCE_TOUCH_MAX_REPORT) count = SCE_TOUCH_MAX_REPORT;
-	for(unsigned int i = 0; i < count; i++)
-	{
-		bool left = touch->report[i].x < rear_mid_x;
-		bool upper = touch->report[i].y < rear_mid_y;
-		if(upper && left)
-			state->l2_state = 255;
-		else if(upper)
-			state->r2_state = 255;
-		else if(left)
-			state->buttons |= CHIAKI_CONTROLLER_BUTTON_L3;
-		else
-			state->buttons |= CHIAKI_CONTROLLER_BUTTON_R3;
-	}
-}
-
-static uint16_t probe_vita_touch_coord(int value, int minimum, int maximum,
-	int output_maximum)
-{
-	if(maximum <= minimum || value <= minimum) return 0;
-	if(value >= maximum) return (uint16_t)output_maximum;
-	return (uint16_t)(((value - minimum) * output_maximum)
-		/ (maximum - minimum));
-}
-
-static void probe_vita_front_touch(const SceTouchData *front,
-	const SceTouchPanelInfo *panel, const ChiakiControllerState *previous,
-	ChiakiControllerState *state)
-{
-	/* Preserve each Vita contact's slot so Chiaki can send its movement and
-	 * release with the same touch ID. The protocol supports two contacts. */
-	unsigned int count = front->reportNum;
-	if(count > SCE_TOUCH_MAX_REPORT) count = SCE_TOUCH_MAX_REPORT;
-	bool used[SCE_TOUCH_MAX_REPORT] = { 0 };
-	for(unsigned int slot = 0; slot < CHIAKI_CONTROLLER_TOUCHES_MAX; slot++)
-	{
-		if(previous->touches[slot].id < 0) continue;
-		for(unsigned int i = 0; i < count; i++)
-		{
-			int8_t id = (int8_t)(front->report[i].id & 0x7f);
-			if(used[i] || id != previous->touches[slot].id) continue;
-			state->touches[slot].id = id;
-			state->touches[slot].x = probe_vita_touch_coord(front->report[i].x,
-				panel->minAaX, panel->maxAaX, 1920);
-			state->touches[slot].y = probe_vita_touch_coord(front->report[i].y,
-				panel->minAaY, panel->maxAaY, 942);
-			used[i] = true;
-			break;
-		}
-	}
-	for(unsigned int i = 0; i < count; i++)
-	{
-		if(used[i]) continue;
-		for(unsigned int slot = 0; slot < CHIAKI_CONTROLLER_TOUCHES_MAX; slot++)
-		{
-			if(state->touches[slot].id >= 0) continue;
-			state->touches[slot].id = (int8_t)(front->report[i].id & 0x7f);
-			state->touches[slot].x = probe_vita_touch_coord(front->report[i].x,
-				panel->minAaX, panel->maxAaX, 1920);
-			state->touches[slot].y = probe_vita_touch_coord(front->report[i].y,
-				panel->minAaY, panel->maxAaY, 942);
-			break;
-		}
-	}
-	if(count >= 2)
-		state->buttons |= CHIAKI_CONTROLLER_BUTTON_TOUCHPAD;
-}
-
-static unsigned int probe_vita_touch_count(const ChiakiControllerState *state)
-{
-	unsigned int count = 0;
-	for(unsigned int i = 0; i < CHIAKI_CONTROLLER_TOUCHES_MAX; i++)
-		if(state->touches[i].id >= 0) count++;
-	return count;
-}
-
 /* Called with the probe mutex held; returns with it held. Frame ownership
  * leaves the queue before unlocking. All decoder/display work stays here. */
 static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
@@ -1621,8 +1509,13 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 	PlusVitaVideoPresent present;
 	ChiakiFeedbackSender controller_feedback;
 	bool controller_feedback_ready = false;
+#if PLUS_VITA_INPUT_WORKER
+	PlusVitaInputWorker *input_worker = NULL;
+	PlusVitaInputStats input_stats = { 0 };
+#else
 	ChiakiControllerState controller_state_prev;
 	chiaki_controller_state_set_idle(&controller_state_prev);
+#endif
 	unsigned int controller_updates = 0;
 	chiaki_mutex_unlock(&probe->mutex);
 	int native_result = plus_vita_video_present_init(&present);
@@ -1646,6 +1539,10 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 		? sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START)
 		: front_info_result;
 	bool front_ready = front_info_result >= 0 && front_start_result >= 0;
+#if PLUS_VITA_INPUT_WORKER
+	PlusVitaInputVita input_vita = { .rear_ready = rear_ready, .front_ready = front_ready,
+		.rear_mid_x = rear_mid_x, .rear_mid_y = rear_mid_y, .front_info = front_info };
+#endif
 	probe_preview_lock(probe);
 	CHIAKI_LOGI(probe->log, "Stream probe rear touch ready=%d panel_x=%d..%d mid_x=%d panel_y=%d..%d mid_y=%d sampling_prev=%d",
 		rear_ready ? 1 : 0, (int)rear_info.minAaX, (int)rear_info.maxAaX,
@@ -1661,7 +1558,9 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 		PLUS_VITA_SCREEN_WIDTH, PLUS_VITA_SCREEN_HEIGHT, PLUS_VITA_SCREEN_PITCH, PROBE_QUEUE_MAX);
 	ChiakiErrorCode err = native_result < 0 ? CHIAKI_ERR_UNKNOWN : CHIAKI_ERR_SUCCESS;
 	uint64_t started = sceKernelGetProcessTimeWide() / 1000u;
+#if !PLUS_VITA_INPUT_WORKER
 	uint64_t stop_chord_since = 0;
+#endif
 	uint64_t last_feedback = started;
 	uint64_t first_display = 0, last_display = 0;
 	unsigned int displayed = 0;
@@ -1669,7 +1568,9 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 	unsigned int recovery_generation_fed = 0;
 	uint64_t prepare_sum = 0, decode_sum = 0, decode_max = 0;
 	uint64_t display_sum = 0, wait_sum = 0, wait_max = 0, queue_wait_max = 0;
+#if !PLUS_VITA_INPUT_WORKER
 	uint64_t last_input_poll_us = 0;
+#endif
 	probe->latency_collecting = true;
 	plus_vita_diagnostic_stream_timing_begin();
 	while(err == CHIAKI_ERR_SUCCESS)
@@ -1693,7 +1594,29 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 				controller_feedback_ready = true;
 				CHIAKI_LOGI(probe->log, "Stream probe Vita gameplay input enabled rear_L2_R2_L3_R3=%d front_touchpad=%d",
 					rear_ready ? 1 : 0, front_ready ? 1 : 0);
+#if PLUS_VITA_INPUT_WORKER
+				chiaki_mutex_unlock(&probe->mutex);
+				feedback_err = plus_vita_input_worker_start(&input_worker, &controller_feedback,
+					plus_vita_input_vita_read, &input_vita);
+				probe_preview_lock(probe);
+				if(feedback_err != CHIAKI_ERR_SUCCESS) { err = feedback_err; break; }
+				CHIAKI_LOGI(probe->log, "Stream probe independent input started period_us=%u control_transition_logs=off aggregate_counters=on",
+					PLUS_VITA_INPUT_PERIOD_US);
+#endif
 			}
+#if PLUS_VITA_INPUT_WORKER
+			PlusVitaInputStatus input_status = plus_vita_input_worker_status(input_worker);
+			if(input_status.done)
+			{
+				if(input_status.error != CHIAKI_ERR_SUCCESS) { err = input_status.error; break; }
+				if(!input_status.user_stopped) { err = CHIAKI_ERR_THREAD; break; }
+				probe->state = PROBE_COMPLETE;
+				if(user_stopped) *user_stopped = true;
+				CHIAKI_LOGI(probe->log, "Stream probe user stop requested after %llu ms; releasing controller and disconnecting",
+					(unsigned long long)(now - started));
+				break;
+			}
+#else
 			SceCtrlData pad = { 0 };
 			uint64_t sampled_us = sceKernelGetProcessTimeWide();
 			if(last_input_poll_us)
@@ -1739,19 +1662,19 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 				else
 					stop_chord_since = 0;
 				ChiakiControllerState state;
-				probe_vita_controller_state(&pad, &state);
+				plus_vita_input_map_pad(&pad, &state);
 				if(rear_ready)
 				{
 					SceTouchData rear_touch = { 0 };
 					if(sceTouchPeek(SCE_TOUCH_PORT_BACK, &rear_touch, 1) > 0)
-						probe_vita_rear_controls(&rear_touch, rear_mid_x,
+						plus_vita_input_map_rear(&rear_touch, rear_mid_x,
 							rear_mid_y, &state);
 				}
 				if(front_ready)
 				{
 					SceTouchData front_touch = { 0 };
 					if(sceTouchPeek(SCE_TOUCH_PORT_FRONT, &front_touch, 1) > 0)
-						probe_vita_front_touch(&front_touch, &front_info,
+						plus_vita_input_map_front(&front_touch, &front_info,
 							&controller_state_prev, &state);
 				}
 				if(!chiaki_controller_state_equals(&state, &controller_state_prev))
@@ -1775,8 +1698,8 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 						|| state.r2_state != controller_state_prev.r2_state)
 						CHIAKI_LOGI(probe->log, "Stream probe rear triggers L2=%u R2=%u",
 							(unsigned int)state.l2_state, (unsigned int)state.r2_state);
-					unsigned int touch_count = probe_vita_touch_count(&state);
-					if(touch_count != probe_vita_touch_count(&controller_state_prev))
+					unsigned int touch_count = plus_vita_input_touch_count(&state);
+					if(touch_count != plus_vita_input_touch_count(&controller_state_prev))
 						CHIAKI_LOGI(probe->log, "Stream probe front touch contacts=%u click=%d",
 							touch_count, (state.buttons & CHIAKI_CONTROLLER_BUTTON_TOUCHPAD) ? 1 : 0);
 					controller_state_prev = state;
@@ -1788,6 +1711,7 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 				probe->latency.input_poll_failures++;
 				stop_chord_since = 0;
 			}
+#endif
 		}
 		if(probe->state == PROBE_FAILED)
 		{
@@ -1987,6 +1911,17 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 		probe->state = PROBE_FAILED;
 	probe->latency_collecting = false;
 	chiaki_mutex_unlock(&probe->mutex);
+#if PLUS_VITA_INPUT_WORKER
+	if(input_worker)
+	{
+		ChiakiErrorCode input_err = plus_vita_input_worker_stop(input_worker, &input_stats);
+		if(err == CHIAKI_ERR_SUCCESS && input_err != CHIAKI_ERR_SUCCESS) err = input_err;
+		probe->latency.input_poll_gap = input_stats.poll_gap;
+		probe->latency.input_publish_call = input_stats.publish_call;
+		probe->latency.input_poll_failures = input_stats.poll_failures;
+		controller_updates = (unsigned int)input_stats.updates;
+	}
+#endif
 	if(controller_feedback_ready)
 	{
 		chiaki_feedback_sender_fini(&controller_feedback);
@@ -1994,6 +1929,14 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 	}
 	plus_vita_diagnostic_stream_timing_end(&probe->latency.log_write_call,
 		&probe->latency.log_mutex_wait);
+#if PLUS_VITA_INPUT_WORKER
+	CHIAKI_LOGI(probe->log,
+		"Stream probe independent input summary: period_us=%u updates=%llu poll_failures=%llu missed_deadlines=%llu native_changes=%llu native_repeats=%llu neutral_result=%d neutral_consumed=%d",
+		PLUS_VITA_INPUT_PERIOD_US, (unsigned long long)input_stats.updates,
+		(unsigned long long)input_stats.poll_failures, (unsigned long long)input_stats.missed_deadlines,
+		(unsigned long long)input_stats.native_changes, (unsigned long long)input_stats.native_repeats,
+		(int)input_stats.neutral_result, input_stats.neutral_consumed ? 1 : 0);
+#endif
 	if(rear_ready && rear_sampling_known
 		&& rear_sampling_prev != SCE_TOUCH_SAMPLING_STATE_START)
 		sceTouchSetSamplingState(SCE_TOUCH_PORT_BACK, rear_sampling_prev);
@@ -2006,9 +1949,9 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 	plus_vita_video_decoder_fini(&probe->video_decoder);
 	native_result = plus_vita_video_present_fini(&present);
 	probe_preview_lock(probe);
-	if(native_result < 0)
+	if(native_result < 0 || err != CHIAKI_ERR_SUCCESS)
 	{
-		err = CHIAKI_ERR_UNKNOWN;
+		if(native_result < 0) err = CHIAKI_ERR_UNKNOWN;
 		probe->state = PROBE_FAILED;
 	}
 	CHIAKI_LOGI(probe->log, "Stream probe preview summary: displayed=%u submitted=%u complete=%u incomplete=%u stale=%u queue_peak=%u audio=%u restore=0x%08x result=%d",

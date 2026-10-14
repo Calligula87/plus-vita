@@ -31,6 +31,11 @@ set(PLUS_VITA_POST_ECHO_URL "" CACHE STRING
   "Optional controlled LAN URL for a physical POST echo test")
 option(PLUS_VITA_PUBLIC_APOLLO_TEST
   "Enable the explicitly authorized credential-free public Apollo GET test" OFF)
+option(PLUS_VITA_INPUT_WORKER "Evaluate independent 4ms input sampling" OFF)
+option(PLUS_VITA_DEFERRED_LOG "Evaluate deferred streaming diagnostics" OFF)
+if(PLUS_VITA_INPUT_WORKER AND PLUS_VITA_DEFERRED_LOG)
+  message(FATAL_ERROR "Keep the first input and logging experiments separate")
+endif()
 
 set(PYLUX_ROOT "${CMAKE_CURRENT_LIST_DIR}/../external/pylux")
 set(NANOPB_ROOT "${PYLUX_ROOT}/third-party/nanopb")
@@ -542,6 +547,7 @@ add_executable(${PROJECT_NAME}
   src/platform/curl_resolve.c
   src/platform/diagnostic_log.c
   src/platform/latency_stats.c
+  src/platform/input_vita.c
   src/platform/auth_probe.c
   src/platform/catalog_fetch_guard.c
   src/platform/credential.c
@@ -636,7 +642,13 @@ target_compile_options(${PROJECT_NAME} PRIVATE
   -fdata-sections
 )
 
+if(PLUS_VITA_INPUT_WORKER)
+  target_sources(${PROJECT_NAME} PRIVATE src/platform/input_worker.c)
+endif()
+
 target_compile_definitions(${PROJECT_NAME} PRIVATE
+  PLUS_VITA_INPUT_WORKER=$<BOOL:${PLUS_VITA_INPUT_WORKER}>
+  PLUS_VITA_DEFERRED_LOG=$<BOOL:${PLUS_VITA_DEFERRED_LOG}>
   CHIAKI_LIB_ENABLE_MBEDTLS=1
   MBEDTLS_ALLOW_PRIVATE_ACCESS=1
 )

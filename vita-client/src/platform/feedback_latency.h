@@ -19,5 +19,8 @@ ChiakiErrorCode plus_vita_feedback_sender_set_controller_state_sampled(
 	ChiakiFeedbackSender *sender, ChiakiControllerState *state, uint64_t sampled_us);
 /* Only after sender_fini has joined the worker, before another sender_init. */
 void plus_vita_feedback_latency_get_stopped(PlusVitaFeedbackLatency *result);
+/* Existing sender mutex protects observed local transport failures. */
+ChiakiErrorCode plus_vita_feedback_sender_error(ChiakiFeedbackSender *sender);
+bool plus_vita_feedback_sender_neutral_consumed(ChiakiFeedbackSender *sender);
 
 #endif

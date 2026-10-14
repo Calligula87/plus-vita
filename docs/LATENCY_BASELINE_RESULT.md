@@ -153,3 +153,10 @@ without playback changes. Baseline acceptance remains open in #3 and directly
 blocks hardware comparisons #6 and #10; analysis completion does not waive it.
 Do not reopen display-worker work, shorten reorder grace, discard compressed
 references or claim a numerical end-to-end improvement from these results.
+
+## Maintainer observation after triage
+
+The maintainer confirmed: "Same quality and stability; input delay still
+noticeable." This satisfies the subjective quality/stability observation for
+the inspected run. Its duration remains 5m52.645s; the separate 8–10 minute
+and restart checks are still required before candidate hardware comparisons.

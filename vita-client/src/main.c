@@ -686,6 +686,7 @@ static void allocation_ui(const PlusVitaAuthProbeResult *result,
 		ChiakiErrorCode replay_err = plus_vita_stream_probe(NULL, &replay_log, NULL);
 		plus_vita_diagnostic_event("replay.complete", (int)replay_err);
 		plus_vita_diagnostic_end();
+		ready = ready && plus_vita_diagnostic_persistence_ok();
 		clear_catalog_screen();
 		printf("PLUS VITA | Audited 720p sample replay\nBuild: %s\n\n", PLUS_VITA_STREAM_PROBE_BUILD);
 		printf("%s\n", replay_err == CHIAKI_ERR_SUCCESS ? "720P SAMPLE REPLAY PASSED" : "720P SAMPLE REPLAY FAILED");
@@ -758,6 +759,7 @@ retry_allocation: ;
 	}
 	plus_vita_diagnostic_event("allocation.complete", (int)err);
 	plus_vita_diagnostic_end();
+	diagnostic_ready = diagnostic_ready && plus_vita_diagnostic_persistence_ok();
 	clear_catalog_screen();
 	printf("PLUS VITA  |  Cloud allocation result\n");
 	printf("Build: %s\n", PLUS_VITA_STREAM_PROBE_BUILD);

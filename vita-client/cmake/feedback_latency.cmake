@@ -89,6 +89,26 @@ uint64_t send_started_us = plus_vita_latency_now_us();
 
 string(APPEND PLUS_VITA_FEEDBACK_TEXT [=[
 
+bool plus_vita_feedback_sender_neutral_consumed(ChiakiFeedbackSender *sender)
+{
+	if(chiaki_mutex_trylock(&sender->state_mutex) != CHIAKI_ERR_SUCCESS) return false;
+	ChiakiControllerState idle;
+	chiaki_controller_state_set_idle(&idle);
+	bool consumed = !sender->controller_state_changed
+		&& chiaki_controller_state_equals(&sender->controller_state_prev, &idle);
+	chiaki_mutex_unlock(&sender->state_mutex);
+	return consumed;
+}
+
+ChiakiErrorCode plus_vita_feedback_sender_error(ChiakiFeedbackSender *sender)
+{
+	ChiakiErrorCode err = chiaki_mutex_lock(&sender->state_mutex);
+	if(err != CHIAKI_ERR_SUCCESS) return err;
+	err = feedback_latency.send_failures ? CHIAKI_ERR_NETWORK : CHIAKI_ERR_SUCCESS;
+	chiaki_mutex_unlock(&sender->state_mutex);
+	return err;
+}
+
 CHIAKI_EXPORT ChiakiErrorCode chiaki_feedback_sender_set_controller_state(
 	ChiakiFeedbackSender *sender, ChiakiControllerState *state)
 {

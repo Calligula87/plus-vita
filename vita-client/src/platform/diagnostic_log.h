@@ -16,6 +16,9 @@ void plus_vita_diagnostic_progress(const char *stage);
 void plus_vita_diagnostic_chiaki_log(ChiakiLogLevel level,
 	const char *message, void *user);
 void plus_vita_diagnostic_end(void);
+/* File I/O success for the most recently started session. Overflow is reported
+ * separately in its bounded sink summary. Safe to query after end. */
+bool plus_vita_diagnostic_persistence_ok(void);
 void plus_vita_diagnostic_stream_timing_begin(void);
 void plus_vita_diagnostic_stream_timing_end(PlusVitaLatencyStats *write_call,
 	PlusVitaLatencyStats *mutex_wait);
