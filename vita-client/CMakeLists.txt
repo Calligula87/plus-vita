@@ -457,6 +457,7 @@ else()
     message(FATAL_ERROR "Pylux touch-slot patch point was not found")
   endif()
 endif()
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/feedback_latency.cmake")
 file(WRITE "${PLUS_VITA_FEEDBACK_SOURCE}" "${PLUS_VITA_FEEDBACK_TEXT}")
 
 # Generate a Vita-only curl transport copy which seeds CURLOPT_RESOLVE from a
@@ -540,6 +541,7 @@ add_executable(${PROJECT_NAME}
   src/platform/random.c
   src/platform/curl_resolve.c
   src/platform/diagnostic_log.c
+  src/platform/latency_stats.c
   src/platform/auth_probe.c
   src/platform/catalog_fetch_guard.c
   src/platform/credential.c

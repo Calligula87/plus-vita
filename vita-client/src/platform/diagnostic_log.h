@@ -4,6 +4,7 @@
 #include <chiaki/log.h>
 
 #include <stdbool.h>
+#include "latency_stats.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,6 +16,9 @@ void plus_vita_diagnostic_progress(const char *stage);
 void plus_vita_diagnostic_chiaki_log(ChiakiLogLevel level,
 	const char *message, void *user);
 void plus_vita_diagnostic_end(void);
+void plus_vita_diagnostic_stream_timing_begin(void);
+void plus_vita_diagnostic_stream_timing_end(PlusVitaLatencyStats *write_call,
+	PlusVitaLatencyStats *mutex_wait);
 
 #ifdef __cplusplus
 }

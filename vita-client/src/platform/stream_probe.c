@@ -7,6 +7,8 @@
 #include "audio_playback_vita.h"
 #include "video_fec.h"
 #include "video_reorder.h"
+#include "diagnostic_log.h"
+#include "feedback_latency.h"
 #include <psp2/ctrl.h>
 #include <psp2/touch.h>
 #include <psp2/kernel/processmgr.h>
@@ -52,6 +54,7 @@ typedef struct {
 	bool include_header;
 	unsigned int recovery_generation;
 	uint64_t enqueued_us;
+	uint64_t first_packet_us, ready_us;
 } ProbeQueuedFrame;
 
 typedef struct probe_video_assembly_t
@@ -66,6 +69,7 @@ typedef struct probe_video_assembly_t
 	bool fec_attempted;
 	bool late_received;
 	size_t stored_bytes;
+	uint64_t first_packet_us, ready_us;
 	uint8_t *unit_data[PROBE_VIDEO_UNITS_MAX];
 	size_t unit_size[PROBE_VIDEO_UNITS_MAX];
 } ProbeVideoAssembly;
@@ -75,6 +79,17 @@ typedef struct {
 	uint16_t expected, received;
 	bool units[PROBE_VIDEO_UNITS_MAX];
 } ProbeReceptionFrame;
+
+typedef struct {
+	PlusVitaLatencyStats input_poll_gap, input_publish_call, main_mutex_wait;
+	PlusVitaLatencyStats callback_mutex_wait, callback_work;
+	PlusVitaLatencyStats frame_assembly, ready_to_enqueue, queue_wait;
+	PlusVitaLatencyStats decode_prepare, decode, display_wait;
+	PlusVitaLatencyStats submitted_first_packet_to_present, submitted_ready_to_present;
+	PlusVitaLatencyStats log_write_call, log_mutex_wait;
+	PlusVitaFeedbackLatency feedback;
+	uint64_t input_poll_failures;
+} ProbeLatency;
 
 typedef enum plus_vita_stream_probe_state_t
 {
@@ -166,7 +181,68 @@ typedef struct plus_vita_stream_probe_t
 	bool capture_done;
 	bool capture_gap;
 	ChiakiSeqNum16 capture_last_frame;
+	bool latency_collecting;
+	uint64_t callback_arrival_us;
+	ProbeLatency latency;
 } PlusVitaStreamProbe;
+
+static void probe_latency_log(ChiakiLog *log, const char *name,
+	const PlusVitaLatencyStats *stats)
+{
+	CHIAKI_LOGI(log,
+		"Stream probe latency metric=%s count=%llu mean_us=%llu p50_upper_us=%llu p95_upper_us=%llu p99_upper_us=%llu max_us=%llu invalid=%llu",
+		name, (unsigned long long)stats->count,
+		(unsigned long long)(stats->count ? stats->total_us / stats->count : 0),
+		(unsigned long long)plus_vita_latency_percentile_upper(stats, 50),
+		(unsigned long long)plus_vita_latency_percentile_upper(stats, 95),
+		(unsigned long long)plus_vita_latency_percentile_upper(stats, 99),
+		(unsigned long long)stats->max_us, (unsigned long long)stats->invalid);
+}
+
+/* Dump only after receive and feedback workers have stopped. Each histogram
+ * has one writer or uses an existing mutex; no per-packet logging is added. */
+static void probe_latency_dump(PlusVitaStreamProbe *probe)
+{
+	ProbeLatency *p = &probe->latency;
+	CHIAKI_LOGI(probe->log,
+		"Stream probe latency summary: version=1 mode=baseline poll_failures=%llu published=%llu consumed=%llu coalesced=%llu send_failures=%llu units=us percentiles=bucket-upper local-only=1",
+		(unsigned long long)p->input_poll_failures,
+		(unsigned long long)p->feedback.published, (unsigned long long)p->feedback.consumed,
+		(unsigned long long)p->feedback.coalesced, (unsigned long long)p->feedback.send_failures);
+#define PROBE_LATENCY_LOG(field) probe_latency_log(probe->log, #field, &p->field)
+	PROBE_LATENCY_LOG(input_poll_gap);
+	PROBE_LATENCY_LOG(input_publish_call);
+	PROBE_LATENCY_LOG(main_mutex_wait);
+	PROBE_LATENCY_LOG(callback_mutex_wait);
+	PROBE_LATENCY_LOG(callback_work);
+	PROBE_LATENCY_LOG(frame_assembly);
+	PROBE_LATENCY_LOG(ready_to_enqueue);
+	PROBE_LATENCY_LOG(queue_wait);
+	PROBE_LATENCY_LOG(decode_prepare);
+	PROBE_LATENCY_LOG(decode);
+	PROBE_LATENCY_LOG(display_wait);
+	PROBE_LATENCY_LOG(submitted_first_packet_to_present);
+	PROBE_LATENCY_LOG(submitted_ready_to_present);
+	PROBE_LATENCY_LOG(log_write_call);
+	PROBE_LATENCY_LOG(log_mutex_wait);
+	PROBE_LATENCY_LOG(feedback.sample_to_publish);
+	PROBE_LATENCY_LOG(feedback.publish_to_wake);
+	PROBE_LATENCY_LOG(feedback.sample_to_state_send);
+	PROBE_LATENCY_LOG(feedback.sample_to_history_send);
+	PROBE_LATENCY_LOG(feedback.state_send_call);
+	PROBE_LATENCY_LOG(feedback.history_send_call);
+#undef PROBE_LATENCY_LOG
+}
+
+/* Main preview thread only. The receiver has its own mutex-wait metric. */
+static void probe_preview_lock(PlusVitaStreamProbe *probe)
+{
+	uint64_t start_us = sceKernelGetProcessTimeWide();
+	chiaki_mutex_lock(&probe->mutex);
+	if(probe->latency_collecting)
+		plus_vita_latency_span(&probe->latency.main_mutex_wait, start_us,
+			sceKernelGetProcessTimeWide());
+}
 
 typedef struct probe_streaminfo_context_t
 {
@@ -501,6 +577,7 @@ static ChiakiErrorCode probe_video_packet(PlusVitaStreamProbe *probe,
 		ChiakiErrorCode err = probe_video_start_frame(probe, assembly, packet);
 		if(err != CHIAKI_ERR_SUCCESS)
 			return err;
+		assembly->first_packet_us = probe->callback_arrival_us;
 		unsigned int occupied = 0;
 		for(unsigned int i = 0; i < PLUS_VITA_VIDEO_REORDER_SLOTS; i++)
 			if(probe->video_reorder.slots[i].used) occupied++;
@@ -584,7 +661,11 @@ static ChiakiErrorCode probe_video_packet(PlusVitaStreamProbe *probe,
 	}
 	if(assembly->units_received < assembly->units_source)
 		return probe_video_drain(probe, false);
-	plus_vita_video_reorder_ready(&probe->video_reorder, slot, sceKernelGetProcessTimeWide());
+	assembly->ready_us = sceKernelGetProcessTimeWide();
+	if(probe->latency_collecting)
+		plus_vita_latency_span(&probe->latency.frame_assembly,
+			assembly->first_packet_us, assembly->ready_us);
+	plus_vita_video_reorder_ready(&probe->video_reorder, slot, assembly->ready_us);
 	return probe_video_drain(probe, false);
 }
 
@@ -747,7 +828,11 @@ static ChiakiErrorCode probe_video_submit(PlusVitaStreamProbe *probe,
 		probe->queue[slot] = (ProbeQueuedFrame){ .data = frame, .size = frame_size,
 			.include_header = slice.slice_type == CHIAKI_BITSTREAM_SLICE_I,
 			.recovery_generation = slice.slice_type == CHIAKI_BITSTREAM_SLICE_I ? probe->recovery_resumes : 0,
-			.enqueued_us = sceKernelGetProcessTimeWide() };
+			.enqueued_us = sceKernelGetProcessTimeWide(),
+			.first_packet_us = assembly->first_packet_us, .ready_us = assembly->ready_us };
+		if(probe->latency_collecting)
+			plus_vita_latency_span(&probe->latency.ready_to_enqueue,
+				assembly->ready_us, probe->queue[slot].enqueued_us);
 		probe->queue_count++;
 		if(probe->queue_count > probe->queue_peak)
 			probe->queue_peak = probe->queue_count;
@@ -1235,7 +1320,11 @@ static void probe_handle_streaminfo(PlusVitaStreamProbe *probe, uint8_t *buf,
 static void probe_takion_cb(ChiakiTakionEvent *event, void *user)
 {
 	PlusVitaStreamProbe *probe = user;
+	uint64_t arrival_us = sceKernelGetProcessTimeWide();
 	chiaki_mutex_lock(&probe->mutex);
+	uint64_t locked_us = sceKernelGetProcessTimeWide();
+	bool measure = probe->latency_collecting && probe->state == PROBE_EXPECT_MEDIA;
+	probe->callback_arrival_us = arrival_us;
 	if(event->type == CHIAKI_TAKION_EVENT_TYPE_CONNECTED
 		&& probe->state == PROBE_CONNECTING)
 	{
@@ -1296,8 +1385,7 @@ static void probe_takion_cb(ChiakiTakionEvent *event, void *user)
 				"Stream probe media decrypt failed: %d", (int)media_err);
 			probe->state = PROBE_FAILED;
 			chiaki_cond_signal(&probe->cond);
-			chiaki_mutex_unlock(&probe->mutex);
-			return;
+			goto callback_done;
 		}
 		if(event->av->is_video)
 		{
@@ -1325,6 +1413,13 @@ static void probe_takion_cb(ChiakiTakionEvent *event, void *user)
 			probe->state = PROBE_FAILED;
 			chiaki_cond_signal(&probe->cond);
 		}
+	}
+callback_done:
+	if(measure)
+	{
+		plus_vita_latency_span(&probe->latency.callback_mutex_wait, arrival_us, locked_us);
+		plus_vita_latency_span(&probe->latency.callback_work, locked_us,
+			sceKernelGetProcessTimeWide());
 	}
 	chiaki_mutex_unlock(&probe->mutex);
 }
@@ -1551,7 +1646,7 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 		? sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START)
 		: front_info_result;
 	bool front_ready = front_info_result >= 0 && front_start_result >= 0;
-	chiaki_mutex_lock(&probe->mutex);
+	probe_preview_lock(probe);
 	CHIAKI_LOGI(probe->log, "Stream probe rear touch ready=%d panel_x=%d..%d mid_x=%d panel_y=%d..%d mid_y=%d sampling_prev=%d",
 		rear_ready ? 1 : 0, (int)rear_info.minAaX, (int)rear_info.maxAaX,
 		rear_mid_x, (int)rear_info.minAaY, (int)rear_info.maxAaY,
@@ -1574,6 +1669,9 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 	unsigned int recovery_generation_fed = 0;
 	uint64_t prepare_sum = 0, decode_sum = 0, decode_max = 0;
 	uint64_t display_sum = 0, wait_sum = 0, wait_max = 0, queue_wait_max = 0;
+	uint64_t last_input_poll_us = 0;
+	probe->latency_collecting = true;
+	plus_vita_diagnostic_stream_timing_begin();
 	while(err == CHIAKI_ERR_SUCCESS)
 	{
 		uint64_t now = sceKernelGetProcessTimeWide() / 1000u;
@@ -1585,7 +1683,7 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 				chiaki_mutex_unlock(&probe->mutex);
 				ChiakiErrorCode feedback_err = chiaki_feedback_sender_init(
 					&controller_feedback, &probe->takion);
-				chiaki_mutex_lock(&probe->mutex);
+				probe_preview_lock(probe);
 				if(feedback_err != CHIAKI_ERR_SUCCESS)
 				{
 					CHIAKI_LOGE(probe->log, "Stream probe controller feedback init failed=%d", (int)feedback_err);
@@ -1597,6 +1695,11 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 					rear_ready ? 1 : 0, front_ready ? 1 : 0);
 			}
 			SceCtrlData pad = { 0 };
+			uint64_t sampled_us = sceKernelGetProcessTimeWide();
+			if(last_input_poll_us)
+				plus_vita_latency_span(&probe->latency.input_poll_gap,
+					last_input_poll_us, sampled_us);
+			last_input_poll_us = sampled_us;
 			if(sceCtrlPeekBufferPositive(0, &pad, 1) > 0)
 			{
 				const uint32_t stop_buttons = SCE_CTRL_START | SCE_CTRL_SELECT;
@@ -1613,7 +1716,7 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 						ChiakiErrorCode feedback_err =
 							chiaki_feedback_sender_set_controller_state(
 								&controller_feedback, &idle);
-						chiaki_mutex_lock(&probe->mutex);
+						probe_preview_lock(probe);
 						if(feedback_err != CHIAKI_ERR_SUCCESS)
 						{
 							err = feedback_err;
@@ -1629,7 +1732,7 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 						 * chance to transmit the idle state before joining it. */
 						chiaki_mutex_unlock(&probe->mutex);
 						sceKernelDelayThread(100000);
-						chiaki_mutex_lock(&probe->mutex);
+						probe_preview_lock(probe);
 						break;
 					}
 				}
@@ -1654,9 +1757,12 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 				if(!chiaki_controller_state_equals(&state, &controller_state_prev))
 				{
 					chiaki_mutex_unlock(&probe->mutex);
-					ChiakiErrorCode feedback_err = chiaki_feedback_sender_set_controller_state(
-						&controller_feedback, &state);
-					chiaki_mutex_lock(&probe->mutex);
+					uint64_t publish_started_us = sceKernelGetProcessTimeWide();
+					ChiakiErrorCode feedback_err = plus_vita_feedback_sender_set_controller_state_sampled(
+						&controller_feedback, &state, sampled_us);
+					plus_vita_latency_span(&probe->latency.input_publish_call,
+						publish_started_us, sceKernelGetProcessTimeWide());
+					probe_preview_lock(probe);
 					if(feedback_err != CHIAKI_ERR_SUCCESS)
 					{
 						CHIAKI_LOGE(probe->log, "Stream probe controller feedback failed=%d", (int)feedback_err);
@@ -1678,7 +1784,10 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 				}
 			}
 			else
+			{
+				probe->latency.input_poll_failures++;
 				stop_chord_since = 0;
+			}
 		}
 		if(probe->state == PROBE_FAILED)
 		{
@@ -1701,7 +1810,7 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 			chiaki_mutex_unlock(&probe->mutex);
 			ChiakiErrorCode feedback_err = chiaki_takion_send_congestion(
 				&probe->takion, &feedback);
-			chiaki_mutex_lock(&probe->mutex);
+			probe_preview_lock(probe);
 			probe->feedback_reports++;
 			if(probe->feedback_reports <= 3 || probe->feedback_reports % 10 == 0
 				|| feedback_err != CHIAKI_ERR_SUCCESS)
@@ -1783,9 +1892,11 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 		probe->queue_count--;
 		probe->video_decode_attempts++;
 		if(frame.recovery_generation) recovery_generation_fed = frame.recovery_generation;
-		uint64_t queue_wait_us = sceKernelGetProcessTimeWide() - frame.enqueued_us;
+		uint64_t dequeued_us = sceKernelGetProcessTimeWide();
+		uint64_t queue_wait_us = dequeued_us - frame.enqueued_us;
 		if(queue_wait_us > queue_wait_max)
 			queue_wait_max = queue_wait_us;
+		plus_vita_latency_span(&probe->latency.queue_wait, frame.enqueued_us, dequeued_us);
 		chiaki_mutex_unlock(&probe->mutex);
 		bool produced = false;
 		native_result = plus_vita_video_decoder_decode(&probe->video_decoder,
@@ -1798,7 +1909,9 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 		decode_sum += probe->video_decoder.last_decode_us;
 		if(probe->video_decoder.last_decode_us > decode_max)
 			decode_max = probe->video_decoder.last_decode_us;
-		chiaki_mutex_lock(&probe->mutex);
+		plus_vita_latency_add(&probe->latency.decode_prepare, probe->video_decoder.last_prepare_us);
+		plus_vita_latency_add(&probe->latency.decode, probe->video_decoder.last_decode_us);
+		probe_preview_lock(probe);
 		if(native_result < 0)
 		{
 			CHIAKI_LOGE(probe->log, "Stream probe preview decode failed=0x%08x", native_result);
@@ -1824,7 +1937,18 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 				wait_sum += present.last_wait_us;
 				if(present.last_wait_us > wait_max)
 					wait_max = present.last_wait_us;
-				chiaki_mutex_lock(&probe->mutex);
+				plus_vita_latency_add(&probe->latency.display_wait, present.last_wait_us);
+				uint64_t display_done_us = sceKernelGetProcessTimeWide();
+				if(native_result >= 0)
+				{
+					/* Native output can belong to an earlier AU. These spans
+					 * describe this submission, not the age of that picture. */
+					plus_vita_latency_span(&probe->latency.submitted_first_packet_to_present,
+						frame.first_packet_us, display_done_us);
+					plus_vita_latency_span(&probe->latency.submitted_ready_to_present,
+						frame.ready_us, display_done_us);
+				}
+				probe_preview_lock(probe);
 				if(native_result < 0)
 				{
 					CHIAKI_LOGE(probe->log, "Stream probe preview display failed=0x%08x", native_result);
@@ -1861,9 +1985,15 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 	/* Stop accepting media before restoring/freeing display buffers. */
 	if(err != CHIAKI_ERR_SUCCESS)
 		probe->state = PROBE_FAILED;
+	probe->latency_collecting = false;
 	chiaki_mutex_unlock(&probe->mutex);
 	if(controller_feedback_ready)
+	{
 		chiaki_feedback_sender_fini(&controller_feedback);
+		plus_vita_feedback_latency_get_stopped(&probe->latency.feedback);
+	}
+	plus_vita_diagnostic_stream_timing_end(&probe->latency.log_write_call,
+		&probe->latency.log_mutex_wait);
 	if(rear_ready && rear_sampling_known
 		&& rear_sampling_prev != SCE_TOUCH_SAMPLING_STATE_START)
 		sceTouchSetSamplingState(SCE_TOUCH_PORT_BACK, rear_sampling_prev);
@@ -1875,7 +2005,7 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 	 * state above. Retire it before releasing its borrowed output buffers. */
 	plus_vita_video_decoder_fini(&probe->video_decoder);
 	native_result = plus_vita_video_present_fini(&present);
-	chiaki_mutex_lock(&probe->mutex);
+	probe_preview_lock(probe);
 	if(native_result < 0)
 	{
 		err = CHIAKI_ERR_UNKNOWN;
@@ -2217,6 +2347,7 @@ ChiakiErrorCode plus_vita_stream_probe(const ChiakiCloudProvisionResult *provisi
 	}
 	chiaki_mutex_unlock(&probe.mutex);
 	chiaki_takion_close(&probe.takion);
+	if(!PROBE_CAPTURE_ONLY) probe_latency_dump(&probe);
 	if(PROBE_CAPTURE_ONLY && probe.capture_size)
 	{
 		char path[128];

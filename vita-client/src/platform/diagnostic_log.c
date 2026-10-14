@@ -1,4 +1,5 @@
 #include "diagnostic_log.h"
+#include "latency_clock.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -13,6 +14,27 @@
 static FILE *diagnostic_file;
 static unsigned long diagnostic_sequence;
 static pthread_mutex_t diagnostic_write_mutex = PTHREAD_MUTEX_INITIALIZER;
+static bool diagnostic_stream_timing;
+static PlusVitaLatencyStats diagnostic_write_call, diagnostic_mutex_wait;
+
+void plus_vita_diagnostic_stream_timing_begin(void)
+{
+	pthread_mutex_lock(&diagnostic_write_mutex);
+	memset(&diagnostic_write_call, 0, sizeof(diagnostic_write_call));
+	memset(&diagnostic_mutex_wait, 0, sizeof(diagnostic_mutex_wait));
+	diagnostic_stream_timing = true;
+	pthread_mutex_unlock(&diagnostic_write_mutex);
+}
+
+void plus_vita_diagnostic_stream_timing_end(PlusVitaLatencyStats *write_call,
+	PlusVitaLatencyStats *mutex_wait)
+{
+	pthread_mutex_lock(&diagnostic_write_mutex);
+	diagnostic_stream_timing = false;
+	*write_call = diagnostic_write_call;
+	*mutex_wait = diagnostic_mutex_wait;
+	pthread_mutex_unlock(&diagnostic_write_mutex);
+}
 
 static bool contains_case_insensitive(const char *text, const char *needle)
 {
@@ -71,7 +93,9 @@ static bool message_is_diagnostic(const char *message)
 
 static void write_line(const char *kind, const char *message, int code)
 {
+	uint64_t start_us = plus_vita_latency_now_us();
 	pthread_mutex_lock(&diagnostic_write_mutex);
+	uint64_t locked_us = plus_vita_latency_now_us();
 	if(!diagnostic_file)
 	{
 		pthread_mutex_unlock(&diagnostic_write_mutex);
@@ -81,6 +105,11 @@ static void write_line(const char *kind, const char *message, int code)
 	fprintf(diagnostic_file, "%06lu %-8s code=%d %s\n",
 		diagnostic_sequence, kind, code, message ? message : "");
 	fflush(diagnostic_file);
+	if(diagnostic_stream_timing)
+	{
+		plus_vita_latency_span(&diagnostic_mutex_wait, start_us, locked_us);
+		plus_vita_latency_span(&diagnostic_write_call, locked_us, plus_vita_latency_now_us());
+	}
 	pthread_mutex_unlock(&diagnostic_write_mutex);
 }
 
