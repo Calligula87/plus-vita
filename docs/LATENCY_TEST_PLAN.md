@@ -59,18 +59,22 @@ the validity of the measurements; they cannot establish the user's latency.
 | A06 | Duplicate updates, injected local send failure, rapid updates and next sender session | Dedup preserved; failure observed; publications reconcile with consumption/coalescing; reset after join | Passed. |
 | A07 | Current instrumentation under memory/undefined-behavior and thread sanitizers | No reported failure in the exercised host paths | Passed on 2026-10-14. |
 | A08 | Diagnostic Release VPK and rollback package | Package builds; manifest identifies build/hash; S hash retained | Passed. The retrieved hardware log now identifies installed B. |
-| A09 | Future production input owner while video work is blocked | New samples reach the existing sender independently; no busy-spin or dependence on video progress | Pending C implementation. |
-| A10 | Future input owner: held controls/touches, stop chord, init/send failure, disconnect and repeated session | Existing mappings/releases preserved; error reaches session owner; worker joins before feedback/transport destruction; no use after shutdown | Pending C implementation. |
-| A11 | Future candidate sanitizer and packaging run | A05/A06 equivalence and new lifecycle checks pass; new build/hash recorded | Pending C implementation. |
-| A12 | Actual diagnostic producers against a controlled slow/failing writer | No producer waits on disk or disk-held locks; bounded retention, ordering/overflow and failure outcomes explicit | Pending L implementation, #8. |
-| A13 | Deferred diagnostics under concurrent stop/restart, redaction and capacity pressure | No unbounded memory/wait, deadlock, sensitive retention or silent record loss; terminal diagnostics accounted for | Pending L and sanitizer checks, #8. |
-| A14 | Audio arrival-to-output reproduction with controlled pacing/sequence/logging | Competing backlog hypotheses tested without changing accepted playback policy | Pending investigation, #9; not an audio fix. |
+| A09 | Production input owner while video work is blocked | New samples reach the existing sender independently; no busy-spin or dependence on video progress | Passed host: actual decoder stalled at native API while feedback and terminal stop continue. |
+| A10 | Input owner: held controls/touches, stop chord, init/send failure, disconnect and repeated session | Existing mappings/releases preserved; error reaches session owner; worker joins before feedback/transport destruction; no use after shutdown | Host mappings/lifecycle/failure/restart passed; native preview/disconnect/touch restoration remain hardware checks. |
+| A11 | Candidate sanitizer and packaging run | A05/A06 equivalence and new lifecycle checks pass; new build/hash recorded | C memory/thread checks and Release VPK passed; FTP staging pending. |
+| A12 | Actual diagnostic producers against a controlled slow/failing writer | No producer waits on disk or disk-held locks; bounded retention, ordering/overflow and failure outcomes explicit | Passed L: blocked real sink, bounded loss/error accounting and persistence separation. |
+| A13 | Deferred diagnostics under concurrent stop/restart, redaction and capacity pressure | No unbounded memory/wait, deadlock, sensitive retention or silent record loss; terminal diagnostics accounted for | L memory/thread checks passed, including stuck-writer shutdown and partial init. Hardware still pending. |
+| A14 | Audio arrival-to-output reproduction with controlled pacing/sequence/logging | Competing backlog hypotheses tested without changing accepted playback policy | Passed agent reproduction/investigation; hardware cause remains unresolved, no playback fix claimed. |
 
 Existing commands, after configuring/building the Vita target:
 
 ```sh
 sh tools/test-latency.sh
 PLUS_VITA_TEST_SANITIZERS=thread sh tools/test-latency.sh
+sh tools/test-input-worker.sh
+sh tools/test-deferred-log.sh
+sh tools/test-audio-queue.sh
+# Repeat these three with PLUS_VITA_TEST_SANITIZERS=thread for concurrency checks.
 ```
 
 The script compiles the generated sender actually used by the VPK. Receiver and

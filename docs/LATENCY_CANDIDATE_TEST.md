@@ -5,6 +5,11 @@ and [#8](https://github.com/Calligula87/plus-vita/issues/8), 2026-10-14.
 Neither candidate is accepted on hardware yet. Keep the original diagnostic
 baseline and accepted reorder VPKs for comparisons and rollback.
 
+Staging status, 2026-10-15: both candidate packages are built locally. The FTP
+connection timed out; upload/readback remain pending the server/address
+confirmation. The filenames below are the planned staging names until the
+manifest confirms `uploaded` and `readback_verified` for each package.
+
 ## Packages and order
 
 All packages have application ID `PLVT00001`: installing one replaces that app
