@@ -37,6 +37,10 @@ before starting another session. Keep credentials and raw logs private.
    minutes and test held-button/stick release, front/rear touch, individual
    START/SELECT, the stop chord and restart. Stop early for stuck controls,
    missing controls, frozen video or worsening sound.
+   The [first C hardware result](LATENCY_INPUT_WORKER_RESULT.md) now verifies
+   4ms mean/7.196ms maximum polling with clean stop. Its 7m18.286s duration is
+   shorter than the candidate soak; human comparison/restart and candidate
+   duration acceptance remain pending. C is not automatically adopted.
 3. Retrieve `ux0:data/plus-vita-allocation.log` after each run and report build,
    duration, responsiveness and any regression. Tell the agent when a log is
    ready; it can retrieve it over the authorized FTP connection.
