@@ -19,7 +19,10 @@ delay, accepted the 7m46.418s baseline duration, then confirmed all remaining
 control/release/response/restart checks done. #3 is complete. The user then
 reported better C response and equivalent picture/sound/controls/releases/restart,
 with C's 7m18.286s duration explicitly accepted. #6/#7 are complete and C is the
-new accepted working input build. #10 is the next separate experiment; #1 stays
+new accepted working input build. #10 subsequently validated isolated logging:
+zero diagnostic loss, lower producer cost, everything worked with little
+noticeable difference, and recorded 5m02.205s duration explicitly accepted.
+#11 prepares the combined candidate; its own human gate will follow. #1 stays
 open. See [delivery/review](LATENCY_IMPLEMENTATION_RESULT.md),
 [candidate procedure](LATENCY_CANDIDATE_TEST.md), and
 [audio investigation](AUDIO_QUEUE_INVESTIGATION.md).
@@ -34,7 +37,8 @@ open. See [delivery/review](LATENCY_IMPLEMENTATION_RESULT.md),
 | [#7 Record candidate acceptance or rollback](https://github.com/Calligula87/plus-vita/issues/7) | Complete; C accepted | Identified worker-1 package retained; B/S preserved; no numerical whole-response claim or untested combination. |
 | [#8 Defer diagnostic file I/O outside streaming hot paths](https://github.com/Calligula87/plus-vita/issues/8) | Software delivered; issue closed | L built/reviewed/upload verified; hardware acceptance is #10. |
 | [#9 Investigate existing audio queue backlog](https://github.com/Calligula87/plus-vita/issues/9) | Scoped investigation complete; issue closed | Hardware cause uncertain; playback policy unchanged. |
-| [#10 Validate deferred logging on Vita](https://github.com/Calligula87/plus-vita/issues/10) | Open; later separate comparison | #3/#8 complete; keep first C and L comparisons separate; `ready-for-human`. |
+| [#10 Validate deferred logging on Vita](https://github.com/Calligula87/plus-vita/issues/10) | Complete; isolated logger validated | Zero diagnostic loss; lower producer costs; no reported quality/control/restart regression; explicit duration revision. |
+| [#11 Prepare combined input and logging candidate](https://github.com/Calligula87/plus-vita/issues/11) | Active software task | #7/#10 complete; unique combined identity and joint tests required; C stays accepted fallback. |
 
 Readiness labels describe who can execute the defined task, not whether a
 blocked task can be started immediately. No assignee was invented.

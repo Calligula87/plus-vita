@@ -86,3 +86,21 @@ combined decision/test. Recording acceptance changes neither build defaults
 nor existing VPK contents; C is reproduced with input ON/logging OFF. The
 parent improvement task stays open for the logging investigation and later
 evidence, with rollback artifacts preserved.
+
+## Isolated logging result and combination, 2026-10-15
+
+L persisted all 2121 records with zero overflow/truncation/drain losses and
+reported successful I/O; measured producer enqueue averaged26.55us while
+actual writer persistence still averaged10.988ms. The maintainer reports
+everything worked with little noticeable difference and explicitly accepts
+the recorded5m02.205s comparison duration. Validate this logging component;
+do not describe it as a separately felt response improvement or a solution to
+the full audio backlog. C remains the accepted working input build.
+
+The isolated comparison restriction has now served its purpose. Permit a new,
+uniquely identified combined **experimental** profile using the unchanged
+input and logger implementations, retain B/C/L profiles and unchanged defaults,
+and exercise both actual boundaries together before packaging. Require a new
+combined Vita comparison against C before acceptance; separate component
+success is insufficient. Video/FEC/reorder/display/audio/quality policies,
+fallback artifacts and privacy limits continue unchanged.
