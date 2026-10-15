@@ -22,9 +22,11 @@ L (`OFF`, `ON`) and default (`OFF`, `OFF`). CMake rejects `ON`, `ON`. The local
 package manifest records final hashes, byte sizes, source commit and FTP status.
 Never infer installation from upload or from a build tag in an untested package.
 
-Staging status: the FTP connection timed out. Both VPKs are local; upload and
-readback verification are pending server/address confirmation. Software tasks
-#5/#8/#9 are closed with this limitation recorded; #3/#6/#7/#10 remain open.
+Staging completed after the server became available: C/L and the original B/S
+packages are in `ux0:data/`, all four verified by SHA256 readback. The existing
+primary diagnostic VPK was backed up and its B hash verified; it and the prior
+log were preserved. No package was installed automatically. Software tasks
+#5/#8/#9 are closed; #3/#6/#7/#10 remain open.
 
 ## Automated validation
 

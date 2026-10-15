@@ -12,8 +12,8 @@ Source commits: `fda4046`, `e299abb`; foundation: `82df29a`. They have not been
 pushed automatically. The historical triage table below is superseded by this
 delivery update for #2/#5/#8/#9.
 
-FTP staging/readback is pending: the connection timed out and server/address
-confirmation was requested. No package was installed or accepted. The user
+FTP staging/readback is complete for C, L, original B and rollback S; all four
+SHA256 hashes were verified. No package was installed or accepted. The user
 confirmed equivalent diagnostic quality/stability with noticeable input delay;
 #3 still needs its 8–10 minute run and restart. #6/#7/#10 remain open hardware
 comparison/acceptance gates. See [delivery/review](LATENCY_IMPLEMENTATION_RESULT.md),
@@ -25,10 +25,10 @@ comparison/acceptance gates. See [delivery/review](LATENCY_IMPLEMENTATION_RESULT
 | [#2 Deliver diagnostic baseline and software validation](https://github.com/Calligula87/plus-vita/issues/2) | Completed locally; issue closed | Foundation committed in `82df29a`; no hardware acceptance. |
 | [#3 Complete remaining diagnostic baseline checks](https://github.com/Calligula87/plus-vita/issues/3) | Open; quality/stability confirmed for the inspected run | Full duration/restart gate remains; `ready-for-human`. |
 | [#4 Analyze baseline delays and select the input experiment](https://github.com/Calligula87/plus-vita/issues/4) | Analysis completed; issue closed | Available evidence analyzed, not full acceptance; `ready-for-agent`. |
-| [#5 Isolate input sampling and validate its lifecycle](https://github.com/Calligula87/plus-vita/issues/5) | Software delivered; issue closed | C built/reviewed; staging pending; hardware acceptance is #6/#7. |
+| [#5 Isolate input sampling and validate its lifecycle](https://github.com/Calligula87/plus-vita/issues/5) | Software delivered; issue closed | C built/reviewed/upload verified; hardware acceptance is #6/#7. |
 | [#6 Compare independent input sampling on Vita](https://github.com/Calligula87/plus-vita/issues/6) | Open | Blocked by #3 and #5; `ready-for-human`. |
 | [#7 Record candidate acceptance or rollback](https://github.com/Calligula87/plus-vita/issues/7) | Open | Blocked by #6; `ready-for-agent`. |
-| [#8 Defer diagnostic file I/O outside streaming hot paths](https://github.com/Calligula87/plus-vita/issues/8) | Software delivered; issue closed | L built/reviewed; staging pending; hardware acceptance is #10. |
+| [#8 Defer diagnostic file I/O outside streaming hot paths](https://github.com/Calligula87/plus-vita/issues/8) | Software delivered; issue closed | L built/reviewed/upload verified; hardware acceptance is #10. |
 | [#9 Investigate existing audio queue backlog](https://github.com/Calligula87/plus-vita/issues/9) | Scoped investigation complete; issue closed | Hardware cause uncertain; playback policy unchanged. |
 | [#10 Validate deferred logging on Vita](https://github.com/Calligula87/plus-vita/issues/10) | Open | Blocked by #3 and #8; `ready-for-human`. |
 

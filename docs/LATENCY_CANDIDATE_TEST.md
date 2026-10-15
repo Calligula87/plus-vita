@@ -5,10 +5,11 @@ and [#8](https://github.com/Calligula87/plus-vita/issues/8), 2026-10-14.
 Neither candidate is accepted on hardware yet. Keep the original diagnostic
 baseline and accepted reorder VPKs for comparisons and rollback.
 
-Staging status, 2026-10-15: both candidate packages are built locally. The FTP
-connection timed out; upload/readback remain pending the server/address
-confirmation. The filenames below are the planned staging names until the
-manifest confirms `uploaded` and `readback_verified` for each package.
+Staging status, 2026-10-15: C, L, original B and accepted rollback S are uploaded
+to `ux0:data/` under the filenames below. All four SHA256 hashes match downloaded
+readbacks. The existing `plus_vita_smoke.vpk` remains the original diagnostic
+baseline and was backed up/verified; the existing result log was preserved.
+No uploaded package has been installed or accepted automatically.
 
 ## Packages and order
 
