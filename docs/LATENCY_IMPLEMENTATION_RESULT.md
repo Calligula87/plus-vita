@@ -28,7 +28,12 @@ primary diagnostic VPK was backed up and its B hash verified; it and the prior
 log were preserved. No package was installed automatically. Software tasks
 #5/#8/#9 are closed. Subsequently #3 was completed using the accepted baseline
 duration and the maintainer's remaining-test confirmation, supported by a
-distinct clean subsequent baseline session. #6/#7/#10 remain open; C is next.
+distinct clean subsequent baseline session. C subsequently passed its
+comparison: the maintainer reported better response, equivalent picture/sound/
+controls/releases/restart, and explicitly accepted its 7m18.286s duration.
+#6/#7 are complete; identified C is accepted with B/S retained. #10 logging-only
+L versus original B is next; the parent task remains open. See the
+[C hardware result](LATENCY_INPUT_WORKER_RESULT.md) and ADR acceptance update.
 
 ## Automated validation
 

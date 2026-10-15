@@ -61,3 +61,28 @@ Related evidence: [display experiment and rollback](../DISPLAY_PACING_TEST.md),
 [decoder evidence](../720P_DECODER_PLAN.md),
 [baseline procedure](../LATENCY_BASELINE_TEST.md), and
 [test plan](../LATENCY_TEST_PLAN.md).
+
+## Hardware decision, 2026-10-15
+
+Accept the identified `live-720p-refs5-input-worker-1` package as the working
+input build. The maintainer reported better response and confirmed picture,
+sound, all controls/releases and restart remained good; the log verifies
+4ms mean/7.196ms maximum polling and clean neutral/shutdown with no input-send
+failure. The maintainer explicitly accepted the recorded 7m18.286s comparison
+duration, a scoped revision of the original 8–10 minute gate for this run.
+Baseline B's 7m46.418s duration was separately accepted; future experimental
+durations are not silently waived.
+
+Retain the accepted C package, original diagnostic B and older accepted S.
+This is a qualitative response improvement supported by local timing, not a
+numerical input-to-screen measurement. The original trade-offs remain: keep
+video/FEC/reorder/display/audio policy, account for the disclosed reduction of
+control/sender diagnostic logging, and do not infer identical network conditions.
+Audio backlog remains a separate issue despite unchanged perceived sound.
+
+Proceed with logging-only L against original B; its input owner stays at B's
+policy. Do not merge logging into C before L has separate evidence and a
+combined decision/test. Recording acceptance changes neither build defaults
+nor existing VPK contents; C is reproduced with input ON/logging OFF. The
+parent improvement task stays open for the logging investigation and later
+evidence, with rollback artifacts preserved.

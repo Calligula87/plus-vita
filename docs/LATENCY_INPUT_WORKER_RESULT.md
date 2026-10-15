@@ -1,6 +1,6 @@
 # Input worker 1: first Vita result
 
-2026-10-15. Candidate C: `live-720p-refs5-input-worker-1`.
+2026-10-15. C, now accepted: `live-720p-refs5-input-worker-1`.
 Related [hardware comparison #6](https://github.com/Calligula87/plus-vita/issues/6),
 [adoption/rollback #7](https://github.com/Calligula87/plus-vita/issues/7),
 and [baseline evidence](LATENCY_BASELINE_FOLLOWUP_RESULT.md).
@@ -23,15 +23,20 @@ and observed send failures were zero. The neutral request succeeded and local
 consumption was confirmed before sender teardown; this is not remote receipt.
 
 **Established:** the separate input owner delivers a much steadier requested
-4ms polling cadence on Vita while the existing video path continues.
-**Not established yet:** repeatable physical/subjective response improvement,
-same-scene control/audio/quality equivalence or subsequent-session success.
-The user was asked for those observations. The planned candidate soak was 8–10
-minutes; after seeing the actual duration, the maintainer explicitly answered
+4ms polling cadence on Vita while the existing video path continues. The
+maintainer then reported **"I felt the response better. I think we improved"**
+and confirmed **"Yes—all remained good, including restart"** in answer to the
+picture/sound/all-controls/releases/stop/restart question. This supplies the
+positive subjective comparison and no-reported-regression evidence.
+No numerical physical input-to-screen measurement was made.
+
+The planned candidate soak was 8–10 minutes; after seeing the actual duration,
+the maintainer explicitly answered
 **"Accept the 7m18s comparison duration"**. This satisfies the revised duration
 criterion for this C comparison; it is not represented as an actual eight-minute
-run or an automatic adoption decision. Keep #6/#7 open pending the human
-response/quality/control/restart observations; do not promote C from metrics alone.
+run. With both the human comparison and the hardware log, **accept C as the
+current working input build and complete #6/#7**. This accepts the identified
+package, not an untested combination or a claim of 75% less game-response delay.
 
 ## Input timing
 
@@ -92,9 +97,10 @@ from the baseline, and earlier B control-check sessions had even longer
 recoveries. The lower queue mean or different losses cannot be assigned solely
 to the input change; queue and decode maxima did not uniformly improve.
 
-The existing audio backlog is higher in this sample and needs the human sound
-comparison. No playback policy changed, so this one observation cannot prove
-that C caused an audio regression or that sound quality is equivalent.
+The existing audio backlog is higher in this sample. The maintainer subsequently
+confirmed sound remained as good as the baseline. No playback policy changed;
+this one counter difference cannot prove C caused an audio regression, and
+the pre-existing backlog still warrants the separate logging investigation.
 
 2550 synchronous diagnostic writes account for approximately 26.982s (~6.16%
 of elapsed time), using the rounded mean. This is aggregate serialized file
@@ -106,13 +112,24 @@ and network variation limit attribution of any gameplay improvement.
 The current-submission presentation intervals are not output-picture age or
 physical input-to-screen latency. No recording-derived measurement is available.
 
-## Next evidence
+## Accepted package and next experiment
 
-Record the user's repeated better/same/worse comparison and any picture,
-sound, touch/control/release or restart issue. If ambiguous, repeat a short
-matched B/C comparison in reverse order. The duration criterion is satisfied
-by the maintainer's explicit revision for this run; another C run is not required
-solely for elapsed time. Retain the original rollback and all private logs.
-L remains the later **separate B-versus-L** experiment, never a combined first
-input-plus-logging candidate. No executable/settings change is needed to
-analyze these results, and C is not accepted automatically.
+Accepted working build: C, `ux0:data/plus-vita-input-worker-1.vpk`, SHA256
+`95437199D32328FB38197C197DCC2E9B91633F47E0D71B0E052CD0BED9FD821B`.
+Retain original B (`B48C54FD…`) for the isolated logging comparison and original
+accepted S (`6F4FEB9A…`) as the older fallback, as well as the full hashes in the
+package manifest. C itself remains available to restore after testing L.
+Neither source defaults nor executable contents change as part of recording
+this acceptance; rebuilding C requires input ON and deferred logging OFF.
+
+**Next: #10, separate B-versus-L**, `ux0:data/plus-vita-deferred-log-1.vpk`,
+build `live-720p-refs5-deferred-log-1`, SHA256
+`06610CC8C42A09104F118D7B79CF62BE97638A0EB61D6E5D391F1BF219787AB7`.
+Its staged file was re-downloaded and hash-verified. L retains B's input owner,
+so compare its logging/stream behavior with original B; it does not contain
+the now accepted input-worker improvement. Test the same scene, response
+actions, controls/releases, picture/sound, clean stop/restart and 8–10 minutes
+from the first live picture, saving its log before another allocation.
+
+Keep the parent improvement task open. Do not combine or accept input+deferred
+logging until L has its own evidence and a subsequent combined decision/test.

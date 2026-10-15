@@ -2,8 +2,9 @@
 
 Software preparation for [#5](https://github.com/Calligula87/plus-vita/issues/5)
 and [#8](https://github.com/Calligula87/plus-vita/issues/8), 2026-10-14.
-Neither candidate is accepted on hardware yet. Keep the original diagnostic
-baseline and accepted reorder VPKs for comparisons and rollback.
+C is now accepted after its hardware comparison and the maintainer's positive
+response/quality/control/restart confirmation. L is still experimental. Keep
+C, the original diagnostic baseline and older accepted reorder VPKs available.
 
 Staging status, 2026-10-15: C, L, original B and accepted rollback S are uploaded
 to `ux0:data/` under the filenames below. All four SHA256 hashes match downloaded
@@ -22,7 +23,7 @@ before starting another session. Keep credentials and raw logs private.
 | Role | Filename in `ux0:data/` | Build on result screen/log |
 | --- | --- | --- |
 | B: original diagnostic baseline | `plus-vita-latency-baseline-1.vpk` | `live-720p-refs5-latency-baseline-1` |
-| C: independent input | `plus-vita-input-worker-1.vpk` | `live-720p-refs5-input-worker-1` |
+| C: accepted independent-input build | `plus-vita-input-worker-1.vpk` | `live-720p-refs5-input-worker-1` |
 | L: deferred logging, for a later separate comparison | `plus-vita-deferred-log-1.vpk` | `live-720p-refs5-deferred-log-1` |
 | S: accepted rollback | `plus-vita-video-reorder-1.vpk` | `live-720p-refs5-video-reorder-1` |
 
@@ -30,24 +31,20 @@ before starting another session. Keep credentials and raw logs private.
    the maintainer accepted 7m46.418s and subsequently confirmed all remaining
    requested checks done; a distinct 5m12.106s baseline allocation ended cleanly.
    Logs are preserved. No further baseline-only run is required before C.
-2. **Next: install C** and compare B and C in the same game/scene and Wi-Fi
-   conditions: repeat the same ten button presses or short stick movements.
-   Optional 120/240fps phone video can estimate button-to-screen response;
-   otherwise report a subjective better/same/worse result. Run C for 8–10
-   minutes and test held-button/stick release, front/rear touch, individual
-   START/SELECT, the stop chord and restart. Stop early for stuck controls,
-   missing controls, frozen video or worsening sound.
-   The [first C hardware result](LATENCY_INPUT_WORKER_RESULT.md) now verifies
-   4ms mean/7.196ms maximum polling with clean stop. The maintainer explicitly
-   accepted its 7m18.286s comparison duration; human response/quality/control
-   and restart observations remain pending. C is not automatically adopted.
+2. C's [hardware comparison](LATENCY_INPUT_WORKER_RESULT.md) is complete:
+   4ms mean/7.196ms maximum polling, clean stop, duration explicitly accepted,
+   user-perceived better response and no reported picture/sound/control/release
+   or restart regression. C is the newly accepted working input build.
 3. Retrieve `ux0:data/plus-vita-allocation.log` after each run and report build,
    duration, responsiveness and any regression. Tell the agent when a log is
    ready; it can retrieve it over the authorized FTP connection.
-4. Compare B and L separately after the input comparison. L retains baseline
-   input sampling. Check sink drop/truncation/I/O counters, stop completion,
-   sound continuity and repeated sessions. Do not combine C and L for the first
-   comparisons. Follow [the full test plan](LATENCY_TEST_PLAN.md) for acceptance.
+4. **Next: install L and compare with original B**, using the same scene,
+   ten repeated response actions, all controls/releases, picture/sound, 8–10
+   minutes from the first live picture and clean stop/restart. L retains B's
+   input sampling; it does not include the accepted C worker. Check sink
+   drop/truncation/I/O counters, sound continuity and repeated sessions. Keep
+   C available to restore after this separate experiment. Do not combine C/L
+   before evaluating L. Follow [the full test plan](LATENCY_TEST_PLAN.md).
 
 ## What changes in C
 
