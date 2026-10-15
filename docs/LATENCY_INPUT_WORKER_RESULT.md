@@ -26,10 +26,12 @@ consumption was confirmed before sender teardown; this is not remote receipt.
 4ms polling cadence on Vita while the existing video path continues.
 **Not established yet:** repeatable physical/subjective response improvement,
 same-scene control/audio/quality equivalence or subsequent-session success.
-The user was asked for those observations. The planned candidate soak is 8–10
-minutes; this run is shorter. The earlier explicit duration exception applied
-to baseline B only, so it is not silently extended to C. Keep #6/#7 open and
-do not promote C from local metrics alone.
+The user was asked for those observations. The planned candidate soak was 8–10
+minutes; after seeing the actual duration, the maintainer explicitly answered
+**"Accept the 7m18s comparison duration"**. This satisfies the revised duration
+criterion for this C comparison; it is not represented as an actual eight-minute
+run or an automatic adoption decision. Keep #6/#7 open pending the human
+response/quality/control/restart observations; do not promote C from metrics alone.
 
 ## Input timing
 
@@ -108,9 +110,9 @@ physical input-to-screen latency. No recording-derived measurement is available.
 
 Record the user's repeated better/same/worse comparison and any picture,
 sound, touch/control/release or restart issue. If ambiguous, repeat a short
-matched B/C comparison in reverse order. The separate duration/stability gate
-still needs an 8–10 minute C run or an explicit maintainer revision; do not
-inherit B's exception. Retain the original rollback and all private logs.
+matched B/C comparison in reverse order. The duration criterion is satisfied
+by the maintainer's explicit revision for this run; another C run is not required
+solely for elapsed time. Retain the original rollback and all private logs.
 L remains the later **separate B-versus-L** experiment, never a combined first
 input-plus-logging candidate. No executable/settings change is needed to
 analyze these results, and C is not accepted automatically.
