@@ -160,3 +160,12 @@ The maintainer confirmed: "Same quality and stability; input delay still
 noticeable." This satisfies the subjective quality/stability observation for
 the inspected run. Its duration remains 5m52.645s; the separate 8–10 minute
 and restart checks are still required before candidate hardware comparisons.
+
+## Follow-up, 2026-10-15
+
+A second clean baseline ran for 7m46.418s with all 21 timing summaries and no
+invalid spans or input-send/audio-output failures. The maintainer explicitly
+accepted that duration, but reported front touch untested and rear controls
+uncertain. #3 remains open for the remaining short control/release, response
+action and restart checks. See the [follow-up report](LATENCY_BASELINE_FOLLOWUP_RESULT.md)
+for comparison metrics and the preserved evidence hash.

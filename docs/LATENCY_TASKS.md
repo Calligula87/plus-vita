@@ -23,7 +23,7 @@ comparison/acceptance gates. See [delivery/review](LATENCY_IMPLEMENTATION_RESULT
 | Task | State after results triage | Dependency / owner |
 | --- | --- | --- |
 | [#2 Deliver diagnostic baseline and software validation](https://github.com/Calligula87/plus-vita/issues/2) | Completed locally; issue closed | Foundation committed in `82df29a`; no hardware acceptance. |
-| [#3 Complete remaining diagnostic baseline checks](https://github.com/Calligula87/plus-vita/issues/3) | Open; quality/stability confirmed for the inspected run | Full duration/restart gate remains; `ready-for-human`. |
+| [#3 Complete remaining diagnostic baseline checks](https://github.com/Calligula87/plus-vita/issues/3) | Open; follow-up clean 7m46.418s, duration explicitly accepted | Front touch/rear controls, releases, response actions and restart still unconfirmed; no repeat long run required. |
 | [#4 Analyze baseline delays and select the input experiment](https://github.com/Calligula87/plus-vita/issues/4) | Analysis completed; issue closed | Available evidence analyzed, not full acceptance; `ready-for-agent`. |
 | [#5 Isolate input sampling and validate its lifecycle](https://github.com/Calligula87/plus-vita/issues/5) | Software delivered; issue closed | C built/reviewed/upload verified; hardware acceptance is #6/#7. |
 | [#6 Compare independent input sampling on Vita](https://github.com/Calligula87/plus-vita/issues/6) | Open | Blocked by #3 and #5; `ready-for-human`. |
