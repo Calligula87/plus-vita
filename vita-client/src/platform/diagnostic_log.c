@@ -27,6 +27,39 @@ static pthread_mutex_t diagnostic_lifecycle_mutex = PTHREAD_MUTEX_INITIALIZER;
 static bool diagnostic_stream_timing;
 static PlusVitaLatencyStats diagnostic_write_call, diagnostic_mutex_wait;
 static bool diagnostic_io_ok;
+#if PLUS_VITA_INPUT_WORKER
+static pthread_mutex_t feedback_log_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_t feedback_log_thread;
+static bool feedback_log_active;
+static uint64_t feedback_logs_suppressed;
+
+void plus_vita_diagnostic_feedback_begin(void)
+{
+	pthread_mutex_lock(&feedback_log_mutex);
+	feedback_log_thread = pthread_self();
+	feedback_logs_suppressed = 0;
+	feedback_log_active = true;
+	pthread_mutex_unlock(&feedback_log_mutex);
+}
+
+uint64_t plus_vita_diagnostic_feedback_end(void)
+{
+	pthread_mutex_lock(&feedback_log_mutex);
+	uint64_t count = feedback_logs_suppressed;
+	feedback_log_active = false;
+	pthread_mutex_unlock(&feedback_log_mutex);
+	return count;
+}
+
+static bool feedback_diagnostic_suppressed(void)
+{
+	pthread_mutex_lock(&feedback_log_mutex);
+	bool suppressed = feedback_log_active && pthread_equal(feedback_log_thread, pthread_self());
+	if(suppressed && feedback_logs_suppressed != UINT64_MAX) feedback_logs_suppressed++;
+	pthread_mutex_unlock(&feedback_log_mutex);
+	return suppressed;
+}
+#endif
 
 #if PLUS_VITA_DEFERRED_LOG
 #define REGULAR_CAPACITY 128u
@@ -335,6 +368,9 @@ void plus_vita_diagnostic_chiaki_log(ChiakiLogLevel level,
 	const char *message, void *user)
 {
 	(void)user;
+#if PLUS_VITA_INPUT_WORKER
+	if(feedback_diagnostic_suppressed()) return;
+#endif
 	if(!message_is_diagnostic(message)) return;
 	if(message_is_sensitive(message))
 	{

@@ -57,9 +57,13 @@ locking and UDP calls retain their platform behavior.
 
 **Comparison limitation:** C omits the old per-control transition log lines
 and emits aggregate input counters at shutdown, avoiding disk I/O in its input
-thread. The baseline had about 285 such writes. Any gain could include reduced
-logging as well as input isolation; do not attribute it entirely to scheduling.
-Other diagnostic writes remain synchronous in C.
+thread. The baseline had about 285 such writes. C also suppresses diagnostics
+from its feedback sender thread, including nested transport diagnostics, and
+reports their count after join as `suppressed_logs`; local send-failure counters
+are retained. This prevents a failure log from holding the sender's state
+mutex across disk I/O. Other threads keep synchronous diagnostics. Any gain
+could include reduced logging as well as input isolation; do not attribute it
+entirely to scheduling.
 
 ## What changes in L
 
@@ -94,3 +98,10 @@ the result screen even if an earlier `io_ok=1` was written to the file.
 Input/video/protocol/FEC/reorder/display/audio policy and mappings stay at the
 baseline. Successful host tests and packaging do not prove a response gain or
 hardware stability; tasks #3, #6, #7 and #10 remain the human/acceptance gates.
+
+Host coverage includes the real production decoder stalled at `sceAvcdecDecode`
+while input reaches the real sender and its terminal stop/neutral completes.
+A separate fixture blocks the real synchronous diagnostic writer, injects a
+transport error that logs through the real sink, and checks sender/input join
+without releasing disk first. The full Vita preview/native transport and touch
+restoration still need the hardware stop/disconnect/restart checks.

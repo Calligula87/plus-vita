@@ -14,6 +14,9 @@ plus_vita_feedback_latency_patch("#include <chiaki/time.h>" [=[
 #include "feedback_latency.h"
 #include "latency_clock.h"
 #include <string.h>
+#if PLUS_VITA_INPUT_WORKER
+#include "diagnostic_log.h"
+#endif
 
 /* All mutations are under the existing sender state_mutex, except reset before
  * worker creation and snapshot after its join. No additional hot-path locks. */
@@ -27,6 +30,34 @@ void plus_vita_feedback_latency_get_stopped(PlusVitaFeedbackLatency *result)
 	*result = feedback_latency;
 }
 ]=])
+
+# Only C suppresses nested sender/transport diagnostics. The callback counts
+# them without disk I/O; other threads and the B/L logging policy are unchanged.
+plus_vita_feedback_latency_patch("static void *feedback_sender_thread_func(void *user)\n{\n\tChiakiFeedbackSender *feedback_sender = user;" [=[
+static void *feedback_sender_thread_func(void *user)
+{
+	ChiakiFeedbackSender *feedback_sender = user;
+#if PLUS_VITA_INPUT_WORKER
+	plus_vita_diagnostic_feedback_begin();
+#endif
+]=])
+# The upstream thread is the last definition. Patch all its terminal returns,
+# including initial-lock/relock failure, to retire the registered thread ID.
+string(FIND "${PLUS_VITA_FEEDBACK_TEXT}" "static void *feedback_sender_thread_func(void *user)\n{" feedback_thread_start)
+if(feedback_thread_start EQUAL -1)
+  message(FATAL_ERROR "Feedback sender thread definition was not found")
+endif()
+string(SUBSTRING "${PLUS_VITA_FEEDBACK_TEXT}" 0 ${feedback_thread_start} feedback_before_thread)
+string(SUBSTRING "${PLUS_VITA_FEEDBACK_TEXT}" ${feedback_thread_start} -1 feedback_thread_body)
+string(REPLACE "return NULL;" [=[
+{
+#if PLUS_VITA_INPUT_WORKER
+		feedback_latency.suppressed_sender_logs = plus_vita_diagnostic_feedback_end();
+#endif
+		return NULL;
+	}
+]=] feedback_thread_body "${feedback_thread_body}")
+set(PLUS_VITA_FEEDBACK_TEXT "${feedback_before_thread}${feedback_thread_body}")
 
 plus_vita_feedback_latency_patch("feedback_sender->log = takion->log;" [=[
 memset(&feedback_latency, 0, sizeof(feedback_latency));

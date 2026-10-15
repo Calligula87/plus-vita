@@ -7,6 +7,7 @@
 
 typedef struct {
 	uint64_t published, consumed, coalesced, send_failures;
+	uint64_t suppressed_sender_logs;
 	PlusVitaLatencyStats sample_to_publish, publish_to_wake;
 	PlusVitaLatencyStats sample_to_state_send, sample_to_history_send;
 	PlusVitaLatencyStats state_send_call, history_send_call;

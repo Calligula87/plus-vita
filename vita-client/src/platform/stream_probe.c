@@ -210,6 +210,8 @@ static void probe_latency_dump(PlusVitaStreamProbe *probe)
 		(unsigned long long)p->input_poll_failures,
 		(unsigned long long)p->feedback.published, (unsigned long long)p->feedback.consumed,
 		(unsigned long long)p->feedback.coalesced, (unsigned long long)p->feedback.send_failures);
+	CHIAKI_LOGI(probe->log, "Stream probe sender diagnostic summary: suppressed_logs=%llu",
+		(unsigned long long)p->feedback.suppressed_sender_logs);
 #define PROBE_LATENCY_LOG(field) probe_latency_log(probe->log, #field, &p->field)
 	PROBE_LATENCY_LOG(input_poll_gap);
 	PROBE_LATENCY_LOG(input_publish_call);

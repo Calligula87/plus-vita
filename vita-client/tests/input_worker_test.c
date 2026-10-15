@@ -2,6 +2,8 @@
 #include "input_worker.h"
 #include "input_vita.h"
 #include "latency_clock.h"
+#include "diagnostic_log.h"
+#include "video_decoder_vita.h"
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -18,6 +20,41 @@ static unsigned int state_packets;
 static int device_mode=1;
 static bool fail_send, fatal_device, fail_create;
 static unsigned int history_packets;
+static pthread_mutex_t boundary_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t boundary_cond = PTHREAD_COND_INITIALIZER;
+static bool video_entered, video_released, disk_blocked, disk_entered;
+
+uint64_t sceKernelGetProcessTimeWide(void) { return plus_vita_latency_now_us(); }
+int sceAvcdecDecode(SceAvcdecCtrl *ctrl, const SceAvcdecAu *au, SceAvcdecArrayPicture *pictures)
+{
+	(void)ctrl; assert(au->es.size == 1 && pictures->numOfElm == 1);
+	pthread_mutex_lock(&boundary_mutex);
+	video_entered = true; pthread_cond_broadcast(&boundary_cond);
+	while(!video_released) pthread_cond_wait(&boundary_cond, &boundary_mutex);
+	pthread_mutex_unlock(&boundary_mutex);
+	pictures->numOfOutput = 0;
+	return 0;
+}
+static void *blocked_video(void *unused)
+{
+	(void)unused;
+	PlusVitaVideoDecoder decoder = { .decoder_created = true, .width = 16, .height = 16 };
+	uint8_t packet = 0; uint32_t output[16 * 16]; bool produced = true;
+	assert(plus_vita_video_decoder_decode(&decoder, NULL, 0, &packet, 1,
+		output, 16, 16, 16, &produced) == 0 && !produced);
+	return NULL;
+}
+int __real_fflush(FILE *file);
+int __wrap_fflush(FILE *file)
+{
+	pthread_mutex_lock(&boundary_mutex);
+	if(disk_blocked) { disk_entered = true; pthread_cond_broadcast(&boundary_cond); }
+	while(disk_blocked) pthread_cond_wait(&boundary_cond, &boundary_mutex);
+	pthread_mutex_unlock(&boundary_mutex);
+	return __real_fflush(file);
+}
+static void *blocked_disk(void *unused)
+{ (void)unused; plus_vita_diagnostic_event("synthetic blocked writer", 0); return NULL; }
 
 int __real_pthread_create(pthread_t *, const pthread_attr_t *, void *(*)(void *), void *);
 int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
@@ -37,6 +74,7 @@ ChiakiErrorCode chiaki_takion_send_feedback_state(ChiakiTakion *takion,
 	bool fail=fail_send; fail_send=false;
 	pthread_cond_broadcast(&device_cond);
 	pthread_mutex_unlock(&device_mutex);
+	if(fail) CHIAKI_LOGE(takion->log, "Takion synthetic network error");
 	return fail ? CHIAKI_ERR_NETWORK : CHIAKI_ERR_SUCCESS;
 }
 
@@ -157,6 +195,31 @@ static PlusVitaInputStatus wait_done(PlusVitaInputWorker *worker)
 	}
 }
 
+static void send_failure_during_blocked_disk(void)
+{
+	assert(plus_vita_diagnostic_begin());
+	pthread_mutex_lock(&boundary_mutex); disk_blocked = true; disk_entered = false; pthread_mutex_unlock(&boundary_mutex);
+	pthread_t disk; assert(!pthread_create(&disk, NULL, blocked_disk, NULL));
+	pthread_mutex_lock(&boundary_mutex);
+	while(!disk_entered) pthread_cond_wait(&boundary_cond, &boundary_mutex);
+	pthread_mutex_unlock(&boundary_mutex);
+	ChiakiLog log; chiaki_log_init(&log, CHIAKI_LOG_ALL, plus_vita_diagnostic_chiaki_log, NULL);
+	ChiakiTakion takion = { .log = &log }; ChiakiFeedbackSender sender = { 0 };
+	device_pad = (SceCtrlData){ .timeStamp=42, .lx=255, .ly=128, .rx=128, .ry=128 };
+	fail_send = true; fatal_device = false; device_mode = 1;
+	assert(chiaki_feedback_sender_init(&sender, &takion) == CHIAKI_ERR_SUCCESS);
+	PlusVitaInputVita vita = { 0 }; PlusVitaInputWorker *worker = NULL;
+	assert(plus_vita_input_worker_start(&worker, &sender, plus_vita_input_vita_read, &vita) == CHIAKI_ERR_SUCCESS);
+	assert(wait_done(worker).error == CHIAKI_ERR_NETWORK);
+	PlusVitaInputStats stats;
+	assert(plus_vita_input_worker_stop(worker, &stats) == CHIAKI_ERR_NETWORK && stats.neutral_consumed);
+	chiaki_feedback_sender_fini(&sender);
+	PlusVitaFeedbackLatency feedback; plus_vita_feedback_latency_get_stopped(&feedback);
+	assert(feedback.send_failures == 1 && feedback.suppressed_sender_logs >= 2);
+	pthread_mutex_lock(&boundary_mutex); disk_blocked = false; pthread_cond_broadcast(&boundary_cond); pthread_mutex_unlock(&boundary_mutex);
+	assert(!pthread_join(disk, NULL)); plus_vita_diagnostic_end();
+}
+
 static void lifecycle_cases(void)
 {
 	for(unsigned int scenario=0;scenario<4;scenario++)
@@ -225,16 +288,17 @@ int main(void)
 	PlusVitaInputWorker *worker = NULL;
 	PlusVitaInputVita vita={0};
 	assert(plus_vita_input_worker_start(&worker, &sender, plus_vita_input_vita_read, &vita) == CHIAKI_ERR_SUCCESS);
-	/* The caller stands in for the video owner and does no sampling while
-	 * blocked. New controls must still reach the actual sender/serialization. */
-	pthread_mutex_t video_mutex = PTHREAD_MUTEX_INITIALIZER;
-	assert(!pthread_mutex_lock(&video_mutex));
+	/* Stall the actual production decoder at its native SDK boundary. */
+	pthread_t video; assert(!pthread_create(&video, NULL, blocked_video, NULL));
+	pthread_mutex_lock(&boundary_mutex);
+	while(!video_entered) pthread_cond_wait(&boundary_cond, &boundary_mutex);
+	pthread_mutex_unlock(&boundary_mutex);
 	pthread_mutex_lock(&device_mutex);
 	device_pad.lx = 255;
 	pthread_mutex_unlock(&device_mutex);
 	wait_x(32767);
-	assert(!pthread_mutex_unlock(&video_mutex));
 	PlusVitaInputStats stats;
+	/* A terminal stop also completes while the synchronous decoder is stalled. */
 	assert(plus_vita_input_worker_stop(worker, &stats) == CHIAKI_ERR_SUCCESS);
 	wait_x(0); /* Neutral reaches the sender before it can be destroyed. */
 	chiaki_feedback_sender_fini(&sender);
@@ -242,8 +306,10 @@ int main(void)
 	plus_vita_feedback_latency_get_stopped(&feedback);
 	assert(stats.updates == 1 && stats.neutral_consumed);
 	assert(feedback.published == 2 && feedback.consumed == 2);
-	pthread_mutex_destroy(&video_mutex);
+	pthread_mutex_lock(&boundary_mutex); video_released = true; pthread_cond_broadcast(&boundary_cond); pthread_mutex_unlock(&boundary_mutex);
+	assert(!pthread_join(video, NULL));
 	lifecycle_cases();
+	send_failure_during_blocked_disk();
 	puts("input worker: native mappings/contact continuity, real feedback during blocked video and neutral release passed");
 	puts("input lifecycle: partial init, missed polls, fatal device, actual send failure, stop chord and restart passed");
 	return 0;
