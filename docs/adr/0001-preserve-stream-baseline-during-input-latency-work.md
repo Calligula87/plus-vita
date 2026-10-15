@@ -90,10 +90,10 @@ evidence, with rollback artifacts preserved.
 ## Isolated logging result and combination, 2026-10-15
 
 L persisted all 2121 records with zero overflow/truncation/drain losses and
-reported successful I/O; measured producer enqueue averaged26.55us while
-actual writer persistence still averaged10.988ms. The maintainer reports
+reported successful I/O; measured producer enqueue averaged 26.55us while
+actual writer persistence still averaged 10.988ms. The maintainer reports
 everything worked with little noticeable difference and explicitly accepts
-the recorded5m02.205s comparison duration. Validate this logging component;
+the recorded 5m02.205s comparison duration. Validate this logging component;
 do not describe it as a separately felt response improvement or a solution to
 the full audio backlog. C remains the accepted working input build.
 

@@ -13,11 +13,17 @@ See [C result](LATENCY_INPUT_WORKER_RESULT.md) and
 D package: `ux0:data/plus-vita-input-worker-deferred-log-1.vpk`.
 Build: `live-720p-refs5-input-worker-deferred-log-1`.
 Timing mode: `input-worker+deferred-log`.
+Release VPK: **1678933 bytes**, SHA256
+`9A05307CB0E7DDBE2BC80D420A694A95B874E03CD8CEDE837E1C5884D0C83FC8`.
+Implementation commit: `5ff453b`. Uploaded to the current Vita on 2026-10-15
+under the new filename and downloaded again with the same hash. C/B/L/S and
+the captured log were preserved. D has not been installed or accepted
+automatically; #12 is ready for the maintainer's physical comparison.
 Manifest: `build/debug/plus-vita-combined-1-manifest.json` records the final
 source commit, SHA256, bytes, Release flags, tests/review and upload/readback.
 Do not infer installation or acceptance from upload.
 
-D enables both existing implementations. It retains C's requested4ms sampler,
+D enables both existing implementations. It retains C's requested 4ms sampler,
 deduplication/mappings/contact continuity, native sampling mode, neutral/join
 and sender diagnostic guard, and L's bounded writer, filtering, loss counters,
 ordering and two-second shutdown ownership. Video/FEC/reorder/display/audio/
@@ -37,6 +43,24 @@ partial init, send failure and stop/restart while the real writer is blocked.
 The isolated harness remains its default. Separate bounded-logger and existing
 latency/audio/FEC/reorder/H.264 regressions remain part of the final suite.
 Native Release build and ELF tag/mode are checked before upload.
+The final full host suite passed: latency/generated-sender equivalence,
+isolated and joint input/feedback, bounded logger, audio reproduction,
+200000-frame reorder cases, 64 FEC vectors/15 independent parity cases and
+H.264 configuration. Relevant isolated/joint thread-sanitizer suites passed.
+All four profile tags/modes were checked with the target preprocessor.
+No new runtime algorithm was introduced; existing upstream warnings remain.
+
+### Standards review
+
+Fixed point `06a74ea42db6eb10edebb7db316e93ce2f99687d`, implementation `5ff453b`:
+**0 findings**. Distinct combined identity, preserved profiles/defaults and
+explicit joint test selection conform to the recorded scope.
+
+### Spec review
+
+**0 findings** against #11. Both existing implementations are exercised at the
+real input/feedback/decoder/sink boundaries; hardware acceptance remains in
+#12. Software delivery, final tests, manifest and verified staging are complete.
 
 ```sh
 PLUS_VITA_INPUT_TEST_DEFERRED_LOG=1 sh tools/test-input-worker.sh
@@ -56,7 +80,7 @@ the accepted working fallback until D's physical test is accepted.
    **accepted worker-1 C**, using the same game/scene, Wi-Fi position/settings
    and ten separated response actions. Report better/same/worse; optional
    high-frame-rate recording is not required.
-3. Run8–10minutes from the **first live picture**, and check picture/sound,
+3. Run 8–10 minutes from the **first live picture**, and check picture/sound,
    ordinary controls/sticks, rear L2/R2/L3/R3, front touch/click and releases.
    Stop with START+SELECT, have the agent retrieve the log, then confirm another
    stream starts/stops. Any duration revision must be explicit for D; previous

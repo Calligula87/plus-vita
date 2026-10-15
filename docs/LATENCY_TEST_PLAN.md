@@ -65,7 +65,7 @@ the validity of the measurements; they cannot establish the user's latency.
 | A12 | Actual diagnostic producers against a controlled slow/failing writer | No producer waits on disk or disk-held locks; bounded retention, ordering/overflow and failure outcomes explicit | Passed L: blocked real sink, bounded loss/error accounting and persistence separation. |
 | A13 | Deferred diagnostics under concurrent stop/restart, redaction and capacity pressure | No unbounded memory/wait, deadlock, sensitive retention or silent record loss; terminal diagnostics accounted for | L memory/thread checks passed, including stuck-writer shutdown and partial init. Hardware still pending. |
 | A14 | Audio arrival-to-output reproduction with controlled pacing/sequence/logging | Competing backlog hypotheses tested without changing accepted playback policy | Passed agent reproduction/investigation; hardware cause remains unresolved, no playback fix claimed. |
-| A15 | Both features in actual input/feedback/decoder/sink harness | Blocked decode/writer, transport error, neutral/join and restart pass together under memory/thread checks | Combined targeted checks passed; final regression/review/package staging in #11. |
+| A15 | Both features in actual input/feedback/decoder/sink harness | Blocked decode/writer, transport error, neutral/join and restart pass together under memory/thread checks | Joint checks/full regressions/Release/profile identities/reviews passed; D uploaded with verified readback; native joint behavior is #12. |
 
 Existing commands, after configuring/building the Vita target:
 
@@ -96,6 +96,7 @@ than treating an unchanged receiver test as proof of input responsiveness.
 | H07 | Compare B and C, repeating a short response comparison in reversed order if the result is ambiguous | Repeatable perceived or measured response improvement; uncertainty and network variation recorded. |
 | H08 | If B or C regresses, install preserved S and verify normal operation | Working rollback retained; experiment is not promoted. |
 | H09 | After #3 and #8, compare L alone with B using identified builds, response actions, 8–10 minutes and stop/restart | Producer/persistence costs, record losses and stream/control/audio behavior compared; verdict with uncertainty, #10. |
+| H10 | Compare identified combined D with accepted C, repeated actions, controls/releases, picture/sound, 8–10 minutes or explicit revised duration, clean stop and subsequent session | Retain C response and quality plus useful bounded diagnostics; keep counters/reception variation explicit; accept/reject/inconclusive in #12. |
 
 Do not force a network failure on the Vita solely to exercise teardown. Host
 fault injection covers controllable error paths; record naturally occurring
