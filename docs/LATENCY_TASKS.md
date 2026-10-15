@@ -39,6 +39,7 @@ open. See [delivery/review](LATENCY_IMPLEMENTATION_RESULT.md),
 | [#9 Investigate existing audio queue backlog](https://github.com/Calligula87/plus-vita/issues/9) | Scoped investigation complete; issue closed | Hardware cause uncertain; playback policy unchanged. |
 | [#10 Validate deferred logging on Vita](https://github.com/Calligula87/plus-vita/issues/10) | Complete; isolated logger validated | Zero diagnostic loss; lower producer costs; no reported quality/control/restart regression; explicit duration revision. |
 | [#11 Prepare combined input and logging candidate](https://github.com/Calligula87/plus-vita/issues/11) | Active software task | #7/#10 complete; unique combined identity and joint tests required; C stays accepted fallback. |
+| [#12 Validate combined build on Vita](https://github.com/Calligula87/plus-vita/issues/12) | Human gate after #11 | Compare D with accepted C; record joint behavior and persistence; no automatic acceptance. |
 
 Readiness labels describe who can execute the defined task, not whether a
 blocked task can be started immediately. No assignee was invented.

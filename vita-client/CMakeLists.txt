@@ -34,7 +34,9 @@ option(PLUS_VITA_PUBLIC_APOLLO_TEST
 option(PLUS_VITA_INPUT_WORKER "Evaluate independent 4ms input sampling" OFF)
 option(PLUS_VITA_DEFERRED_LOG "Evaluate deferred streaming diagnostics" OFF)
 if(PLUS_VITA_INPUT_WORKER AND PLUS_VITA_DEFERRED_LOG)
-  message(FATAL_ERROR "Keep the first input and logging experiments separate")
+  # C and L have separate Vita evidence. Their combination is a new identified
+  # test profile; component acceptance does not imply combined acceptance.
+  message(STATUS "Experimental combined input-worker/deferred-log profile")
 endif()
 
 set(PYLUX_ROOT "${CMAKE_CURRENT_LIST_DIR}/../external/pylux")

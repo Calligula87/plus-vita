@@ -65,6 +65,7 @@ the validity of the measurements; they cannot establish the user's latency.
 | A12 | Actual diagnostic producers against a controlled slow/failing writer | No producer waits on disk or disk-held locks; bounded retention, ordering/overflow and failure outcomes explicit | Passed L: blocked real sink, bounded loss/error accounting and persistence separation. |
 | A13 | Deferred diagnostics under concurrent stop/restart, redaction and capacity pressure | No unbounded memory/wait, deadlock, sensitive retention or silent record loss; terminal diagnostics accounted for | L memory/thread checks passed, including stuck-writer shutdown and partial init. Hardware still pending. |
 | A14 | Audio arrival-to-output reproduction with controlled pacing/sequence/logging | Competing backlog hypotheses tested without changing accepted playback policy | Passed agent reproduction/investigation; hardware cause remains unresolved, no playback fix claimed. |
+| A15 | Both features in actual input/feedback/decoder/sink harness | Blocked decode/writer, transport error, neutral/join and restart pass together under memory/thread checks | Combined targeted checks passed; final regression/review/package staging in #11. |
 
 Existing commands, after configuring/building the Vita target:
 
@@ -74,6 +75,7 @@ PLUS_VITA_TEST_SANITIZERS=thread sh tools/test-latency.sh
 sh tools/test-input-worker.sh
 sh tools/test-deferred-log.sh
 sh tools/test-audio-queue.sh
+PLUS_VITA_INPUT_TEST_DEFERRED_LOG=1 sh tools/test-input-worker.sh
 # Repeat these three with PLUS_VITA_TEST_SANITIZERS=thread for concurrency checks.
 ```
 

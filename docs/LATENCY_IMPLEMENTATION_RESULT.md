@@ -18,7 +18,9 @@ left separate.
 | Rollback / diagnostic baseline | Original packages retained. Successful compilation is not hardware acceptance. |
 
 The final Release configurations are C (`INPUT_WORKER=ON`, `DEFERRED_LOG=OFF`),
-L (`OFF`, `ON`) and default (`OFF`, `OFF`). CMake rejects `ON`, `ON`. The local
+L (`OFF`, `ON`) and default (`OFF`, `OFF`). At isolated delivery CMake rejected
+`ON`, `ON`; after #10 validated L, #11 introduces the uniquely identified
+experimental combined profile. See [joint test](LATENCY_COMBINED_TEST.md). The local
 package manifest records final hashes, byte sizes, source commit and FTP status.
 Never infer installation from upload or from a build tag in an untested package.
 

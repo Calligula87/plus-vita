@@ -6,7 +6,10 @@
 #include <chiaki/cloudsession.h>
 #include <chiaki/log.h>
 
-#if PLUS_VITA_INPUT_WORKER
+#if PLUS_VITA_INPUT_WORKER && PLUS_VITA_DEFERRED_LOG
+#define PLUS_VITA_STREAM_PROBE_BUILD "live-720p-refs5-input-worker-deferred-log-1"
+#define PLUS_VITA_STREAM_PROBE_MODE "input-worker+deferred-log"
+#elif PLUS_VITA_INPUT_WORKER
 #define PLUS_VITA_STREAM_PROBE_BUILD "live-720p-refs5-input-worker-1"
 #define PLUS_VITA_STREAM_PROBE_MODE "input-worker"
 #elif PLUS_VITA_DEFERRED_LOG

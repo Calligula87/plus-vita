@@ -2,9 +2,11 @@
 
 Software preparation for [#5](https://github.com/Calligula87/plus-vita/issues/5)
 and [#8](https://github.com/Calligula87/plus-vita/issues/8), 2026-10-14.
-C is now accepted after its hardware comparison and the maintainer's positive
-response/quality/control/restart confirmation. L is still experimental. Keep
-C, the original diagnostic baseline and older accepted reorder VPKs available.
+C is accepted after its hardware comparison and the maintainer's positive
+response/quality/control/restart confirmation. Isolated L is validated for
+bounded diagnostics with no reported regression and little perceived difference.
+The next experiment is [combined D](LATENCY_COMBINED_TEST.md). Keep C, original
+B/L and older accepted S packages available; D requires its own acceptance.
 
 Staging status, 2026-10-15: C, L, original B and accepted rollback S are uploaded
 to `ux0:data/` under the filenames below. All four SHA256 hashes match downloaded
