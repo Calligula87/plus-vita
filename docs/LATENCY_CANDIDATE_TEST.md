@@ -26,14 +26,11 @@ before starting another session. Keep credentials and raw logs private.
 | L: deferred logging, for a later separate comparison | `plus-vita-deferred-log-1.vpk` | `live-720p-refs5-deferred-log-1` |
 | S: accepted rollback | `plus-vita-video-reorder-1.vpk` | `live-720p-refs5-video-reorder-1` |
 
-1. Finish B's remaining [baseline checks](LATENCY_BASELINE_FOLLOWUP_RESULT.md):
-   a short check of front/rear controls and releases, ten response actions if
-   still untested, clean START+SELECT stop and another allocation/restart.
-   The follow-up ran cleanly for 7m46.418s and the maintainer explicitly accepted
-   that baseline duration, so another long baseline run is not required.
-   Front touch was not tested and rear controls were uncertain; restart is
-   not yet confirmed. Earlier picture quality/stability equivalence was reported.
-2. After that gate passes, compare B and C in the same game/scene and Wi-Fi
+1. B's [baseline checks](LATENCY_BASELINE_FOLLOWUP_RESULT.md) are complete:
+   the maintainer accepted 7m46.418s and subsequently confirmed all remaining
+   requested checks done; a distinct 5m12.106s baseline allocation ended cleanly.
+   Logs are preserved. No further baseline-only run is required before C.
+2. **Next: install C** and compare B and C in the same game/scene and Wi-Fi
    conditions: repeat the same ten button presses or short stick movements.
    Optional 120/240fps phone video can estimate button-to-screen response;
    otherwise report a subjective better/same/worse result. Run C for 8–10

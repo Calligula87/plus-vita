@@ -26,7 +26,9 @@ Staging completed after the server became available: C/L and the original B/S
 packages are in `ux0:data/`, all four verified by SHA256 readback. The existing
 primary diagnostic VPK was backed up and its B hash verified; it and the prior
 log were preserved. No package was installed automatically. Software tasks
-#5/#8/#9 are closed; #3/#6/#7/#10 remain open.
+#5/#8/#9 are closed. Subsequently #3 was completed using the accepted baseline
+duration and the maintainer's remaining-test confirmation, supported by a
+distinct clean subsequent baseline session. #6/#7/#10 remain open; C is next.
 
 ## Automated validation
 

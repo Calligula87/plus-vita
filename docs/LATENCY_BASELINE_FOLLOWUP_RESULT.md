@@ -103,3 +103,47 @@ repeat ten separated response actions if not already done, then cleanly stop
 and start another stream. Report unavailable game-specific actions as unknown,
 not as passed or failed. No repeat long session is required by the accepted
 duration revision.
+
+## Baseline gate completed, 2026-10-15
+
+After those instructions the maintainer reported **"All test done you can get
+the log"**. Record this as confirmation that the remaining requested control,
+release, response-action and restart checks were completed, alongside the
+earlier quality/stability observation and explicit acceptance of 7m46.418s.
+No per-action numerical input response measurement or detailed individual
+subjective timing was supplied. The diagnostic baseline is accepted as the
+comparison reference; candidate C/L acceptance remains separate.
+
+Retrieved a distinct subsequent baseline allocation into private artifact
+`build/debug/plus-vita-baseline-controls-20261015-223621.log`, 256569 bytes,
+SHA256 `BDB8E6B19A12252C0689F453E48845D8B0D42EF458250643340D1B623489D2BD`.
+It identifies the same baseline build and ran **312106ms (5m12.106s)** before
+clean user stop. This is the short controls/restart follow-up, not a replacement
+for the already accepted duration evidence. The new allocation plus the user
+confirmation supports the subsequent-session criterion. All 21 metrics are
+present, invalid spans zero, input poll/send failures zero, audio output
+failure zero, and display restore/disconnect/audio drain/release succeeded.
+Eight front-contact diagnostic transitions corroborate that touch sampling
+occurred; logs alone do not prove in-game mapping correctness or releases.
+
+Local poll interval mean/p95-upper/max: **15.163/25/61.164ms**. Sample-to-local
+state/history-send means: **0.356/0.362ms**. 1799 changed updates were published
+and consumed, zero coalesced. Synchronous writes: 2038 at mean 10.518ms and
+max 31.585ms. No physical input-to-screen improvement is established.
+
+This session had more disruptive reception/reorder activity: five recoveries
+resumed after 86, 94, 545, 566 and 490ms; 104 dependent units were discarded.
+There were 10 incomplete frames, eight missing-frame retirements, four reorder
+pressure drops, 319 successful FEC repairs with zero failures, and compressed
+queue peak 9/16 without overflow stop. Audio had 56 sequence gaps, two sequence
+resets and 17 local evictions; queue residence mean/max 223.737/316.715ms and
+48 output-gap stalls. Two pre-stream Senkusha timeout/error entries preceded
+the successful live stream. This is not a claim of zero stutter or identical
+network conditions. Retain the differences when comparing C and B rather than
+attributing every changed frame/stall count to input scheduling.
+
+Close #3 as completed; #6 can now proceed with **C only**. Re-downloaded
+`ux0:data/plus-vita-input-worker-1.vpk` from the current Vita server and verified
+SHA256 `95437199D32328FB38197C197DCC2E9B91633F47E0D71B0E052CD0BED9FD821B`.
+It is present and unchanged, not automatically installed. #10 remains the later
+separate logging-only comparison; #7 requires actual candidate response results.

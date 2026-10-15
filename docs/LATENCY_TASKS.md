@@ -13,9 +13,10 @@ pushed automatically. The historical triage table below is superseded by this
 delivery update for #2/#5/#8/#9.
 
 FTP staging/readback is complete for C, L, original B and rollback S; all four
-SHA256 hashes were verified. No package was installed or accepted. The user
-confirmed equivalent diagnostic quality/stability with noticeable input delay;
-#3 still needs its 8–10 minute run and restart. #6/#7/#10 remain open hardware
+SHA256 hashes were verified. No candidate was installed or accepted automatically.
+The user confirmed equivalent diagnostic quality/stability with noticeable input
+delay, accepted the 7m46.418s baseline duration, then confirmed all remaining
+control/release/response/restart checks done. #3 is complete. #6/#7/#10 remain open hardware
 comparison/acceptance gates. See [delivery/review](LATENCY_IMPLEMENTATION_RESULT.md),
 [candidate procedure](LATENCY_CANDIDATE_TEST.md), and
 [audio investigation](AUDIO_QUEUE_INVESTIGATION.md).
@@ -23,14 +24,14 @@ comparison/acceptance gates. See [delivery/review](LATENCY_IMPLEMENTATION_RESULT
 | Task | State after results triage | Dependency / owner |
 | --- | --- | --- |
 | [#2 Deliver diagnostic baseline and software validation](https://github.com/Calligula87/plus-vita/issues/2) | Completed locally; issue closed | Foundation committed in `82df29a`; no hardware acceptance. |
-| [#3 Complete remaining diagnostic baseline checks](https://github.com/Calligula87/plus-vita/issues/3) | Open; follow-up clean 7m46.418s, duration explicitly accepted | Front touch/rear controls, releases, response actions and restart still unconfirmed; no repeat long run required. |
+| [#3 Complete remaining diagnostic baseline checks](https://github.com/Calligula87/plus-vita/issues/3) | Completed; baseline accepted as comparison reference | Duration explicitly accepted and remaining checks confirmed; distinct subsequent allocation stopped cleanly. |
 | [#4 Analyze baseline delays and select the input experiment](https://github.com/Calligula87/plus-vita/issues/4) | Analysis completed; issue closed | Available evidence analyzed, not full acceptance; `ready-for-agent`. |
 | [#5 Isolate input sampling and validate its lifecycle](https://github.com/Calligula87/plus-vita/issues/5) | Software delivered; issue closed | C built/reviewed/upload verified; hardware acceptance is #6/#7. |
-| [#6 Compare independent input sampling on Vita](https://github.com/Calligula87/plus-vita/issues/6) | Open | Blocked by #3 and #5; `ready-for-human`. |
+| [#6 Compare independent input sampling on Vita](https://github.com/Calligula87/plus-vita/issues/6) | Open; next test | #3/#5 complete; C file hash reverified on current server; `ready-for-human`. |
 | [#7 Record candidate acceptance or rollback](https://github.com/Calligula87/plus-vita/issues/7) | Open | Blocked by #6; `ready-for-agent`. |
 | [#8 Defer diagnostic file I/O outside streaming hot paths](https://github.com/Calligula87/plus-vita/issues/8) | Software delivered; issue closed | L built/reviewed/upload verified; hardware acceptance is #10. |
 | [#9 Investigate existing audio queue backlog](https://github.com/Calligula87/plus-vita/issues/9) | Scoped investigation complete; issue closed | Hardware cause uncertain; playback policy unchanged. |
-| [#10 Validate deferred logging on Vita](https://github.com/Calligula87/plus-vita/issues/10) | Open | Blocked by #3 and #8; `ready-for-human`. |
+| [#10 Validate deferred logging on Vita](https://github.com/Calligula87/plus-vita/issues/10) | Open; later separate comparison | #3/#8 complete; keep first C and L comparisons separate; `ready-for-human`. |
 
 Readiness labels describe who can execute the defined task, not whether a
 blocked task can be started immediately. No assignee was invented.
