@@ -19,8 +19,10 @@ git submodule update --init --recursive
 
 ## Current smoke target
 
-New builds open the graphical app with session-only account import/manual
-entry and an initial catalogue. Live account setup still needs its
+New builds open a blue/gold graphical app with joystick/touch menu navigation,
+session-only saved-JSON import and an initial catalogue. The account remains
+connected through Circle/back and catalogue re-entry during one app run;
+Remember and Play follow in later tickets. The revised setup/navigation needs its
 [Vita check](../docs/ACCOUNT_SETUP_TEST.md); see the
 [setup guide](../docs/ACCOUNT_SETUP.md) and
 [startup check](../docs/GRAPHICAL_STARTUP_TEST.md). Stream integration follows

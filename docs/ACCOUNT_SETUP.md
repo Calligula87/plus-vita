@@ -1,86 +1,73 @@
 # Connect your own Sony account
 
-This describes the account-setup development candidate for
-[#15](https://github.com/Calligula87/plus-vita/issues/15). It reaches a basic
-alphabetical catalogue; the complete beta's covers, settings and Play flow are
-subsequent tickets. The actual Vita setup procedure still needs hardware
-validation; simulated responses are not proof of live Sony compatibility.
+The account-setup development candidate for
+[#15](https://github.com/Calligula87/plus-vita/issues/15) opens a basic
+alphabetical catalogue. Covers, search, settings, Remember and Play follow in
+later tickets. The maintainer reached the catalogue using file import on the
+first candidate. The revised saved-response instructions and account re-entry
+need a new [Vita check](ACCOUNT_SETUP_TEST.md).
 
-## Get a sign-in token on your phone or PC
+## Save your sign-in JSON on a phone or PC
 
-1. Use a browser to sign in to your own account at
-   [PlayStation](https://www.playstation.com/). Complete Sony's password,
-   [passkey](https://www.playstation.com/en-us/support/account/set-up-passkey/)
-   or [two-step verification](https://www.playstation.com/en-us/support/account/2sv-login/)
-   prompts on that device.
-2. In the **same browser/profile**, open Sony's
-   [sign-in cookie endpoint](https://ca.account.sony.com/api/v1/ssocookie).
-   The browser should show JSON containing an `npsso` field. If it shows an
-   error or has no such field, sign in again in that browser and retry.
-   This endpoint route is also used by the pinned upstream Pylux sign-in flow;
-   the complete Plus Vita recipe must still be checked on the candidate.
-3. Copy only the `npsso` value: 64 letters and numbers, without surrounding
-   quotes. Treat it as an account-access secret. Do not post the browser
-   response, token, token-file contents or a screenshot containing it to GitHub.
+1. Sign in to your own account at [PlayStation](https://www.playstation.com/).
+   Complete Sony's password, passkey or verification prompts on that device.
+2. In the **same browser/profile**, open the
+   [Sony sign-in response](https://ca.account.sony.com/api/v1/ssocookie).
+   It should show JSON containing an `npsso` field. If it shows an error or no
+   such field, sign in again in that browser and retry.
+3. Use the browser's save/download action to save that response as
+   **plus-vita-auth.json**. On a PC, use Save as (usually Ctrl+S); keep JSON
+   format and the `.json` filename. Save the response itself, not an HTML page
+   or a screenshot. If your phone cannot save the response, use a PC browser.
 
-Plus Vita does not ask for your Sony email/password and does not receive your
-passkey or verification code. Sign-in stays with Sony; the transferred token
-authorizes the Vita application.
+Keep this file private: it grants account access. Do not post it, the browser
+response or screenshots showing its contents to GitHub. You do not need to
+extract or type the token, construct JSON or remove other response fields.
 
-## Import a file with VitaShell
+Plus Vita does not ask for your Sony email/password, passkey or verification
+code. Sony handles sign-in. The transferred JSON supplies the Vita credential.
 
-1. Create a UTF-8 plain-text file without a byte-order mark, named
-   `plus-vita-auth.json`, containing only this JSON shape:
+## Transfer and import
 
-   ```json
-   {"npsso":"REPLACE_THIS_WITH_YOUR_64_CHARACTER_TOKEN"}
-   ```
+1. Transfer **plus-vita-auth.json** with VitaShell to
+   **ux0:data/plus-vita-auth.json**. Keep a private copy on your phone/PC if
+   you will want to sign in again after exiting the app.
+2. Open Plus Vita, choose **Get started**, then **Continue** and **Import JSON**.
+3. The app reads and removes the transferred file before authorization. It
+   accepts a UTF-8 JSON response up to 4096 bytes, including a UTF-8 byte-order
+   mark. Unrelated response fields are ignored. Invalid or ambiguous credential
+   data, malformed JSON and oversized files are rejected without displaying
+   their contents. Readable malformed files are also consumed and removed.
+4. If cleanup fails, sign-in stops with a fixed explanation. Remove the file
+   using VitaShell and transfer a fresh copy before trying again.
 
-   Replace the placeholder with your token. Do not include other fields or
-   extra text. The placeholder above is deliberately not a valid credential.
-2. Use your usual VitaShell file-transfer method to place the file at
-   `ux0:data/plus-vita-auth.json` on the Vita.
-3. Open Plus Vita, choose **Get started**, read the sign-in instructions and
-   choose **Continue**, then **Import token file**.
-4. The app reads and removes the imported file before authorizing. The current
-   candidate is **session only**: there is no Remember switch yet. Keep a
-   private copy on your own phone/PC if you will need to import it again after
-   exiting. Never put this private copy inside a public repo or issue report.
-5. If removal fails, the app stops before sign-in and tells you that cleanup
-   failed. Check/remove the file with VitaShell and try again. A malformed file
-   that was read successfully is also removed, then an error explains how to
-   replace it.
-6. While authorization/catalogue loading runs, Circle or **Cancel** returns to
-   the welcome screen. Network work is cancelled cooperatively; an in-progress
-   DNS/OS operation may finish before the worker exits. If you immediately try
-   again while that happens, the app asks you to wait briefly. A late result
-   cannot reopen the cancelled account.
+There is no Remember switch in this candidate. Import stores your account
+**only in memory for the current app run**. Normal filesystem deletion is not
+a guarantee that old storage blocks cannot be recovered. No protected
+persistent storage is claimed.
 
-The app's file removal is normal filesystem deletion, not a guarantee that
-storage blocks cannot be recovered. This candidate does not claim protected
-persistent storage.
+## Keep browsing during this app run
 
-## Enter the token on Vita instead
+- Successful authorization opens the catalogue. Browse with the **left
+  joystick**, or touch a visible row. D-pad presses do not move app menu focus;
+  this preference does not change controls inside streaming games.
+- **Circle** returns to the connected home. Choose **Open catalogue** to return
+  immediately with the selection retained. The imported file is no longer
+  needed. About and cancelling Exit keep the account connected too.
+- Confirming Exit ends the app run. On the next launch, transfer/import your
+  JSON again. Remember and Forget controls follow in #16.
+- During initial import/authorization, **Circle** or **Cancel** cancels setup.
+  This does not establish a connected account. File consumption still finishes
+  if already started. If it was consumed, transfer a new copy before retrying.
+  Network cancellation is cooperative; an in-progress DNS/OS call may finish
+  before the worker exits. If it is busy, wait briefly before retrying. A late
+  result cannot open a cancelled account.
+- Missing, invalid, expired/rejected credentials, cleanup failure, connectivity
+  failure, unavailable catalogue and empty catalogue have readable outcomes.
+  For expired/rejected sign-in, save a fresh browser JSON response and import it.
+- This candidate has no Play action yet. A listed game does not guarantee
+  streaming eligibility.
 
-Choose **Enter token** at setup. Enter the same 64-character token with the
-Vita keyboard, without JSON, quotes or spaces. The token field is masked.
-Cancel returns to setup; Enter continues to the same session-only authorization
-and catalogue flow. This route also removes any managed import file before
-authorization, so an earlier file is not silently retained.
-
-## Read the result
-
-- Successful authorization opens the initial graphical catalogue. Use the
-  D-pad or left stick to browse, or touch a visible row to select it.
-- A rejected/expired token asks you to sign in again on your phone/PC and obtain
-  a fresh token. The Sony password or a Vita system device password is not an
-  NPSSO replacement.
-- Missing files, format errors, cleanup failures, network errors, unavailable
-  catalogue and an empty catalogue have separate readable outcomes.
-- This candidate cannot launch games from the catalogue yet. Do not interpret
-  a listed title as a guarantee of streaming eligibility.
-- Back/exit clears the active runtime account; reopening requires another
-  import or manual entry. Remember/Forget controls follow in #16.
-
-For the hardware check, follow [the candidate procedure](ACCOUNT_SETUP_TEST.md).
-Do not attach this credential file or a full app-data folder to an issue.
+Follow the [candidate test procedure](ACCOUNT_SETUP_TEST.md). For reports,
+provide step numbers and symptoms; never include credential files or a full
+app-data folder.

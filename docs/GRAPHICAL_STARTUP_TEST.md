@@ -2,7 +2,7 @@
 
 Issue [#14](https://github.com/Calligula87/plus-vita/issues/14) adds the first
 graphical startup slice. This is a startup preview, not the complete beta.
-Account import and streaming remain subsequent tickets.
+The current candidate also includes account import; streaming follows later.
 
 ## Build and automated validation
 
@@ -12,7 +12,8 @@ Run the actual native workflow tests on a host with a C compiler:
 sh tools/test-app-workflow.sh
 ```
 
-The tests exercise welcome focus, button navigation, About/back, deliberate
+The tests exercise welcome focus, raw joystick input/deadzone/repeat, ignored
+D-pad menu presses, About/back, deliberate
 exit, touch hit areas and operation cancellation/late results. They do not
 establish Vita font rendering, physical input or display ownership behavior.
 
@@ -36,19 +37,21 @@ The application ID is shared with the accepted stream app, so installation
 replaces the installed app. Retain its accepted VPK for rollback. Never include
 credential files or personal data in a test report.
 
-1. Open the app. Verify that the dark graphical welcome appears promptly,
+1. Open the app. Verify that the blue graphical welcome appears promptly,
    with Get started selected and readable title, body and button hints.
    There should be no NPSSO prompt, network request, diagnostic self-tests or
    terminal output during this startup slice.
-2. Navigate using the D-pad and left stick in both directions. Check focus,
-   stick dead zone and repeat timing. Holding X must not repeatedly activate.
+2. Navigate using the left joystick in both directions. Check gold focus,
+   stick deadzone and repeat timing. D-pad presses must not move focus.
+   Holding Cross/Circle must not repeatedly activate/back out. Check the
+   neutral logo placeholder and removal of the console illustration/cyan.
 3. Open About and return using Circle and the visible Back button. Verify that
    the welcome selection is restored.
 4. Tap visible controls. Taps outside their bounds should do nothing; holding
    a touch must not activate another screen repeatedly. Check screen edges.
 5. Open Get started. Verify the preparation/setup guide and cancel/back flow.
-   The original #14 preview does not import accounts. For the later #15
-   candidate, continue with the [account setup check](ACCOUNT_SETUP_TEST.md).
+   Continue with the updated [account setup check](ACCOUNT_SETUP_TEST.md)
+   for JSON import and connected-home/catalogue re-entry.
 6. Select Exit or press Circle on welcome. Stay here is selected first. Circle
    cancels; explicitly choosing Exit closes the app. Reopen and repeat.
 7. Check text and buttons for clipping, overlap and flicker, and check that the

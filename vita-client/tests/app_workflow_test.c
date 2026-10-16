@@ -3,8 +3,48 @@
 #include <assert.h>
 #include <stdio.h>
 
+static void menu_pad(PlusVitaApp *app, uint32_t buttons, unsigned char y, uint64_t time)
+{
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_PAD,
+		.pad = { .buttons = buttons, .left_y = y, .time_us = time } });
+}
+
+static void joystick_menu(void)
+{
+	PlusVitaApp *app = plus_vita_app_create();
+	assert(app);
+	/* Vita D-pad bits (up/right/down/left) must not navigate the UI. */
+	menu_pad(app, 0xf0, 128, 0);
+	assert(plus_vita_app_view(app).selected == 0);
+	menu_pad(app, 0, 180, 1);
+	assert(plus_vita_app_view(app).selected == 0);
+	menu_pad(app, 0, 181, 100);
+	assert(plus_vita_app_view(app).selected == 1);
+	menu_pad(app, 0, 255, 400099);
+	assert(plus_vita_app_view(app).selected == 1);
+	menu_pad(app, 0, 255, 400100);
+	assert(plus_vita_app_view(app).selected == 2);
+	menu_pad(app, 0, 255, 560100);
+	assert(plus_vita_app_view(app).selected == 0);
+	menu_pad(app, 0, 76, 560101);
+	assert(plus_vita_app_view(app).selected == 0);
+	menu_pad(app, 0, 75, 560102);
+	assert(plus_vita_app_view(app).selected == 2);
+	menu_pad(app, 0x2000, 128, 560103); /* Circle */
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_EXIT_CONFIRM);
+	menu_pad(app, 0x2000, 128, 560104);
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_EXIT_CONFIRM);
+	menu_pad(app, 0, 128, 560105);
+	menu_pad(app, 0x4000, 128, 560106); /* Cross: Stay here */
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_WELCOME);
+	menu_pad(app, 0x4000, 128, 560107);
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_WELCOME);
+	plus_vita_app_destroy(app);
+}
+
 int main(void)
 {
+	joystick_menu();
 	PlusVitaApp *app = plus_vita_app_create();
 	assert(app);
 	PlusVitaAppView view = plus_vita_app_view(app);

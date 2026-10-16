@@ -20,11 +20,11 @@ typedef enum {
 } PlusVitaAppScreen;
 typedef enum {
 	PLUS_VITA_ACTION_SETUP,
+	PLUS_VITA_ACTION_CATALOGUE,
 	PLUS_VITA_ACTION_ABOUT,
 	PLUS_VITA_ACTION_EXIT,
 	PLUS_VITA_ACTION_BACK,
 	PLUS_VITA_ACTION_IMPORT,
-	PLUS_VITA_ACTION_ENTER_TOKEN,
 	PLUS_VITA_ACTION_GAME, PLUS_VITA_ACTION_CONTINUE
 } PlusVitaAppAction;
 typedef struct {
@@ -40,20 +40,31 @@ typedef struct {
 	uint64_t operation;
 } PlusVitaAppView;
 typedef enum {
+	PLUS_VITA_EVENT_PAD,
 	PLUS_VITA_EVENT_UP, PLUS_VITA_EVENT_DOWN,
 	PLUS_VITA_EVENT_ACTIVATE, PLUS_VITA_EVENT_BACK,
 	PLUS_VITA_EVENT_TOUCH, PLUS_VITA_EVENT_SETUP_READY,
 	PLUS_VITA_EVENT_IMPORT_READ, PLUS_VITA_EVENT_IMPORT_REMOVED,
-	PLUS_VITA_EVENT_AUTHORIZED, PLUS_VITA_EVENT_TOKEN_ENTERED
+	PLUS_VITA_EVENT_AUTHORIZED
 } PlusVitaAppEventKind;
 typedef enum {
 	PLUS_VITA_RESULT_OK, PLUS_VITA_RESULT_STORAGE_ERROR, PLUS_VITA_RESULT_MISSING,
 	PLUS_VITA_RESULT_REJECTED, PLUS_VITA_RESULT_NETWORK_ERROR, PLUS_VITA_RESULT_CATALOGUE_ERROR,
-	PLUS_VITA_RESULT_CANCELLED, PLUS_VITA_RESULT_BUSY, PLUS_VITA_RESULT_INPUT_ERROR,
+	PLUS_VITA_RESULT_CANCELLED, PLUS_VITA_RESULT_BUSY,
 	PLUS_VITA_RESULT_CLEANUP_ERROR
 } PlusVitaAppResult;
+
+/* Vita button bits; the adapter verifies these against the SDK. Other bits,
+ * including the D-pad, are deliberately ignored by menu navigation. */
+enum { PLUS_VITA_MENU_CIRCLE = 0x2000, PLUS_VITA_MENU_CROSS = 0x4000 };
+typedef struct {
+	uint32_t buttons;
+	unsigned char left_y;
+	uint64_t time_us;
+} PlusVitaAppPad;
 typedef struct {
 	PlusVitaAppEventKind kind;
+	PlusVitaAppPad pad;
 	int x, y;
 	uint64_t operation;
 	PlusVitaAppResult status;
@@ -65,7 +76,7 @@ typedef struct {
 typedef enum {
 	PLUS_VITA_EFFECT_NONE, PLUS_VITA_EFFECT_EXIT, PLUS_VITA_EFFECT_PREPARE_SETUP,
 	PLUS_VITA_EFFECT_READ_IMPORT, PLUS_VITA_EFFECT_REMOVE_IMPORT,
-	PLUS_VITA_EFFECT_AUTHORIZE, PLUS_VITA_EFFECT_ENTER_TOKEN
+	PLUS_VITA_EFFECT_AUTHORIZE
 } PlusVitaAppEffectKind;
 /* Authorization effects contain sensitive material for the Sony adapter only.
  * Never log or render an effect/event; clear its credential after consumption. */

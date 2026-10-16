@@ -14,12 +14,69 @@ static void setup(PlusVitaApp *app)
 	assert(strstr(plus_vita_app_view(app).body, "ssocookie") != NULL);
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_SETUP);
+	assert(plus_vita_app_view(app).action_count == 2);
+	assert(strcmp(plus_vita_app_view(app).actions[0].label, "Import JSON") == 0);
+	assert(plus_vita_app_view(app).actions[1].id == PLUS_VITA_ACTION_BACK);
+}
+
+static void saved_json(const char *data, size_t size, bool valid)
+{
+	PlusVitaApp *app = plus_vita_app_create();
+	assert(app);
+	setup(app);
+	PlusVitaAppEffect effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
+	uint64_t operation = effect.operation;
+	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_IMPORT_READ,
+		.operation = operation, .data = data, .data_size = size });
+	assert(effect.kind == PLUS_VITA_EFFECT_REMOVE_IMPORT);
+	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_IMPORT_REMOVED, .operation = operation });
+	assert(effect.kind == (valid ? PLUS_VITA_EFFECT_AUTHORIZE : PLUS_VITA_EFFECT_NONE));
+	if(valid) assert(effect.credential.length == 64);
+	else {
+		assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_ERROR);
+		assert(plus_vita_credential_is_clear(&effect.credential));
+	}
+	plus_vita_credential_clear(&effect.credential);
+	plus_vita_app_destroy(app);
+}
+
+static void saved_response_formats(void)
+{
+	#define TOKEN "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	const char *invalid[] = {
+		"{}", "[]", "null", "{\"npsso\":null}", "{\"npsso\":64}", "{\"npsso\":\"short\"}",
+		"{\"npsso\":\"" TOKEN "\",\"npsso\":\"" TOKEN "\"}",
+		"{\"npsso\":\"" TOKEN "\",\"np\\u0073so\":\"" TOKEN "\"}",
+		"{\"nested\":{\"npsso\":\"" TOKEN "\"}}",
+		"{\"npsso\":\"" TOKEN "\",}", "{\"npsso\":\"" TOKEN "\"} {}",
+		"{\"npsso\":\"" TOKEN "\",\"bad\":[1,]}",
+		"{\"npsso\":\"" TOKEN "\",\"bad\":/* comment */true}",
+		"{\"npsso\":\"" TOKEN "\"}\v", "{\"npsso\":\"" TOKEN "\",\"bad\":\"\xff\"}",
+		"{\"npsso\":\"" TOKEN "\",\"bad\":NaN}",
+		"{\"npsso\":\"" TOKEN "\",\"bad\":Infinity}",
+		"{\"npsso\":\"" TOKEN "\",\"bad\":{\"nested\":NaN}}",
+		"{\"npsso\":\"" TOKEN "\",\"bad\":\"raw\nnewline\"}",
+		"{\"npsso\":\"" TOKEN "\",\"bad\":\vtrue}"
+	};
+	for(size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) saved_json(invalid[i], strlen(invalid[i]), false);
+	const char escaped[] = " \r\n{\"np\\u0073so\":\"" TOKEN "\",\"ignored\":[true,false,null,2.5,\"a\\\"b\"]}\t";
+	saved_json(escaped, sizeof(escaped) - 1, true);
+	const char bom[] = "\xef\xbb\xbf{\"npsso\":\"" TOKEN "\"}";
+	saved_json(bom, sizeof(bom) - 1, true);
+	const char embedded_nul[] = "{\"npsso\":\"" TOKEN "\"}\0trailing";
+	saved_json(embedded_nul, sizeof(embedded_nul) - 1, false);
+	char oversized[4097]; memset(oversized, ' ', sizeof(oversized));
+	memcpy(oversized, bom, sizeof(bom) - 1);
+	saved_json(oversized, sizeof(oversized), false);
+	#undef TOKEN
 }
 
 int main(void)
 {
+	saved_response_formats();
 	/* Synthetic test credential; never use a real account as a fixture. */
-	const char file[] = "{\"npsso\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}";
+	const char file[] = "{\"extra\":{\"npsso\":\"ignored\",\"values\":[1,true,null]},"
+		"\"npsso\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"other\":\"ignored\"}";
 	PlusVitaApp *app = plus_vita_app_create();
 	assert(app);
 	setup(app);
@@ -55,19 +112,17 @@ int main(void)
 	app = plus_vita_app_create();
 	assert(app);
 	setup(app);
-	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
 	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
-	assert(effect.kind == PLUS_VITA_EFFECT_ENTER_TOKEN);
 	operation = effect.operation;
-	const char manual[] = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+	const char private_value[] = "SYNTHETIC_PRIVATE_VALUE_NOT_FOR_UI";
 	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){
-		.kind = PLUS_VITA_EVENT_TOKEN_ENTERED, .operation = operation,
-		.status = PLUS_VITA_RESULT_OK, .data = manual, .data_size = sizeof(manual) - 1 });
+		.kind = PLUS_VITA_EVENT_IMPORT_READ, .operation = operation,
+		.status = PLUS_VITA_RESULT_OK, .data = file, .data_size = sizeof(file) - 1 });
 	assert(effect.kind == PLUS_VITA_EFFECT_REMOVE_IMPORT);
 	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){
 		.kind = PLUS_VITA_EVENT_IMPORT_REMOVED, .operation = operation, .status = PLUS_VITA_RESULT_OK });
 	assert(effect.kind == PLUS_VITA_EFFECT_AUTHORIZE);
-	assert(effect.credential.length == 64 && memcmp(effect.credential.value, manual, 64) == 0);
+	assert(effect.credential.length == 64);
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_AUTHORIZED,
 		.operation = operation, .status = PLUS_VITA_RESULT_OK, .entry_count = 0 });
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_CATALOGUE);
@@ -108,9 +163,9 @@ int main(void)
 			.operation = operation, .data = file, .data_size = sizeof(file) - 1 });
 		plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_IMPORT_REMOVED, .operation = operation });
 		plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_AUTHORIZED,
-			.operation = operation, .status = failures[i], .data = manual, .data_size = 64 });
+			.operation = operation, .status = failures[i], .data = private_value, .data_size = sizeof(private_value) - 1 });
 		view = plus_vita_app_view(app);
-		assert(view.screen == PLUS_VITA_APP_ERROR && strstr(view.body, manual) == NULL);
+		assert(view.screen == PLUS_VITA_APP_ERROR && strstr(view.body, private_value) == NULL);
 		plus_vita_app_destroy(app);
 	}
 	app = plus_vita_app_create();
@@ -130,11 +185,6 @@ int main(void)
 	app = plus_vita_app_create();
 	assert(app);
 	setup(app);
-	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
-	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
-	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_TOKEN_ENTERED,
-		.operation = effect.operation, .status = PLUS_VITA_RESULT_CANCELLED });
-	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_SETUP);
 	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
 	const char malformed[] = "{\"npsso\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}trailing";
 	operation = effect.operation;
@@ -144,6 +194,6 @@ int main(void)
 	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_IMPORT_REMOVED, .operation = operation });
 	assert(effect.kind == PLUS_VITA_EFFECT_NONE && plus_vita_app_view(app).screen == PLUS_VITA_APP_ERROR);
 	plus_vita_app_destroy(app);
-	puts("app account: import routes, cleanup, catalogues, safe failures, keyboard cancel and stale results passed");
+	puts("app account: JSON-only setup, cleanup, catalogues, safe failures and stale results passed");
 	return 0;
 }

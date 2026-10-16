@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 static atomic_bool block_server, server_entered;
+static atomic_uint requests;
 static void pause_poll(void) { const struct timespec delay = { .tv_nsec = 1000000 }; nanosleep(&delay, NULL); }
 
 static void body(CCHttpResponse *response, const char *value)
@@ -28,6 +29,7 @@ static void body(CCHttpResponse *response, const char *value)
 ChiakiErrorCode __wrap_cc_http_perform(ChiakiLog *log, const CCHttpRequest *request, CCHttpResponse *response)
 {
 	(void)log;
+	atomic_fetch_add(&requests, 1);
 	/* The externally observable request may occur only after file consumption. */
 	assert(access("ux0:data/plus-vita-auth.json", F_OK) != 0 && errno == ENOENT);
 	memset(response, 0, sizeof(*response));
@@ -164,6 +166,32 @@ int main(void)
 	assert(view.screen == PLUS_VITA_APP_CATALOGUE);
 	assert(view.action_count == 2 && strcmp(view.actions[0].label, "Alpha") == 0);
 	assert(access("ux0:data/plus-vita-auth.json", F_OK) != 0);
+	unsigned initial_requests = atomic_load(&requests);
+	/* Source file has been consumed. Navigation must retain the runtime account. */
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
+	for(unsigned repeat = 0; repeat < 3; repeat++)
+	{
+		assert(strcmp(plus_vita_app_view(app).actions[plus_vita_app_view(app).selected].label, "Zulu") == 0);
+		plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_BACK });
+		view = plus_vita_app_view(app);
+		assert(view.screen == PLUS_VITA_APP_WELCOME);
+		assert(strcmp(view.actions[0].label, "Open catalogue") == 0);
+		/* About and cancelled exit are navigation, not sign-out. */
+		plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
+		plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
+		assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_ABOUT);
+		plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_BACK });
+		plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_BACK });
+		assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_EXIT_CONFIRM);
+		plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
+		/* Touch the catalogue action regardless of restored home focus. */
+		PlusVitaAppEffect reopened = plus_vita_app_dispatch(app,
+			(PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_TOUCH, .x = 120, .y = 340 });
+		assert(reopened.kind == PLUS_VITA_EFFECT_NONE);
+		assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_CATALOGUE);
+		assert(atomic_load(&requests) == initial_requests);
+		assert(access("ux0:data/plus-vita-auth.json", F_OK) != 0);
+	}
 	assert(plus_vita_account_close(account));
 	plus_vita_app_destroy(app);
 

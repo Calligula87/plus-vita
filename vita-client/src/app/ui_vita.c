@@ -2,7 +2,6 @@
 #include "ui_vita.h"
 #include "app.h"
 #include "account_vita.h"
-#include "../platform/credential_ime.h"
 #include <debugScreen.h> /* SDK bitmap font fallback; no terminal initialization. */
 #include <psp2/ctrl.h>
 #include <psp2/display.h>
@@ -20,6 +19,9 @@
 #define PITCH 1024
 #define FRAME_BYTES ((PITCH * HEIGHT * 4u + 0x3ffffu) & ~0x3ffffu)
 #define RGB(r,g,b) (0xff000000u | ((uint32_t)(b)<<16) | ((uint32_t)(g)<<8) | (r))
+
+_Static_assert((unsigned)PLUS_VITA_MENU_CROSS == (unsigned)SCE_CTRL_CROSS, "Menu Cross bit must match VitaSDK");
+_Static_assert((unsigned)PLUS_VITA_MENU_CIRCLE == (unsigned)SCE_CTRL_CIRCLE, "Menu Circle bit must match VitaSDK");
 
 typedef struct {
 	SceUID blocks[2];
@@ -190,33 +192,29 @@ static void text(UiDisplay *display, const char *value, int x, int y, int size, 
 static bool draw(UiDisplay *display, const PlusVitaAppView *view)
 {
 	for(int y = 0; y < HEIGHT; y++)
-		rectangle(display, 0, y, WIDTH, 1, RGB(12 + y / 60, 17 + y / 45, 29 + y / 32));
-	rectangle(display, 0, 0, WIDTH, 4, RGB(103, 228, 181));
+		rectangle(display, 0, y, WIDTH, 1, RGB(0, 25 + y / 20, 70 + y / 6));
+	rectangle(display, 0, 0, WIDTH, 4, RGB(246, 198, 91));
 	text(display, "plus vita", 64, 52, 24, 400, RGB(236, 244, 250));
-	text(display, "DEVELOPMENT BUILD", 712, 49, 14, 220, RGB(145, 164, 185));
-	text(display, view->subtitle, 64, 114, 16, 832, RGB(103, 228, 181));
+	text(display, "DEVELOPMENT BUILD", 712, 49, 14, 220, RGB(195, 211, 239));
+	text(display, view->subtitle, 64, 114, 16, 832, RGB(246, 198, 91));
 	text(display, view->title, 64, 164, 36, 832, RGB(243, 247, 252));
-	text(display, view->body, 64, 216, 20, view->screen == PLUS_VITA_APP_WELCOME ? 520 : 832, RGB(162, 180, 201));
+	text(display, view->body, 64, 216, 20, view->screen == PLUS_VITA_APP_WELCOME ? 520 : 832, RGB(210, 224, 247));
 	if(view->screen == PLUS_VITA_APP_WELCOME)
 	{
-		rounded(display, 636, 235, 262, 146, RGB(37, 56, 72));
-		rounded(display, 681, 248, 170, 120, RGB(13, 24, 37));
-		rectangle(display, 650, 300, 21, 6, RGB(103, 228, 181));
-		rectangle(display, 658, 292, 6, 22, RGB(103, 228, 181));
-		rounded(display, 865, 293, 10, 10, RGB(103, 228, 181));
-		rounded(display, 878, 306, 10, 10, RGB(103, 228, 181));
-		text(display, "A new way to play.", 656, 414, 18, 262, RGB(145, 164, 185));
+		rounded(display, 674, 238, 192, 192, RGB(18, 53, 113));
+		text(display, "APP LOGO", 712, 321, 18, 158, RGB(210, 224, 247));
+		text(display, "Coming later", 709, 355, 16, 158, RGB(195, 211, 239));
 	}
 	for(size_t i = 0; i < view->action_count; i++)
 	{
 		const PlusVitaAppButton *button = &view->actions[i];
 		bool selected = i == view->selected;
 		rounded(display, button->x, button->y, button->width, button->height,
-			selected ? RGB(103, 228, 181) : RGB(33, 45, 61));
+			selected ? RGB(246, 198, 91) : RGB(17, 57, 125));
 		text(display, button->label, button->x + 20, button->y + 34, 22, button->width - 40,
-			selected ? RGB(10, 28, 25) : RGB(226, 234, 244));
+			selected ? RGB(9, 29, 66) : RGB(243, 247, 252));
 	}
-	text(display, view->hint, 64, 529, 16, 832, RGB(145, 164, 185));
+	text(display, view->hint, 64, 529, 16, 832, RGB(195, 211, 239));
 	SceDisplayFrameBuf frame = {
 		.size = sizeof(frame), .base = display->pixels[display->back], .pitch = PITCH,
 		.pixelformat = SCE_DISPLAY_PIXELFORMAT_A8B8G8R8, .width = WIDTH, .height = HEIGHT
@@ -238,6 +236,18 @@ static void queue_effect(PlusVitaAppEffect *pending, PlusVitaAppEffect effect)
 	plus_vita_credential_clear(&effect.credential);
 }
 
+static bool handle_input(PlusVitaApp *app, PlusVitaAccount *account, PlusVitaAppEffect *pending, PlusVitaAppEvent event)
+{
+	PlusVitaAppView before = plus_vita_app_view(app);
+	PlusVitaAppEffect effect = plus_vita_app_dispatch(app, event);
+	PlusVitaAppView after = plus_vita_app_view(app);
+	if(before.operation && after.operation != before.operation) plus_vita_account_cancel(account);
+	bool changed = effect.kind != PLUS_VITA_EFFECT_NONE || memcmp(&before, &after, sizeof(before)) != 0;
+	queue_effect(pending, effect);
+	plus_vita_credential_clear(&effect.credential);
+	return changed;
+}
+
 int plus_vita_app_run(void)
 {
 	UiDisplay *display = calloc(1, sizeof(*display));
@@ -257,9 +267,6 @@ int plus_vita_app_run(void)
 		&& panel.maxAaX > panel.minAaX && panel.maxAaY > panel.minAaY
 		&& sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START) == 0;
 	bool touched = false, dirty = true;
-	uint32_t previous_buttons = 0;
-	int previous_direction = 0;
-	uint64_t repeat_at = 0;
 	PlusVitaAppEffect pending = { .kind = PLUS_VITA_EFFECT_NONE };
 	int result = 0;
 	while(plus_vita_app_view(app).screen != PLUS_VITA_APP_CLOSED)
@@ -271,48 +278,25 @@ int plus_vita_app_run(void)
 			dirty = false;
 		}
 		SceCtrlData pad = { 0 };
-		PlusVitaAppEvent event = { 0 };
-		bool has_event = false;
+		bool input_changed = false;
 		if(sceCtrlPeekBufferPositive(0, &pad, 1) > 0)
 		{
-			uint32_t pressed = pad.buttons & ~previous_buttons;
-			int direction = (pad.buttons & SCE_CTRL_DOWN) || pad.ly > 180 ? 1
-				: (pad.buttons & SCE_CTRL_UP) || pad.ly < 76 ? -1 : 0;
-			uint64_t now = sceKernelGetProcessTimeWide();
-			if(pressed & SCE_CTRL_CIRCLE) { event.kind = PLUS_VITA_EVENT_BACK; has_event = true; }
-			else if(pressed & SCE_CTRL_CROSS) { event.kind = PLUS_VITA_EVENT_ACTIVATE; has_event = true; }
-			else if(direction && (direction != previous_direction || now >= repeat_at))
-			{
-				event.kind = direction > 0 ? PLUS_VITA_EVENT_DOWN : PLUS_VITA_EVENT_UP;
-				has_event = true;
-				repeat_at = now + (direction != previous_direction ? 400000u : 160000u);
-			}
-			previous_direction = direction;
-			previous_buttons = pad.buttons;
+			input_changed = handle_input(app, account, &pending, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_PAD,
+				.pad = { .buttons = pad.buttons, .left_y = pad.ly, .time_us = sceKernelGetProcessTimeWide() } });
 		}
 		SceTouchData touch = { 0 };
 		if(touch_ready && sceTouchPeek(SCE_TOUCH_PORT_FRONT, &touch, 1) > 0)
 		{
-			if(!has_event && touch.reportNum && !touched)
+			if(!input_changed && touch.reportNum && !touched)
 			{
-				event = (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_TOUCH,
+				input_changed = handle_input(app, account, &pending, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_TOUCH,
 					.x = (touch.report[0].x - panel.minAaX) * (WIDTH - 1) / (panel.maxAaX - panel.minAaX),
-					.y = (touch.report[0].y - panel.minAaY) * (HEIGHT - 1) / (panel.maxAaY - panel.minAaY) };
-				has_event = true;
+					.y = (touch.report[0].y - panel.minAaY) * (HEIGHT - 1) / (panel.maxAaY - panel.minAaY) });
 			}
 			touched = touch.reportNum != 0;
 		}
-		if(has_event)
-		{
-			uint64_t previous_operation = plus_vita_app_view(app).operation;
-			PlusVitaAppEffect effect = plus_vita_app_dispatch(app, event);
-			if(previous_operation && plus_vita_app_view(app).operation != previous_operation)
-				plus_vita_account_cancel(account);
-			queue_effect(&pending, effect);
-			plus_vita_credential_clear(&effect.credential);
-			dirty = true;
-		}
-		else if(pending.kind != PLUS_VITA_EFFECT_NONE)
+		dirty = dirty || input_changed;
+		if(!input_changed && pending.kind != PLUS_VITA_EFFECT_NONE)
 		{
 			PlusVitaAppEffect effect = pending;
 			plus_vita_credential_clear(&pending.credential);
@@ -321,23 +305,6 @@ int plus_vita_app_run(void)
 			{
 				if(effect.kind == PLUS_VITA_EFFECT_PREPARE_SETUP)
 					plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_SETUP_READY, .operation = effect.operation });
-				else if(effect.kind == PLUS_VITA_EFFECT_ENTER_TOKEN)
-				{
-					PlusVitaCredential credential;
-					PlusVitaCredentialImeResult keyboard;
-					plus_vita_credential_ime_read_masked(&credential, &keyboard);
-					PlusVitaAppResult status = !keyboard.initialized ? PLUS_VITA_RESULT_INPUT_ERROR
-						: !keyboard.accepted ? PLUS_VITA_RESULT_CANCELLED : PLUS_VITA_RESULT_OK;
-					queue_effect(&pending, plus_vita_app_dispatch(app, (PlusVitaAppEvent){
-						.kind = PLUS_VITA_EVENT_TOKEN_ENTERED, .operation = effect.operation, .status = status,
-						.data = credential.value, .data_size = credential.length }));
-					plus_vita_credential_clear(&credential);
-					/* The keyboard consumed these presses; do not replay Enter/Cancel. */
-					SceCtrlData after_keyboard = { 0 };
-					if(sceCtrlPeekBufferPositive(0, &after_keyboard, 1) > 0) previous_buttons = after_keyboard.buttons;
-					previous_direction = 0;
-					touched = true;
-				}
 				else if(!plus_vita_account_start(account, &effect))
 				{
 					PlusVitaAppEventKind kind = effect.kind == PLUS_VITA_EFFECT_READ_IMPORT ? PLUS_VITA_EVENT_IMPORT_READ

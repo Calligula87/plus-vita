@@ -4,6 +4,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <json_object.h>
+#include <json_tokener.h>
 
 struct plus_vita_app_t {
 	PlusVitaAppView view;
@@ -14,7 +16,10 @@ struct plus_vita_app_t {
 	PlusVitaCatalogEntry *catalogue;
 	size_t catalogue_count, catalogue_selection;
 	char catalogue_status[128];
-	bool imported_valid;
+	bool imported_valid, connected;
+	uint32_t previous_buttons;
+	int previous_direction;
+	uint64_t repeat_at;
 };
 
 static void welcome(PlusVitaApp *app)
@@ -24,7 +29,7 @@ static void welcome(PlusVitaApp *app)
 		.title = "Your games. Your Vita.",
 		.subtitle = "WELCOME TO PLUS VITA",
 		.body = "Play your cloud games on the handheld you love.\nConnect your own Sony account to get started.",
-		.hint = "D-pad / stick  Move     X  Select     O  Back",
+		.hint = "Left stick  Move     X  Select     O  Back",
 		.actions = {
 			{ PLUS_VITA_ACTION_SETUP, "Get started", 64, 316, 500, 52 },
 			{ PLUS_VITA_ACTION_ABOUT, "About Plus Vita", 64, 380, 500, 52 },
@@ -32,6 +37,13 @@ static void welcome(PlusVitaApp *app)
 		},
 		.action_count = 3, .selected = app->welcome_selection
 	};
+	if(app->connected)
+	{
+		app->view.subtitle = "YOUR ACCOUNT IS CONNECTED";
+		app->view.body = "Open your cloud catalogue and keep browsing.\nYour sign-in stays connected until you exit the app.";
+		app->view.actions[0].id = PLUS_VITA_ACTION_CATALOGUE;
+		app->view.actions[0].label = "Open catalogue";
+	}
 }
 
 PlusVitaApp *plus_vita_app_create(void)
@@ -57,20 +69,19 @@ static void setup_view(PlusVitaApp *app)
 	app->waiting_for = PLUS_VITA_EFFECT_NONE;
 	app->view = (PlusVitaAppView){
 		.screen = PLUS_VITA_APP_SETUP,
-		.title = "Bring your own account.", .subtitle = "CONNECT TO SONY",
-		.body = "Create a JSON file: {\"npsso\":\"your 64-character token\"}\nTransfer to ux0:data/plus-vita-auth.json with VitaShell.\nThe file is removed after import. Sign-in is not saved.",
+		.title = "Import your sign-in JSON.", .subtitle = "CONNECT TO SONY",
+		.body = "Transfer plus-vita-auth.json to ux0:data with VitaShell.\nChoose Import JSON. The transferred file is then removed.\nYour account stays connected until you exit this app.",
 		.hint = "X  Select     O  Back",
 		.actions = {
-			{ PLUS_VITA_ACTION_IMPORT, "Import token file", 64, 316, 832, 52 },
-			{ PLUS_VITA_ACTION_ENTER_TOKEN, "Enter token", 64, 380, 832, 52 },
-			{ PLUS_VITA_ACTION_BACK, "Back", 64, 444, 832, 52 }
-		}, .action_count = 3
+			{ PLUS_VITA_ACTION_IMPORT, "Import JSON", 64, 316, 832, 52 },
+			{ PLUS_VITA_ACTION_BACK, "Back", 64, 380, 832, 52 }
+		}, .action_count = 2
 	};
 }
 
 static void account_error(PlusVitaApp *app, const char *message)
 {
-	plus_vita_credential_clear(&app->credential);
+	if(!app->connected) plus_vita_credential_clear(&app->credential);
 	app->pending_operation = 0;
 	app->waiting_for = PLUS_VITA_EFFECT_NONE;
 	app->view = (PlusVitaAppView){
@@ -85,46 +96,110 @@ static const char *result_message(PlusVitaAppResult result)
 	switch(result)
 	{
 		case PLUS_VITA_RESULT_MISSING:
-			return "No token file was found. Transfer it with VitaShell\nor return to setup and enter the token with the Vita keyboard.";
+			return "No sign-in JSON was found. Transfer plus-vita-auth.json\nto ux0:data with VitaShell, then choose Import JSON.";
 		case PLUS_VITA_RESULT_STORAGE_ERROR:
-			return "The token file could not be read. Check it with VitaShell and try again.";
+			return "The sign-in JSON could not be read. Check it with VitaShell and try again.";
 		case PLUS_VITA_RESULT_REJECTED:
-			return "Your sign-in was rejected or has expired.\nSign in to Sony again and import a fresh token.";
+			return "Your sign-in was rejected or has expired.\nSign in to Sony again, save a fresh JSON response and import it.";
 		case PLUS_VITA_RESULT_NETWORK_ERROR:
 			return "Sony could not be reached. Check Wi-Fi and try again.\nYour account details have not been displayed or logged.";
 		case PLUS_VITA_RESULT_CATALOGUE_ERROR:
 			return "The cloud catalogue is unavailable for this account right now.\nCheck your eligible subscription and try again later.";
 		case PLUS_VITA_RESULT_BUSY:
 			return "The previous request is still finishing.\nReturn to setup and try again in a moment.";
-		case PLUS_VITA_RESULT_INPUT_ERROR:
-			return "The Vita keyboard could not be opened.\nReturn to setup and try again, or import a file with VitaShell.";
 		default:
 			return "Account setup could not be completed. Please try again.";
 	}
 }
 
+static void json_space(const char **cursor, const char *end)
+{
+	while(*cursor < end && (**cursor == ' ' || **cursor == '\t' || **cursor == '\r' || **cursor == '\n')) ++*cursor;
+}
+
+static bool json_text_valid(const char *text, size_t size)
+{
+	/* json-c's strict mode still accepts NaN/Infinity and raw string controls.
+	 * These are not JSON. Check their lexical forms before decoding values. */
+	bool quoted = false, escaped = false;
+	for(size_t i = 0; i < size; i++)
+	{
+		unsigned char c = (unsigned char)text[i];
+		if(c < 0x20 && (quoted || (c != '\t' && c != '\r' && c != '\n'))) return false;
+		if(quoted)
+		{
+			if(escaped) escaped = false;
+			else if(c == '\\') escaped = true;
+			else if(c == '"') quoted = false;
+		}
+		else if(c == '"') quoted = true;
+		else if(c == 'N' || c == 'I') return false;
+	}
+	return !quoted;
+}
+
+static bool json_value(struct json_tokener *parser, const char **cursor, const char *end, struct json_object **value)
+{
+	json_tokener_reset(parser);
+	*value = json_tokener_parse_ex(parser, *cursor, (int)(end - *cursor));
+	if(json_tokener_get_error(parser) != json_tokener_success) return false;
+	size_t consumed = json_tokener_get_parse_end(parser);
+	if(!consumed) return false;
+	*cursor += consumed;
+	return true;
+}
+
 static bool parse_import(PlusVitaCredential *credential, const char *data, size_t size)
 {
-	if(!data || size > 4096) return false;
+	if(!data || !size || size > 4096 || !json_text_valid(data, size)) return false;
 	const char *p = data, *end = data + size;
-	#define SKIP_SPACE() while(p < end && isspace((unsigned char)*p)) p++
-	SKIP_SPACE();
+	/* Accept a UTF-8 BOM emitted by some save-response tools. */
+	if(size >= 3 && memcmp(p, "\xef\xbb\xbf", 3) == 0) p += 3;
+	json_space(&p, end);
 	if(p == end || *p++ != '{') return false;
-	SKIP_SPACE();
-	if(end - p < 7 || memcmp(p, "\"npsso\"", 7)) return false;
-	p += 7;
-	SKIP_SPACE();
-	if(p == end || *p++ != ':') return false;
-	SKIP_SPACE();
-	if(p == end || *p++ != '"' || end - p < 65) return false;
-	const char *token = p;
-	for(unsigned i = 0; i < 64; i++) if(!isalnum((unsigned char)*p++)) return false;
-	if(*p++ != '"') return false;
-	SKIP_SPACE();
-	if(p == end || *p++ != '}') return false;
-	SKIP_SPACE();
-	#undef SKIP_SPACE
-	return p == end && plus_vita_credential_set(credential, token, 64);
+	struct json_tokener *parser = json_tokener_new_ex(16);
+	if(!parser) return false;
+	json_tokener_set_flags(parser, JSON_TOKENER_STRICT | JSON_TOKENER_ALLOW_TRAILING_CHARS | JSON_TOKENER_VALIDATE_UTF8);
+	PlusVitaCredential parsed = { 0 };
+	struct json_object *value = NULL;
+	bool found = false, valid = false;
+	/* Parse root members individually: a normal object parse would silently
+	 * overwrite duplicate npsso keys, including escaped spellings of the key.
+	 * json-c still validates/decodes each complete key and nested value. */
+	for(;;)
+	{
+		json_space(&p, end);
+		if(p == end || *p != '"' || !json_value(parser, &p, end, &value)) goto done;
+		bool npsso = json_object_is_type(value, json_type_string)
+			&& json_object_get_string_len(value) == 5 && memcmp(json_object_get_string(value), "npsso", 5) == 0;
+		json_object_put(value); value = NULL;
+		json_space(&p, end);
+		if(p == end || *p++ != ':') goto done;
+		json_space(&p, end);
+		if(!json_value(parser, &p, end, &value)) goto done;
+		if(npsso)
+		{
+			if(found || !json_object_is_type(value, json_type_string) || json_object_get_string_len(value) != 64) goto done;
+			const char *token = json_object_get_string(value);
+			for(unsigned i = 0; i < 64; i++)
+				if(!((token[i] >= 'A' && token[i] <= 'Z') || (token[i] >= 'a' && token[i] <= 'z')
+					|| (token[i] >= '0' && token[i] <= '9'))) goto done;
+			found = plus_vita_credential_set(&parsed, token, 64);
+		}
+		json_object_put(value); value = NULL;
+		json_space(&p, end);
+		if(p == end) goto done;
+		if(*p == '}') { p++; break; }
+		if(*p++ != ',') goto done;
+	}
+	json_space(&p, end);
+	valid = found && p == end;
+	if(valid) *credential = parsed;
+done:
+	json_object_put(value);
+	json_tokener_free(parser);
+	plus_vita_credential_clear(&parsed);
+	return valid;
 }
 
 static int compare_titles(const void *left, const void *right)
@@ -140,7 +215,7 @@ static void catalogue_view(PlusVitaApp *app)
 	PlusVitaAppView view = {
 		.screen = PLUS_VITA_APP_CATALOGUE, .title = "Choose your next game.",
 		.subtitle = "CLOUD CATALOGUE", .body = app->catalogue_status,
-		.hint = "D-pad / stick  Browse     O  Back"
+		.hint = "Left stick  Browse     O  Back"
 	};
 	snprintf(app->catalogue_status, sizeof(app->catalogue_status),
 		"%u cloud games available.\nYour sign-in is kept for this app session only.", (unsigned)app->catalogue_count);
@@ -161,18 +236,17 @@ static void catalogue_view(PlusVitaApp *app)
 	app->view = view;
 }
 
-static PlusVitaAppEffect import_account(PlusVitaApp *app, bool manual)
+static PlusVitaAppEffect import_account(PlusVitaApp *app)
 {
 	plus_vita_credential_clear(&app->credential);
 	free(app->catalogue);
 	app->catalogue = NULL;
 	app->catalogue_count = app->catalogue_selection = 0;
 	app->pending_operation = ++app->next_operation;
-	app->waiting_for = manual ? PLUS_VITA_EFFECT_ENTER_TOKEN : PLUS_VITA_EFFECT_READ_IMPORT;
+	app->waiting_for = PLUS_VITA_EFFECT_READ_IMPORT;
 	app->view = (PlusVitaAppView){
 		.screen = PLUS_VITA_APP_AUTHORIZING, .title = "Connecting your account.",
-		.subtitle = "ACCOUNT SETUP", .body = manual ? "Enter your sign-in token using the Vita keyboard."
-			: "Reading your token file. You can cancel at any time.",
+		.subtitle = "ACCOUNT SETUP", .body = "Reading your sign-in JSON. You can cancel at any time.",
 		.hint = "O  Cancel", .actions = {{ PLUS_VITA_ACTION_BACK, "Cancel", 64, 444, 500, 52 }},
 		.action_count = 1
 	};
@@ -185,7 +259,8 @@ static void confirm_exit(PlusVitaApp *app)
 	app->view = (PlusVitaAppView){
 		.screen = PLUS_VITA_APP_EXIT_CONFIRM,
 		.title = "See you next time?", .subtitle = "EXIT PLUS VITA",
-		.body = "You can come back whenever you are ready to play.",
+		.body = app->connected ? "Exiting ends this sign-in.\nTransfer your JSON again to sign in on the next launch."
+			: "You can come back whenever you are ready to play.",
 		.hint = "X  Select     O  Back",
 		.actions = {
 			{ PLUS_VITA_ACTION_BACK, "Stay here", 64, 380, 500, 52 },
@@ -199,6 +274,20 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	PlusVitaAppView *view = &app->view;
 	PlusVitaAppEffect effect = { .kind = PLUS_VITA_EFFECT_NONE };
 	if(view->screen == PLUS_VITA_APP_CLOSED) return effect;
+	if(event.kind == PLUS_VITA_EVENT_PAD)
+	{
+		PlusVitaAppPad pad = event.pad;
+		uint32_t pressed = pad.buttons & ~app->previous_buttons;
+		int direction = pad.left_y > 180 ? 1 : pad.left_y < 76 ? -1 : 0;
+		bool navigate = direction && (direction != app->previous_direction || pad.time_us >= app->repeat_at);
+		if(navigate) app->repeat_at = pad.time_us + (direction != app->previous_direction ? 400000u : 160000u);
+		app->previous_direction = direction;
+		app->previous_buttons = pad.buttons;
+		if(pressed & PLUS_VITA_MENU_CIRCLE) event.kind = PLUS_VITA_EVENT_BACK;
+		else if(pressed & PLUS_VITA_MENU_CROSS) event.kind = PLUS_VITA_EVENT_ACTIVATE;
+		else if(navigate) event.kind = direction > 0 ? PLUS_VITA_EVENT_DOWN : PLUS_VITA_EVENT_UP;
+		else return effect;
+	}
 	/* Cleanup is a storage obligation even after sign-in ownership is cancelled.
 	 * Report failure without ever accepting the cancelled account result. */
 	if(event.kind == PLUS_VITA_EVENT_IMPORT_READ && event.status == PLUS_VITA_RESULT_CLEANUP_ERROR)
@@ -207,41 +296,21 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		return effect;
 	}
 	if(event.kind == PLUS_VITA_EVENT_IMPORT_READ || event.kind == PLUS_VITA_EVENT_IMPORT_REMOVED
-		|| event.kind == PLUS_VITA_EVENT_AUTHORIZED || event.kind == PLUS_VITA_EVENT_TOKEN_ENTERED)
+		|| event.kind == PLUS_VITA_EVENT_AUTHORIZED)
 	{
 		if(view->screen != PLUS_VITA_APP_AUTHORIZING || !event.operation
 			|| event.operation != app->pending_operation) return effect;
-		if((event.kind == PLUS_VITA_EVENT_IMPORT_READ && app->waiting_for == PLUS_VITA_EFFECT_READ_IMPORT)
-			|| (event.kind == PLUS_VITA_EVENT_TOKEN_ENTERED && app->waiting_for == PLUS_VITA_EFFECT_ENTER_TOKEN))
+		if(event.kind == PLUS_VITA_EVENT_IMPORT_READ && app->waiting_for == PLUS_VITA_EFFECT_READ_IMPORT)
 		{
-			if(event.kind == PLUS_VITA_EVENT_TOKEN_ENTERED && event.status == PLUS_VITA_RESULT_CANCELLED)
-			{
-				plus_vita_credential_clear(&app->credential);
-				setup_view(app);
-				return effect;
-			}
 			if(event.status != PLUS_VITA_RESULT_OK)
 			{
 				account_error(app, result_message(event.status));
 				return effect;
 			}
-			bool valid;
-			if(event.kind == PLUS_VITA_EVENT_TOKEN_ENTERED)
-			{
-				valid = event.data && event.data_size == 64;
-				for(size_t i = 0; valid && i < event.data_size; i++) valid = isalnum((unsigned char)event.data[i]) != 0;
-				if(valid) valid = plus_vita_credential_set(&app->credential, event.data, event.data_size);
-			}
-			else valid = parse_import(&app->credential, event.data, event.data_size);
-			app->imported_valid = valid;
-			if(!valid && event.kind == PLUS_VITA_EVENT_TOKEN_ENTERED)
-				account_error(app, "The sign-in token is not valid. Use exactly 64 letters and numbers.");
-			else
-			{
-				app->waiting_for = PLUS_VITA_EFFECT_REMOVE_IMPORT;
-				view->body = "Removing the imported token file before sign-in.";
-				effect = (PlusVitaAppEffect){ .kind = PLUS_VITA_EFFECT_REMOVE_IMPORT, .operation = event.operation };
-			}
+			app->imported_valid = parse_import(&app->credential, event.data, event.data_size);
+			app->waiting_for = PLUS_VITA_EFFECT_REMOVE_IMPORT;
+			view->body = "Finishing sign-in file cleanup.";
+			effect = (PlusVitaAppEffect){ .kind = PLUS_VITA_EFFECT_REMOVE_IMPORT, .operation = event.operation };
 		}
 		else if(event.kind == PLUS_VITA_EVENT_IMPORT_REMOVED && app->waiting_for == PLUS_VITA_EFFECT_REMOVE_IMPORT)
 		{
@@ -252,7 +321,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 			}
 			if(!app->imported_valid)
 			{
-				account_error(app, "The token file was removed, but its format was not valid.\nCreate a new file using the setup guide, or enter the token.");
+				account_error(app, "The JSON file was removed, but its sign-in data was not valid.\nSave a fresh browser JSON response and transfer it again.");
 				return effect;
 			}
 			app->waiting_for = PLUS_VITA_EFFECT_AUTHORIZE;
@@ -279,6 +348,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 					qsort(app->catalogue, event.entry_count, sizeof(*app->catalogue), compare_titles);
 				}
 				app->catalogue_count = event.entry_count;
+				app->connected = true;
 				app->pending_operation = 0;
 				app->waiting_for = PLUS_VITA_EFFECT_NONE;
 				catalogue_view(app);
@@ -295,7 +365,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 			*view = (PlusVitaAppView){
 				.screen = PLUS_VITA_APP_SETUP_GUIDE, .title = "Sign in on your phone or PC.",
 				.subtitle = "YOUR SONY ACCOUNT", .hint = "X  Select     O  Back",
-				.body = "1. Sign in at playstation.com in your browser.\n2. Open ca.account.sony.com/api/v1/ssocookie.\n3. Copy only the npsso value. Keep it private.\nComplete Sony's password, passkey or 2-step prompts.",
+				.body = "1. Sign in at playstation.com on your phone or PC.\n2. Open ca.account.sony.com/api/v1/ssocookie.\n3. Save the response as plus-vita-auth.json.\nKeep this file private. Complete Sony's sign-in prompts.",
 				.actions = {
 					{ PLUS_VITA_ACTION_CONTINUE, "Continue", 64, 380, 832, 52 },
 					{ PLUS_VITA_ACTION_BACK, "Back", 64, 444, 832, 52 }
@@ -336,8 +406,8 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	{
 		app->pending_operation = 0;
 		app->waiting_for = PLUS_VITA_EFFECT_NONE;
-		plus_vita_credential_clear(&app->credential);
-		if(view->screen == PLUS_VITA_APP_ERROR) setup_view(app);
+		if(!app->connected) plus_vita_credential_clear(&app->credential);
+		if(view->screen == PLUS_VITA_APP_ERROR && !app->connected) setup_view(app);
 		else if(view->screen == PLUS_VITA_APP_WELCOME)
 		{
 			app->welcome_selection = view->selected;
@@ -348,8 +418,13 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	else if(event.kind == PLUS_VITA_EVENT_ACTIVATE && view->action_count)
 	{
 		PlusVitaAppAction action = view->actions[view->selected].id;
-		if(action == PLUS_VITA_ACTION_IMPORT || action == PLUS_VITA_ACTION_ENTER_TOKEN)
-			return import_account(app, action == PLUS_VITA_ACTION_ENTER_TOKEN);
+		if(action == PLUS_VITA_ACTION_CATALOGUE)
+		{
+			app->welcome_selection = view->selected;
+			catalogue_view(app);
+		}
+		else if(action == PLUS_VITA_ACTION_IMPORT)
+			return import_account(app);
 		else if(action == PLUS_VITA_ACTION_CONTINUE) setup_view(app);
 		else if(action == PLUS_VITA_ACTION_SETUP)
 		{
@@ -382,8 +457,8 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		{
 			app->pending_operation = 0;
 			app->waiting_for = PLUS_VITA_EFFECT_NONE;
-			plus_vita_credential_clear(&app->credential);
-			if(view->screen == PLUS_VITA_APP_ERROR) setup_view(app);
+			if(!app->connected) plus_vita_credential_clear(&app->credential);
+			if(view->screen == PLUS_VITA_APP_ERROR && !app->connected) setup_view(app);
 			else welcome(app);
 		}
 		else if(action == PLUS_VITA_ACTION_EXIT)
