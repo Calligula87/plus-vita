@@ -7,18 +7,30 @@ on:
       - ".gitmodules"
       - "external/pylux"
       - "vita-client/**"
+      - "tools/test-app-workflow.sh"
   pull_request:
     paths:
       - ".github/workflows/vita-smoke.yml"
       - ".gitmodules"
       - "external/pylux"
       - "vita-client/**"
+      - "tools/test-app-workflow.sh"
   workflow_dispatch:
 
 jobs:
+  app-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test native application workflow
+        run: sh tools/test-app-workflow.sh
+
   build:
     runs-on: ubuntu-latest
     container: vitasdk/vitasdk:latest
+    strategy:
+      matrix:
+        diagnostic: ["OFF", "ON"]
     steps:
       - name: Check out sources
         uses: actions/checkout@v4
@@ -26,7 +38,9 @@ jobs:
           submodules: recursive
 
       - name: Configure
-        run: cmake -S vita-client -B build/vita -DCMAKE_BUILD_TYPE=Release
+        run: >-
+          cmake -S vita-client -B build/vita -DCMAKE_BUILD_TYPE=Release
+          -DPLUS_VITA_DIAGNOSTIC_APP=${{ matrix.diagnostic }}
 
       - name: Build VPK
         run: cmake --build build/vita --parallel
@@ -37,6 +51,6 @@ jobs:
       - name: Upload VPK
         uses: actions/upload-artifact@v4
         with:
-          name: plus-vita-smoke
+          name: plus-vita-diagnostic-${{ matrix.diagnostic }}
           path: build/vita/plus_vita_smoke.vpk
           if-no-files-found: error

@@ -56,6 +56,7 @@ Release configuration used these non-secret options:
 ```sh
 cmake -S vita-client -B build/vita \
   -DCMAKE_BUILD_TYPE=Release \
+  -DPLUS_VITA_DIAGNOSTIC_APP=ON \
   -DPLUS_VITA_PUBLIC_APOLLO_TEST=ON \
   -DPLUS_VITA_INPUT_WORKER=ON \
   -DPLUS_VITA_DEFERRED_LOG=ON
@@ -67,6 +68,10 @@ retained under its distinct filename above. Source defaults for the input
 worker and deferred logging remain OFF, so an unspecified default build does
 not select this accepted profile. A future rebuild must be identified and
 checked separately; configuration alone does not promise an identical hash.
+
+The diagnostic entry flag selects the historical text interface after the
+graphical startup work. Normal new builds otherwise enter the graphical app.
+It does not change the bytes or acceptance of the retained package above.
 
 ## Phase closure
 

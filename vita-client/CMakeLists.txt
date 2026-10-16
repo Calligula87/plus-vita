@@ -18,7 +18,14 @@ add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../external/opus-1.6.1" opus)
 
 include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 
-set(VITA_APP_NAME "plus-vita smoke")
+option(PLUS_VITA_DIAGNOSTIC_APP "Launch the historical diagnostic/test interface" OFF)
+if(PLUS_VITA_DIAGNOSTIC_APP)
+  set(VITA_APP_NAME "plus-vita smoke")
+  set(PLUS_VITA_ENTRY_SOURCE src/main.c)
+else()
+  set(VITA_APP_NAME "Plus Vita")
+  set(PLUS_VITA_ENTRY_SOURCE src/app/main.c src/app/app.c src/app/ui_vita.c)
+endif()
 set(VITA_TITLEID "PLVT00001")
 set(VITA_VERSION "00.01")
 set(PLUS_VITA_TLS_PROBE_URL "" CACHE STRING
@@ -504,7 +511,7 @@ string(REPLACE "if(header_list)\n\t\tcurl_slist_free_all(header_list);"
 file(WRITE "${PLUS_VITA_CURL_HTTP_SOURCE}" "${PLUS_VITA_CURL_HTTP_TEXT}")
 
 add_executable(${PROJECT_NAME}
-  src/main.c
+  ${PLUS_VITA_ENTRY_SOURCE}
   generated/takion.pb.c
   "${PYLUX_ROOT}/lib/src/audio.c"
   "${PYLUX_ROOT}/lib/src/base64.c"
@@ -727,6 +734,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   SceHttp_stub
   SceSsl_stub
   SceSysmodule_stub
+	ScePgf_stub
   SceVideodec_stub
 )
 
