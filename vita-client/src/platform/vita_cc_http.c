@@ -3,6 +3,7 @@
 #include "curl_http.h"
 #include "secure_http.h"
 #include "network.h"
+#include "request_cancel.h"
 
 #include <curl/curl.h>
 
@@ -152,7 +153,7 @@ ChiakiErrorCode cc_http_perform(ChiakiLog *log, const CCHttpRequest *request,
 		return CHIAKI_ERR_INVALID_DATA;
 	memset(response, 0, sizeof(*response));
 	test_network_attempts++;
-	if(test_network_blocked)
+	if(test_network_blocked || plus_vita_request_cancelled())
 		return CHIAKI_ERR_CANCELED;
 
 	bool network_owned = !plus_vita_network_is_initialized();

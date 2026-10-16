@@ -19,9 +19,12 @@ git submodule update --init --recursive
 
 ## Current smoke target
 
-New builds now open the graphical startup preview; account import and stream
-integration follow in the release tickets. See the
-[startup check](../docs/GRAPHICAL_STARTUP_TEST.md). Select
+New builds open the graphical app with session-only account import/manual
+entry and an initial catalogue. Live account setup still needs its
+[Vita check](../docs/ACCOUNT_SETUP_TEST.md); see the
+[setup guide](../docs/ACCOUNT_SETUP.md) and
+[startup check](../docs/GRAPHICAL_STARTUP_TEST.md). Stream integration follows
+in later release tickets. Select
 `-DPLUS_VITA_DIAGNOSTIC_APP=ON` to build the historical smoke/stream interface
 described below. Retain accepted stream artifacts separately.
 

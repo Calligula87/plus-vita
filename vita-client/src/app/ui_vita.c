@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "ui_vita.h"
 #include "app.h"
+#include "account_vita.h"
+#include "../platform/credential_ime.h"
 #include <debugScreen.h> /* SDK bitmap font fallback; no terminal initialization. */
 #include <psp2/ctrl.h>
 #include <psp2/display.h>
@@ -120,6 +122,7 @@ static int draw_character(UiDisplay *display, unsigned character, int x, int bas
 {
 	SceFontCharInfo info;
 	if(display->font && sceFontGetCharInfo(display->font, character, &info) == 0
+		&& (info.sfp26AdvanceH > 0 || info.bitmapWidth > 0)
 		&& info.bitmapWidth <= 128 && info.bitmapHeight <= 128)
 	{
 		memset(display->glyph, 0, sizeof(display->glyph));
@@ -144,22 +147,43 @@ static int draw_character(UiDisplay *display, unsigned character, int x, int bas
 	if(character > 127) character = '?';
 	int scale = size / 8;
 	if(scale < 1) scale = 1;
+	int horizontal_scale = size / 12;
+	if(horizontal_scale < 1) horizontal_scale = 1;
 	const unsigned char *glyph = font->glyphs + character * 8;
 	for(int row = 0; row < 8; row++)
 		for(int col = 0; col < 8; col++)
-			if(glyph[row] & (0x80u >> col)) rectangle(display, x + col * scale, baseline - 8 * scale + row * scale, scale, scale, color);
-	return 8 * scale;
+			if(glyph[row] & (0x80u >> col)) rectangle(display, x + col * horizontal_scale,
+				baseline - 8 * scale + row * scale, horizontal_scale, scale, color);
+	return 8 * horizontal_scale;
 }
 
 static void text(UiDisplay *display, const char *value, int x, int y, int size, int max_width, uint32_t color)
 {
 	int pen = x;
 	if(!value) return;
-	for(const unsigned char *p = (const unsigned char *)value; *p; p++)
+	const unsigned char *p = (const unsigned char *)value;
+	while(*p)
 	{
-		if(*p == '\n') { pen = x; y += size + 10; continue; }
+		unsigned character = *p++;
+		if(character >= 0x80)
+		{
+			unsigned following = character >= 0xc2 && character <= 0xdf ? 1
+				: character >= 0xe0 && character <= 0xef ? 2 : character >= 0xf0 && character <= 0xf4 ? 3 : 0;
+			unsigned decoded = character & (following == 1 ? 0x1fu : following == 2 ? 0x0fu : 0x07u);
+			bool valid = following != 0;
+			for(unsigned i = 0; valid && i < following; i++)
+			{
+				if((p[i] & 0xc0u) != 0x80u) valid = false;
+				else decoded = (decoded << 6) | (p[i] & 0x3fu);
+			}
+			unsigned minimum = following == 1 ? 0x80 : following == 2 ? 0x800 : 0x10000;
+			valid = valid && decoded >= minimum && decoded <= 0x10ffff && !(decoded >= 0xd800 && decoded <= 0xdfff);
+			if(valid) { character = decoded; p += following; }
+			else character = '?';
+		}
+		if(character == '\n') { pen = x; y += size + 10; continue; }
 		if(pen + size > x + max_width) { pen = x; y += size + 10; }
-		pen += draw_character(display, *p, pen, y, size, color);
+		pen += draw_character(display, character, pen, y, size, color);
 	}
 }
 
@@ -169,7 +193,7 @@ static bool draw(UiDisplay *display, const PlusVitaAppView *view)
 		rectangle(display, 0, y, WIDTH, 1, RGB(12 + y / 60, 17 + y / 45, 29 + y / 32));
 	rectangle(display, 0, 0, WIDTH, 4, RGB(103, 228, 181));
 	text(display, "plus vita", 64, 52, 24, 400, RGB(236, 244, 250));
-	text(display, "STARTUP PREVIEW", 728, 49, 14, 200, RGB(145, 164, 185));
+	text(display, "DEVELOPMENT BUILD", 712, 49, 14, 220, RGB(145, 164, 185));
 	text(display, view->subtitle, 64, 114, 16, 832, RGB(103, 228, 181));
 	text(display, view->title, 64, 164, 36, 832, RGB(243, 247, 252));
 	text(display, view->body, 64, 216, 20, view->screen == PLUS_VITA_APP_WELCOME ? 520 : 832, RGB(162, 180, 201));
@@ -204,12 +228,25 @@ static bool draw(UiDisplay *display, const PlusVitaAppView *view)
 	return true;
 }
 
+static void queue_effect(PlusVitaAppEffect *pending, PlusVitaAppEffect effect)
+{
+	if(effect.kind != PLUS_VITA_EFFECT_NONE)
+	{
+		plus_vita_credential_clear(&pending->credential);
+		*pending = effect;
+	}
+	plus_vita_credential_clear(&effect.credential);
+}
+
 int plus_vita_app_run(void)
 {
 	UiDisplay *display = calloc(1, sizeof(*display));
 	PlusVitaApp *app = plus_vita_app_create();
-	if(!display || !app) { free(display); plus_vita_app_destroy(app); return 1; }
-	if(!display_open(display)) { free(display); plus_vita_app_destroy(app); return 1; }
+	PlusVitaAccount *account = plus_vita_account_create();
+	if(!display || !app || !account)
+	{ free(display); plus_vita_app_destroy(app); plus_vita_account_close(account); return 1; }
+	if(!display_open(display))
+	{ free(display); plus_vita_app_destroy(app); plus_vita_account_close(account); return 1; }
 	SceCtrlPadInputMode previous_mode = SCE_CTRL_MODE_DIGITAL;
 	bool restore_mode = sceCtrlGetSamplingMode(&previous_mode) == 0;
 	sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
@@ -267,22 +304,64 @@ int plus_vita_app_run(void)
 		}
 		if(has_event)
 		{
+			uint64_t previous_operation = plus_vita_app_view(app).operation;
 			PlusVitaAppEffect effect = plus_vita_app_dispatch(app, event);
-			if(effect.kind != PLUS_VITA_EFFECT_NONE) pending = effect;
+			if(previous_operation && plus_vita_app_view(app).operation != previous_operation)
+				plus_vita_account_cancel(account);
+			queue_effect(&pending, effect);
+			plus_vita_credential_clear(&effect.credential);
 			dirty = true;
 		}
-		/* No network or storage work in this startup slice. Service results use
-		 * the same correlated event seam when account setup is connected. */
-		else if(pending.kind == PLUS_VITA_EFFECT_PREPARE_SETUP)
+		else if(pending.kind != PLUS_VITA_EFFECT_NONE)
 		{
-			plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_SETUP_READY, .operation = pending.operation });
+			PlusVitaAppEffect effect = pending;
+			plus_vita_credential_clear(&pending.credential);
 			pending.kind = PLUS_VITA_EFFECT_NONE;
+			if(effect.operation && effect.operation == plus_vita_app_view(app).operation)
+			{
+				if(effect.kind == PLUS_VITA_EFFECT_PREPARE_SETUP)
+					plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_SETUP_READY, .operation = effect.operation });
+				else if(effect.kind == PLUS_VITA_EFFECT_ENTER_TOKEN)
+				{
+					PlusVitaCredential credential;
+					PlusVitaCredentialImeResult keyboard;
+					plus_vita_credential_ime_read_masked(&credential, &keyboard);
+					PlusVitaAppResult status = !keyboard.initialized ? PLUS_VITA_RESULT_INPUT_ERROR
+						: !keyboard.accepted ? PLUS_VITA_RESULT_CANCELLED : PLUS_VITA_RESULT_OK;
+					queue_effect(&pending, plus_vita_app_dispatch(app, (PlusVitaAppEvent){
+						.kind = PLUS_VITA_EVENT_TOKEN_ENTERED, .operation = effect.operation, .status = status,
+						.data = credential.value, .data_size = credential.length }));
+					plus_vita_credential_clear(&credential);
+					/* The keyboard consumed these presses; do not replay Enter/Cancel. */
+					SceCtrlData after_keyboard = { 0 };
+					if(sceCtrlPeekBufferPositive(0, &after_keyboard, 1) > 0) previous_buttons = after_keyboard.buttons;
+					previous_direction = 0;
+					touched = true;
+				}
+				else if(!plus_vita_account_start(account, &effect))
+				{
+					PlusVitaAppEventKind kind = effect.kind == PLUS_VITA_EFFECT_READ_IMPORT ? PLUS_VITA_EVENT_IMPORT_READ
+						: effect.kind == PLUS_VITA_EFFECT_REMOVE_IMPORT ? PLUS_VITA_EVENT_IMPORT_REMOVED : PLUS_VITA_EVENT_AUTHORIZED;
+					queue_effect(&pending, plus_vita_app_dispatch(app, (PlusVitaAppEvent){
+						.kind = kind, .operation = effect.operation, .status = PLUS_VITA_RESULT_BUSY }));
+				}
+			}
+			plus_vita_credential_clear(&effect.credential);
+			dirty = true;
+		}
+		PlusVitaAppEvent service_result;
+		if(plus_vita_account_poll(account, &service_result))
+		{
+			queue_effect(&pending, plus_vita_app_dispatch(app, service_result));
+			plus_vita_account_release_result(account);
 			dirty = true;
 		}
 		sceDisplayWaitVblankStart();
 	}
 	if(restore_touch) sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, previous_touch);
 	if(restore_mode) sceCtrlSetSamplingMode(previous_mode);
+	plus_vita_credential_clear(&pending.credential);
+	plus_vita_account_close(account);
 	plus_vita_app_destroy(app);
 	if(display_close(display)) free(display);
 	/* On failed scanout restoration leave its buffers alive until process exit. */

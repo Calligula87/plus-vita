@@ -47,7 +47,8 @@ credential files or personal data in a test report.
 4. Tap visible controls. Taps outside their bounds should do nothing; holding
    a touch must not activate another screen repeatedly. Check screen edges.
 5. Open Get started. Verify the preparation/setup guide and cancel/back flow.
-   The preview accurately states that account import is not included yet.
+   The original #14 preview does not import accounts. For the later #15
+   candidate, continue with the [account setup check](ACCOUNT_SETUP_TEST.md).
 6. Select Exit or press Circle on welcome. Stay here is selected first. Circle
    cancels; explicitly choosing Exit closes the app. Reopen and repeat.
 7. Check text and buttons for clipping, overlap and flicker, and check that the

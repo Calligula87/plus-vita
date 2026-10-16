@@ -57,7 +57,7 @@ int main(void)
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_SETUP_READY, .operation = cancelled_operation });
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_PREPARING);
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_SETUP_READY, .operation = effect.operation });
-	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_SETUP);
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_SETUP_GUIDE);
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_BACK });
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_WELCOME);
 	plus_vita_app_destroy(app);

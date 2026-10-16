@@ -8,6 +8,7 @@ on:
       - "external/pylux"
       - "vita-client/**"
       - "tools/test-app-workflow.sh"
+      - "tools/test-app-account-integration.sh"
   pull_request:
     paths:
       - ".github/workflows/vita-smoke.yml"
@@ -15,6 +16,7 @@ on:
       - "external/pylux"
       - "vita-client/**"
       - "tools/test-app-workflow.sh"
+      - "tools/test-app-account-integration.sh"
   workflow_dispatch:
 
 jobs:
@@ -22,8 +24,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Test native application workflow
         run: sh tools/test-app-workflow.sh
+      - name: Test native account worker with simulated Sony responses
+        run: sh tools/test-app-account-integration.sh
 
   build:
     runs-on: ubuntu-latest

@@ -26,11 +26,15 @@ typedef struct display_buffer_t
 	SceGxmSyncObject *sync;
 	SceGxmColorSurface surface;
 	SceUID uid;
+	bool mapped;
 } DisplayBuffer;
 
 static DisplayBuffer display_buffers[DISPLAY_BUFFER_COUNT];
 static unsigned int front_buffer;
 static unsigned int back_buffer;
+static SceDisplayFrameBuf saved_frame;
+static bool display_visible, display_unusable;
+static bool display_term(void);
 
 static void secure_clear(void *value, size_t size)
 {
@@ -60,10 +64,18 @@ static void display_callback(const void *callback_data)
 		.height = DISPLAY_HEIGHT,
 	};
 	sceDisplaySetFrameBuf(&frame, SCE_DISPLAY_SETBUF_NEXTFRAME);
+	display_visible = true;
 }
 
 static bool display_init(void)
 {
+	if(display_unusable) return false;
+	front_buffer = 0;
+	back_buffer = 1;
+	display_visible = false;
+	memset(&saved_frame, 0, sizeof(saved_frame));
+	saved_frame.size = sizeof(saved_frame);
+	if(sceDisplayGetFrameBuf(&saved_frame, SCE_DISPLAY_SETBUF_NEXTFRAME) < 0) saved_frame.base = NULL;
 	SceGxmInitializeParams params = {
 		.flags = 0,
 		.displayQueueMaxPendingCount = 1,
@@ -80,19 +92,22 @@ static bool display_init(void)
 		display_buffers[i].uid = sceKernelAllocMemBlock("plus_vita_ime",
 			SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, allocation_size, NULL);
 		if(display_buffers[i].uid < 0
-			|| sceKernelGetMemBlockBase(display_buffers[i].uid,
-				&display_buffers[i].data) < 0
+			|| sceKernelGetMemBlockBase(display_buffers[i].uid, &display_buffers[i].data) < 0
 			|| sceGxmMapMemory(display_buffers[i].data, allocation_size,
-				SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE) < 0
-			|| sceGxmColorSurfaceInit(&display_buffers[i].surface,
+				SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE) < 0) goto error;
+		display_buffers[i].mapped = true;
+		if(sceGxmColorSurfaceInit(&display_buffers[i].surface,
 				SCE_GXM_COLOR_FORMAT_A8B8G8R8, SCE_GXM_COLOR_SURFACE_LINEAR,
 				SCE_GXM_COLOR_SURFACE_SCALE_NONE, SCE_GXM_OUTPUT_REGISTER_SIZE_32BIT,
 				DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_STRIDE,
 				display_buffers[i].data) < 0
 			|| sceGxmSyncObjectCreate(&display_buffers[i].sync) < 0)
-			return false;
+			goto error;
 	}
 	return true;
+error:
+	display_term();
+	return false;
 }
 
 static void display_swap(void)
@@ -105,28 +120,37 @@ static void display_swap(void)
 	back_buffer = (back_buffer + 1) % DISPLAY_BUFFER_COUNT;
 }
 
-static void display_term(void)
+static bool display_term(void)
 {
 	sceGxmDisplayQueueFinish();
+	if(display_visible && (sceDisplaySetFrameBuf(saved_frame.base ? &saved_frame : NULL,
+		SCE_DISPLAY_SETBUF_NEXTFRAME) < 0 || sceDisplayWaitSetFrameBuf() < 0))
+	{
+		/* Keep active buffers alive rather than free memory still scanned out. */
+		display_unusable = true;
+		return false;
+	}
 	for(unsigned int i = 0; i < DISPLAY_BUFFER_COUNT; i++)
 	{
 		if(display_buffers[i].sync)
 			sceGxmSyncObjectDestroy(display_buffers[i].sync);
-		if(display_buffers[i].data)
+		if(display_buffers[i].mapped)
 			sceGxmUnmapMemory(display_buffers[i].data);
 		if(display_buffers[i].uid >= 0)
 			sceKernelFreeMemBlock(display_buffers[i].uid);
 	}
 	sceGxmTerminate();
 	memset(display_buffers, 0, sizeof(display_buffers));
+	return true;
 }
 
-void plus_vita_credential_ime_read(PlusVitaCredential *credential,
-	PlusVitaCredentialImeResult *result)
+static void credential_ime_read(PlusVitaCredential *credential,
+	PlusVitaCredentialImeResult *result, bool masked)
 {
 	static const uint16_t title[] = {
 		'N','P','S','S','O',' ','v','i','s','i','b','l','e',' ','-',' ','n','o','t',' ','s','a','v','e','d',0
 	};
+	static const uint16_t masked_title[] = { 'E','n','t','e','r',' ','N','P','S','S','O',0 };
 	uint16_t input[SCE_IME_DIALOG_MAX_TEXT_LENGTH + 1] = { 0 };
 	bool app_initialized = false;
 	bool gxm_initialized = false;
@@ -155,9 +179,9 @@ void plus_vita_credential_ime_read(PlusVitaCredential *credential,
 	param.type = SCE_IME_TYPE_BASIC_LATIN;
 	param.option = SCE_IME_OPTION_NO_AUTO_CAPITALIZATION | SCE_IME_OPTION_NO_ASSISTANCE;
 	param.dialogMode = SCE_IME_DIALOG_DIALOG_MODE_WITH_CANCEL;
-	param.textBoxMode = SCE_IME_DIALOG_TEXTBOX_MODE_DEFAULT;
-	param.title = title;
-	param.maxTextLength = PLUS_VITA_CREDENTIAL_MAX;
+	param.textBoxMode = masked ? SCE_IME_DIALOG_TEXTBOX_MODE_PASSWORD : SCE_IME_DIALOG_TEXTBOX_MODE_DEFAULT;
+	param.title = masked ? masked_title : title;
+	param.maxTextLength = masked ? 64 : PLUS_VITA_CREDENTIAL_MAX;
 	param.initialText = NULL;
 	param.inputTextBuffer = input;
 	if(sceImeDialogInit(&param) < 0)
@@ -205,13 +229,22 @@ void plus_vita_credential_ime_read(PlusVitaCredential *credential,
 cleanup:
 	if(dialog_initialized)
 		sceImeDialogTerm();
+	if(gxm_initialized && !display_term()) result->validated = false;
 	if(!result->validated)
 		plus_vita_credential_clear(credential);
 	result->credential_wiped = plus_vita_credential_is_clear(credential);
 	secure_clear(input, sizeof(input));
 	result->input_wiped = memory_is_clear(input, sizeof(input));
-	if(gxm_initialized)
-		display_term();
 	if(app_initialized)
 		sceAppUtilShutdown();
+}
+
+void plus_vita_credential_ime_read(PlusVitaCredential *credential, PlusVitaCredentialImeResult *result)
+{
+	credential_ime_read(credential, result, false);
+}
+
+void plus_vita_credential_ime_read_masked(PlusVitaCredential *credential, PlusVitaCredentialImeResult *result)
+{
+	credential_ime_read(credential, result, true);
 }

@@ -20,5 +20,7 @@ typedef struct plus_vita_credential_ime_result_t
 
 void plus_vita_credential_ime_read(PlusVitaCredential *credential,
 	PlusVitaCredentialImeResult *result);
+void plus_vita_credential_ime_read_masked(PlusVitaCredential *credential,
+	PlusVitaCredentialImeResult *result);
 
 #endif

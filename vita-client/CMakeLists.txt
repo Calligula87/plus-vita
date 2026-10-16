@@ -24,7 +24,7 @@ if(PLUS_VITA_DIAGNOSTIC_APP)
   set(PLUS_VITA_ENTRY_SOURCE src/main.c)
 else()
   set(VITA_APP_NAME "Plus Vita")
-  set(PLUS_VITA_ENTRY_SOURCE src/app/main.c src/app/app.c src/app/ui_vita.c)
+  set(PLUS_VITA_ENTRY_SOURCE src/app/main.c src/app/app.c src/app/ui_vita.c src/app/account_vita.c)
 endif()
 set(VITA_TITLEID "PLVT00001")
 set(VITA_VERSION "00.01")
@@ -480,7 +480,7 @@ file(WRITE "${PLUS_VITA_FEEDBACK_SOURCE}" "${PLUS_VITA_FEEDBACK_TEXT}")
 set(PLUS_VITA_CURL_HTTP_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/generated/curl_http_vita.c")
 file(READ "${PYLUX_ROOT}/lib/src/curl_http.c" PLUS_VITA_CURL_HTTP_TEXT)
 string(REPLACE "#include \"curl_http.h\""
-  "#include \"curl_http.h\"\n#include \"curl_resolve.h\""
+  "#include \"curl_http.h\"\n#include \"curl_resolve.h\"\n#include \"request_cancel.h\""
   PLUS_VITA_CURL_HTTP_TEXT "${PLUS_VITA_CURL_HTTP_TEXT}")
 string(REPLACE "GrowBuffer header_buf = { 0 };"
   "GrowBuffer header_buf = { 0 };\n\tstruct curl_slist *resolve_list = NULL;"
@@ -498,6 +498,8 @@ set(PLUS_VITA_CURL_URL_NEW [=[
 		err = CHIAKI_ERR_NETWORK;
 		goto cleanup;
 	}
+	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+	curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, plus_vita_request_progress);
 ]=])
 string(FIND "${PLUS_VITA_CURL_HTTP_TEXT}" "${PLUS_VITA_CURL_URL_OLD}" PLUS_VITA_CURL_URL_POS)
 if(PLUS_VITA_CURL_URL_POS EQUAL -1)
@@ -553,6 +555,7 @@ add_executable(${PROJECT_NAME}
   "${NANOPB_ROOT}/pb_decode.c"
   "${NANOPB_ROOT}/pb_encode.c"
   src/platform/random.c
+  src/platform/request_cancel.c
   src/platform/curl_resolve.c
   src/platform/diagnostic_log.c
   src/platform/latency_stats.c
