@@ -105,6 +105,55 @@ static void drive(PlusVitaApp *app, PlusVitaAccount *account, PlusVitaAppEffect 
 
 int main(void)
 {
+	/* Cancel before delivering the read result: consumption must still finish. */
+	import_file();
+	PlusVitaApp *cancelled_app = plus_vita_app_create();
+	PlusVitaAccount *cancelled_account = plus_vita_account_create();
+	PlusVitaAppEffect read = open_import(cancelled_app);
+	assert(plus_vita_account_start(cancelled_account, &read));
+	plus_vita_app_dispatch(cancelled_app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_BACK });
+	plus_vita_account_cancel(cancelled_account);
+	PlusVitaAppEvent consumed;
+	bool read_done = false;
+	for(unsigned i = 0; i < 5000 && !read_done; i++) {
+		read_done = plus_vita_account_poll(cancelled_account, &consumed);
+		if(!read_done) pause_poll();
+	}
+	assert(read_done);
+	assert(access("ux0:data/plus-vita-auth.json", F_OK) != 0 && errno == ENOENT);
+	assert(plus_vita_app_dispatch(cancelled_app, consumed).kind == PLUS_VITA_EFFECT_NONE);
+	assert(plus_vita_app_view(cancelled_app).screen == PLUS_VITA_APP_WELCOME);
+	assert(!atomic_load(&server_entered));
+	plus_vita_account_release_result(cancelled_account);
+	assert(plus_vita_account_close(cancelled_account));
+	plus_vita_app_destroy(cancelled_app);
+
+	/* A nonempty directory at the import path cannot be consumed/removed.
+	 * Even after cancellation the user must see the cleanup failure. */
+	assert(mkdir("ux0:data/plus-vita-auth.json", 0700) == 0);
+	FILE *obstruction = fopen("ux0:data/plus-vita-auth.json/keep", "wb");
+	assert(obstruction && fclose(obstruction) == 0);
+	cancelled_app = plus_vita_app_create();
+	cancelled_account = plus_vita_account_create();
+	read = open_import(cancelled_app);
+	assert(plus_vita_account_start(cancelled_account, &read));
+	plus_vita_app_dispatch(cancelled_app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_BACK });
+	read_done = false;
+	for(unsigned i = 0; i < 5000 && !read_done; i++) {
+		read_done = plus_vita_account_poll(cancelled_account, &consumed);
+		if(!read_done) pause_poll();
+	}
+	assert(read_done && consumed.status == PLUS_VITA_RESULT_CLEANUP_ERROR);
+	assert(plus_vita_app_dispatch(cancelled_app, consumed).kind == PLUS_VITA_EFFECT_NONE);
+	assert(plus_vita_app_view(cancelled_app).screen == PLUS_VITA_APP_ERROR);
+	assert(strstr(plus_vita_app_view(cancelled_app).body, "Remove it with VitaShell"));
+	assert(!atomic_load(&server_entered));
+	plus_vita_account_release_result(cancelled_account);
+	assert(plus_vita_account_close(cancelled_account));
+	plus_vita_app_destroy(cancelled_app);
+	assert(remove("ux0:data/plus-vita-auth.json/keep") == 0);
+	assert(rmdir("ux0:data/plus-vita-auth.json") == 0);
+
 	import_file();
 	PlusVitaApp *app = plus_vita_app_create();
 	PlusVitaAccount *account = plus_vita_account_create();

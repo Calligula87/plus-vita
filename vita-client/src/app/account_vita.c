@@ -36,6 +36,14 @@ static void read_import(PlusVitaAccount *account)
 	size_t size = fread(account->file, 1, sizeof(account->file), file);
 	bool failed = ferror(file) != 0;
 	if(fclose(file) != 0) failed = true;
+	/* Consumption and deletion are one worker operation. UI cancellation must
+	 * never strand a file that this worker has already opened and consumed. */
+	if(remove(IMPORT_FILE) != 0 && errno != ENOENT)
+	{
+		account->result.status = PLUS_VITA_RESULT_CLEANUP_ERROR;
+		clear_bytes(account->file, sizeof(account->file));
+		return;
+	}
 	account->result.status = failed ? PLUS_VITA_RESULT_STORAGE_ERROR : PLUS_VITA_RESULT_OK;
 	account->result.data = account->file;
 	account->result.data_size = size;

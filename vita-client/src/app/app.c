@@ -199,6 +199,13 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	PlusVitaAppView *view = &app->view;
 	PlusVitaAppEffect effect = { .kind = PLUS_VITA_EFFECT_NONE };
 	if(view->screen == PLUS_VITA_APP_CLOSED) return effect;
+	/* Cleanup is a storage obligation even after sign-in ownership is cancelled.
+	 * Report failure without ever accepting the cancelled account result. */
+	if(event.kind == PLUS_VITA_EVENT_IMPORT_READ && event.status == PLUS_VITA_RESULT_CLEANUP_ERROR)
+	{
+		account_error(app, "The app could not remove the imported token file.\nSign-in was not attempted. Remove it with VitaShell and try again.");
+		return effect;
+	}
 	if(event.kind == PLUS_VITA_EVENT_IMPORT_READ || event.kind == PLUS_VITA_EVENT_IMPORT_REMOVED
 		|| event.kind == PLUS_VITA_EVENT_AUTHORIZED || event.kind == PLUS_VITA_EVENT_TOKEN_ENTERED)
 	{
