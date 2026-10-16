@@ -5,8 +5,10 @@ and [#8](https://github.com/Calligula87/plus-vita/issues/8), 2026-10-14.
 C is accepted after its hardware comparison and the maintainer's positive
 response/quality/control/restart confirmation. Isolated L is validated for
 bounded diagnostics with no reported regression and little perceived difference.
-The next experiment is [combined D](LATENCY_COMBINED_TEST.md). Keep C, original
-B/L and older accepted S packages available; D requires its own acceptance.
+The later [combined D comparison](LATENCY_COMBINED_RESULT.md) also passed:
+D is the accepted working build and C is the immediate fallback. Keep original
+B/L and older accepted S packages available. The isolated procedure below
+records the completed comparison order, rather than another required test.
 
 Staging status, 2026-10-15: C, L, original B and accepted rollback S are uploaded
 to `ux0:data/` under the filenames below. All four SHA256 hashes match downloaded
@@ -25,9 +27,10 @@ before starting another session. Keep credentials and raw logs private.
 | Role | Filename in `ux0:data/` | Build on result screen/log |
 | --- | --- | --- |
 | B: original diagnostic baseline | `plus-vita-latency-baseline-1.vpk` | `live-720p-refs5-latency-baseline-1` |
-| C: accepted independent-input build | `plus-vita-input-worker-1.vpk` | `live-720p-refs5-input-worker-1` |
-| L: deferred logging, for a later separate comparison | `plus-vita-deferred-log-1.vpk` | `live-720p-refs5-deferred-log-1` |
+| C: accepted independent-input fallback | `plus-vita-input-worker-1.vpk` | `live-720p-refs5-input-worker-1` |
+| L: validated isolated deferred logging | `plus-vita-deferred-log-1.vpk` | `live-720p-refs5-deferred-log-1` |
 | S: accepted rollback | `plus-vita-video-reorder-1.vpk` | `live-720p-refs5-video-reorder-1` |
+| D: accepted combined working build | `plus-vita-input-worker-deferred-log-1.vpk` | `live-720p-refs5-input-worker-deferred-log-1` |
 
 1. B's [baseline checks](LATENCY_BASELINE_FOLLOWUP_RESULT.md) are complete:
    the maintainer accepted 7m46.418s and subsequently confirmed all remaining
@@ -40,13 +43,15 @@ before starting another session. Keep credentials and raw logs private.
 3. Retrieve `ux0:data/plus-vita-allocation.log` after each run and report build,
    duration, responsiveness and any regression. Tell the agent when a log is
    ready; it can retrieve it over the authorized FTP connection.
-4. **Next: install L and compare with original B**, using the same scene,
-   ten repeated response actions, all controls/releases, picture/sound, 8–10
-   minutes from the first live picture and clean stop/restart. L retains B's
-   input sampling; it does not include the accepted C worker. Check sink
-   drop/truncation/I/O counters, sound continuity and repeated sessions. Keep
-   C available to restore after this separate experiment. Do not combine C/L
-   before evaluating L. Follow [the full test plan](LATENCY_TEST_PLAN.md).
+4. **Completed: L compared with original B**. L retained B's input owner;
+   it did not include C. The maintainer accepted 5m02.205s as a revision of the
+   planned 8–10 minutes and confirmed everything worked with little noticeable
+   difference, including controls/releases, picture/sound and stop/restart.
+   Diagnostic loss, persistence and stream counters were checked separately;
+   see [L result](LATENCY_DEFERRED_LOG_RESULT.md).
+5. D subsequently retained C's response/quality and L's diagnostic benefits;
+   its 6m59.375s duration was explicitly accepted. No further hardware test is
+   required for this completed phase. See [the full test plan](LATENCY_TEST_PLAN.md).
 
 ## What changes in C
 
@@ -106,11 +111,11 @@ the result screen even if an earlier `io_ok=1` was written to the file.
 
 Input/video/protocol/FEC/reorder/display/audio policy and mappings stay at the
 baseline. Successful host tests and packaging do not prove a response gain or
-hardware stability; tasks #3, #6, #7 and #10 remain the human/acceptance gates.
+hardware stability; tasks #3, #6, #7 and #10 supplied those later human gates.
 
 Host coverage includes the real production decoder stalled at `sceAvcdecDecode`
 while input reaches the real sender and its terminal stop/neutral completes.
 A separate fixture blocks the real synchronous diagnostic writer, injects a
 transport error that logs through the real sink, and checks sender/input join
 without releasing disk first. The full Vita preview/native transport and touch
-restoration still need the hardware stop/disconnect/restart checks.
+restoration were subsequently checked through the hardware comparisons.

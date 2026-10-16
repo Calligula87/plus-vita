@@ -2,7 +2,14 @@
 
 Canonical specification: [#1](https://github.com/Calligula87/plus-vita/issues/1).
 Tasks are GitHub sub-issues with native dependencies; this is a local status
-snapshot dated 2026-10-14, not a second issue tracker.
+snapshot dated 2026-10-15, not a second issue tracker.
+
+Final status: **#2–#12 complete; scoped parent #1 complete. D is accepted** after
+the maintainer's combined comparison. Response remained at least as good as C,
+everything worked including restart, and the recorded 6m59.375s duration was
+explicitly accepted. See [combined result](LATENCY_COMBINED_RESULT.md). C remains
+the immediate fallback, with B/L/S preserved. Local timings support the accepted
+qualitative improvement; numerical physical input response remains unmeasured.
 
 Delivery update, 2026-10-15: **#5 input isolation**, **#8 separate deferred
 logging** and **#9 audio investigation** are implemented/reviewed locally.
@@ -23,8 +30,8 @@ with C's 7m18.286s duration explicitly accepted. #6/#7 are complete and C is the
 new accepted working input build. #10 subsequently validated isolated logging:
 zero diagnostic loss, lower producer cost, everything worked with little
 noticeable difference, and recorded 5m02.205s duration explicitly accepted.
-#11 prepares the combined candidate; its own human gate will follow. #1 stays
-open. See [delivery/review](LATENCY_IMPLEMENTATION_RESULT.md),
+#11 delivered the combined candidate; #12's own hardware gate subsequently
+passed, completing the scoped parent. See [delivery/review](LATENCY_IMPLEMENTATION_RESULT.md),
 [candidate procedure](LATENCY_CANDIDATE_TEST.md), and
 [audio investigation](AUDIO_QUEUE_INVESTIGATION.md).
 
@@ -40,14 +47,14 @@ open. See [delivery/review](LATENCY_IMPLEMENTATION_RESULT.md),
 | [#9 Investigate existing audio queue backlog](https://github.com/Calligula87/plus-vita/issues/9) | Scoped investigation complete; issue closed | Hardware cause uncertain; playback policy unchanged. |
 | [#10 Validate deferred logging on Vita](https://github.com/Calligula87/plus-vita/issues/10) | Complete; isolated logger validated | Zero diagnostic loss; lower producer costs; no reported quality/control/restart regression; explicit duration revision. |
 | [#11 Prepare combined input and logging candidate](https://github.com/Calligula87/plus-vita/issues/11) | Software delivered; complete | Joint memory/thread and full regressions passed; Release/reviews passed; D uploaded/readback verified. |
-| [#12 Validate combined build on Vita](https://github.com/Calligula87/plus-vita/issues/12) | Next human test, unblocked | Install D, compare with accepted C and record joint behavior/persistence; C remains fallback. |
+| [#12 Validate combined build on Vita](https://github.com/Calligula87/plus-vita/issues/12) | Complete; D accepted | Response at least as good as C, all quality/control/restart checks good; zero diagnostic loss; explicit 6m59.375s duration revision. |
 
 Readiness labels describe who can execute the defined task, not whether a
 blocked task can be started immediately. No assignee was invented.
 Every task has category `enhancement` and exactly one triage state. The input
 and logging candidates are separate; do not combine their first comparisons.
 
-Before the next test, use the [test plan](LATENCY_TEST_PLAN.md) and
+For reproduction, use the [test plan](LATENCY_TEST_PLAN.md) and
 [combined procedure](LATENCY_COMBINED_TEST.md). The
 [local spec snapshot](LATENCY_SPEC.md) includes the 28 user stories and testing
 decisions; [ADR 0001](adr/0001-preserve-stream-baseline-during-input-latency-work.md)
@@ -57,5 +64,6 @@ the same artifacts as before this documentation work.
 The [baseline follow-up](LATENCY_BASELINE_FOLLOWUP_RESULT.md),
 [accepted input result](LATENCY_INPUT_WORKER_RESULT.md) and
 [isolated logger result](LATENCY_DEFERRED_LOG_RESULT.md) record the hardware
-evidence and explicit duration revisions. Those component decisions do not
-establish combined hardware acceptance; #12 owns that next gate.
+evidence and explicit duration revisions. Those component decisions alone did
+not establish combined hardware acceptance; the later
+[D result](LATENCY_COMBINED_RESULT.md) completes that gate separately.

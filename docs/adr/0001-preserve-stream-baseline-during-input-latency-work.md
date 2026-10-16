@@ -104,3 +104,24 @@ and exercise both actual boundaries together before packaging. Require a new
 combined Vita comparison against C before acceptance; separate component
 success is insufficient. Video/FEC/reorder/display/audio/quality policies,
 fallback artifacts and privacy limits continue unchanged.
+
+## Combined hardware acceptance, 2026-10-15
+
+Accept D, `live-720p-refs5-input-worker-deferred-log-1`, as the working build.
+The maintainer reports response at least as good as accepted C and confirms
+picture, sound, controls/releases and stop/restart remained good. They explicitly
+accept the recorded 6m59.375s live duration for this comparison. All 2381 retained
+diagnostic records persisted without loss, input polling averaged 4ms with a
+7.031ms maximum gap, and neutral/join/shutdown completed without input failure.
+The tested VPK SHA256 is
+`9A05307CB0E7DDBE2BC80D420A694A95B874E03CD8CEDE837E1C5884D0C83FC8`.
+See [combined result](../LATENCY_COMBINED_RESULT.md).
+
+This completes the scoped input/logging phase, following C's perceived response
+improvement and L's isolated validation. Retain C as the immediate fallback and
+preserve B/L/S. Both feature flags reproduce D; defaults stay OFF. No video,
+FEC/reorder, display, audio, quality or mapping policy changes with acceptance.
+Numerical physical response remains unmeasured; quieter reception confounds
+presentation gains. Audio residence still builds after late arrivals, so the
+lower whole-run mean does not establish an audio fix. Longer-session behavior
+and native picture age remain uncertainties, not implied tested outcomes.

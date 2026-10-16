@@ -1,8 +1,8 @@
 # Latency software delivery
 
-2026-10-15. Preparation for GitHub #5, #8 and #9; physical acceptance remains
-in #3, #6, #7 and #10. The user confirmed the inspected diagnostic run retained
-quality/stability while input delay remained noticeable.
+2026-10-15. Software preparation for GitHub #5, #8 and #9, followed by completed
+physical gates #3/#6/#7/#10/#12. [Combined D is now accepted](LATENCY_COMBINED_RESULT.md).
+The sections below retain the delivery and review evidence leading to acceptance.
 
 Changes are committed on the existing `main` branch: `82df29a` records the
 diagnostic foundation, `fda4046` implements the isolated candidates and audio
@@ -34,7 +34,8 @@ distinct clean subsequent baseline session. C subsequently passed its
 comparison: the maintainer reported better response, equivalent picture/sound/
 controls/releases/restart, and explicitly accepted its 7m18.286s duration.
 #6/#7 are complete; identified C is accepted with B/S retained. #10 logging-only
-L versus original B is next; the parent task remains open. See the
+L versus original B subsequently passed, then combined D passed #12, completing
+the scoped parent task. See the
 [C hardware result](LATENCY_INPUT_WORKER_RESULT.md) and ADR acceptance update.
 
 ## Automated validation
@@ -78,5 +79,23 @@ Initial review: **2 findings**, both resolved in `e299abb`:
   input and terminal shutdown.
 
 Follow-up Spec review: **0 remaining findings**. Full Vita preview, native
-touch restoration, repeated sessions and physical response/stability remain
-hardware gates. Standards: 0; Spec: 2 fixed, 0 remaining.
+touch restoration, repeated sessions and physical response/stability required
+the later hardware gates, which subsequently passed. Standards: 0; Spec: 2
+fixed, 0 remaining.
+
+## Final combined acceptance
+
+Combined implementation `5ff453b`, reviewed from `06a74ea`, passed the full
+available host suite, relevant isolated/joint thread checks, native Release and
+four-profile identity checks. Standards and Spec reviews each had zero findings.
+The identified D VPK was uploaded and read back with matching SHA256, then
+tested on Vita for 6m59.375s. The maintainer explicitly accepted that duration
+and confirmed response at least as good as C and everything worked, including
+picture/sound/controls/releases/stop/restart. All 2381 records persisted, with
+zero loss; no input/send failure occurred and shutdown completed cleanly.
+
+D is the accepted working package, C the immediate fallback. The
+[final result](LATENCY_COMBINED_RESULT.md) records hashes, local timings,
+reception confounds and the remaining audio buildup. The accepted phase does
+not claim numerical physical input response or a fixed audio backlog. Source
+defaults remain unchanged; acceptance requires no package change or new upload.

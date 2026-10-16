@@ -10,8 +10,9 @@ noticeable. The player cannot yet quantify that delay, and removing buffering
 without evidence risks losing the picture quality, audio and stability already
 achieved.
 
-The current implementation samples input in the same loop that decodes video
-and waits for display. That is a plausible contributor, not an established
+At the start of this work, the implementation sampled input in the same loop
+that decoded video and waited for display. That was a plausible contributor,
+not an established
 explanation for the entire input response latency.
 
 ## Solution
@@ -159,18 +160,29 @@ means 0.357–0.427ms and diagnostic write/flush mean/max 10.565/35.083ms across
 found. Existing audio residence averaged 230.748ms, versus 250.148ms in the
 previous accepted run; it is not a newly established regression.
 
-Source remains uncommitted. The full baseline duration, subjective quality and
-restart checks are unconfirmed; numerical input response latency is unmeasured.
-Analysis is complete for selecting the first software experiment, not for
-accepting a candidate. Independent input sampling and deferred logging are not
-implemented. The accepted reorder build remains the rollback. The rejected
-display-worker experiment is not being reopened.
+The scoped phase is complete. Independent input sampling and deferred logging
+are implemented, tested, reviewed and committed locally; commits have not been
+pushed automatically. Baseline B was accepted, C improved perceived response,
+L validated bounded diagnostics, and the separately identified combined D
+retained C's response/quality/control/restart experience. All 2381 D diagnostic
+records persisted without loss. D is the accepted working build; C is the
+immediate fallback and original B/L/S packages remain preserved. See
+[combined result](LATENCY_COMBINED_RESULT.md) for exact identities and evidence.
+
+The maintainer explicitly accepted each recorded comparison duration: B
+7m46.418s, C 7m18.286s, L 5m02.205s and D 6m59.375s. These are scoped revisions
+of the original 8–10 minute gate, not claims of longer runs. All requested
+picture/sound/control/release/stop/restart checks are complete. Numerical
+physical input response remains unmeasured; native picture age and the cause
+of variable audio backlog remain uncertain. Quieter reception in D confounds
+presentation/audio comparisons. No video/audio/quality policy was changed,
+and the rejected display-worker experiment was not reopened.
 
 Canonical specification and execution tasks are published in GitHub Issues.
 This document is a local snapshot. Supporting repository documents are
 `docs/LATENCY_TEST_PLAN.md`, `docs/LATENCY_BASELINE_TEST.md`, and ADR 0001;
-their new content is also uncommitted and should not be linked as published
-default-branch files until committed.
+their evidence and decisions are committed locally. Local document paths should
+not be presented as published default-branch files before those commits are pushed.
 
 Primary-source references inspected during planning:
 
@@ -184,17 +196,23 @@ for this client.
 
 ### Execution tasks
 
-- [x] [#2 Deliver diagnostic baseline and software validation](https://github.com/Calligula87/plus-vita/issues/2) — implemented locally and packaged; source uncommitted, hardware acceptance excluded.
-- [ ] [#3 Complete remaining diagnostic baseline checks](https://github.com/Calligula87/plus-vita/issues/3) — human acceptance checks remain; the first clean run has been analyzed.
+- [x] [#2 Deliver diagnostic baseline and software validation](https://github.com/Calligula87/plus-vita/issues/2) — implemented, tested, committed locally and packaged.
+- [x] [#3 Complete remaining diagnostic baseline checks](https://github.com/Calligula87/plus-vita/issues/3) — baseline accepted, including explicit duration revision and remaining checks.
 - [x] [#4 Analyze baseline delays and select the input experiment](https://github.com/Calligula87/plus-vita/issues/4) — available evidence analyzed; full hardware acceptance excluded.
-- [ ] [#5 Isolate input sampling and validate its lifecycle](https://github.com/Calligula87/plus-vita/issues/5) — first unblocked software task.
-- [ ] [#6 Compare independent input sampling on Vita](https://github.com/Calligula87/plus-vita/issues/6) — human comparison; blocked by #3 and #5.
-- [ ] [#7 Record candidate acceptance or rollback](https://github.com/Calligula87/plus-vita/issues/7) — blocked by #6.
-- [ ] [#8 Defer diagnostic file I/O outside streaming hot paths](https://github.com/Calligula87/plus-vita/issues/8) — separate unblocked software candidate.
-- [ ] [#9 Investigate existing audio queue backlog](https://github.com/Calligula87/plus-vita/issues/9) — unblocked investigation; no playback-policy changes.
-- [ ] [#10 Validate deferred logging on Vita](https://github.com/Calligula87/plus-vita/issues/10) — human comparison; blocked by #3 and #8.
+- [x] [#5 Isolate input sampling and validate its lifecycle](https://github.com/Calligula87/plus-vita/issues/5) — implemented, tested, reviewed and packaged.
+- [x] [#6 Compare independent input sampling on Vita](https://github.com/Calligula87/plus-vita/issues/6) — better perceived response, preserved quality/controls/restart; duration accepted.
+- [x] [#7 Record candidate acceptance or rollback](https://github.com/Calligula87/plus-vita/issues/7) — C accepted; fallback packages preserved.
+- [x] [#8 Defer diagnostic file I/O outside streaming hot paths](https://github.com/Calligula87/plus-vita/issues/8) — implemented, tested, reviewed and packaged separately.
+- [x] [#9 Investigate existing audio queue backlog](https://github.com/Calligula87/plus-vita/issues/9) — scoped investigation complete; hardware cause unresolved and playback policy unchanged.
+- [x] [#10 Validate deferred logging on Vita](https://github.com/Calligula87/plus-vita/issues/10) — L validated without diagnostic loss or reported regression; duration accepted.
+- [x] [#11 Prepare combined input and logging candidate](https://github.com/Calligula87/plus-vita/issues/11) — joint/full checks, two-axis review, native Release and verified FTP staging complete.
+- [x] [#12 Validate combined build on Vita](https://github.com/Calligula87/plus-vita/issues/12) — D accepted: response at least as good as C, everything worked, zero diagnostic loss; duration explicitly accepted.
 
 Native GitHub sub-issue/dependency relationships are canonical. Rejecting a
 candidate completes an experiment, not the parent's response-improvement goal;
 keep the parent open and record the next evidence/work unless the user changes
 that goal.
+
+Here the input improvement was accepted and retained by the combined build,
+so parent #1 completes this scoped phase. No additional mandatory test remains
+for that acceptance; further tuning would require a separate experiment.

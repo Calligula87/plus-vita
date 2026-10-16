@@ -1,5 +1,12 @@
 # Combined input-worker and deferred-log test
 
+Completed, 2026-10-15: **D accepted** after the identified 6m59.375s run and
+explicit maintainer duration revision. Response remained at least as good as C;
+picture/sound/controls/releases/stop/restart remained good. All 2381 diagnostic
+records persisted without loss. See the [final result](LATENCY_COMBINED_RESULT.md)
+for comparisons, reception confounds and remaining audio uncertainty. The
+procedure below is retained for reproduction; #12's human gate is complete.
+
 Software task [#11](https://github.com/Calligula87/plus-vita/issues/11), hardware
 gate [#12](https://github.com/Calligula87/plus-vita/issues/12). Original C is
 accepted for better perceived response without reported quality/control/restart
@@ -17,8 +24,8 @@ Release VPK: **1678933 bytes**, SHA256
 `9A05307CB0E7DDBE2BC80D420A694A95B874E03CD8CEDE837E1C5884D0C83FC8`.
 Implementation commit: `5ff453b`. Uploaded to the current Vita on 2026-10-15
 under the new filename and downloaded again with the same hash. C/B/L/S and
-the captured log were preserved. D has not been installed or accepted
-automatically; #12 is ready for the maintainer's physical comparison.
+the captured log were preserved. The maintainer subsequently installed/tested D
+and accepted its physical comparison; upload alone did not establish acceptance.
 Manifest: `build/debug/plus-vita-combined-1-manifest.json` records the final
 source commit, SHA256, bytes, Release flags, tests/review and upload/readback.
 Do not infer installation or acceptance from upload.
@@ -59,16 +66,17 @@ explicit joint test selection conform to the recorded scope.
 ### Spec review
 
 **0 findings** against #11. Both existing implementations are exercised at the
-real input/feedback/decoder/sink boundaries; hardware acceptance remains in
-#12. Software delivery, final tests, manifest and verified staging are complete.
+real input/feedback/decoder/sink boundaries; hardware acceptance was separately
+assigned to #12 and has now passed. Software delivery, final tests, manifest
+and verified staging are complete.
 
 ```sh
 PLUS_VITA_INPUT_TEST_DEFERRED_LOG=1 sh tools/test-input-worker.sh
 PLUS_VITA_INPUT_TEST_DEFERRED_LOG=1 PLUS_VITA_TEST_SANITIZERS=thread sh tools/test-input-worker.sh
 ```
 
-Host verification does not establish joint Vita scheduling/quality. C remains
-the accepted working fallback until D's physical test is accepted.
+Host verification did not establish joint Vita scheduling/quality. The later
+physical comparison passed; D is accepted and C remains the working fallback.
 
 ## Human procedure
 
