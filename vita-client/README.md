@@ -1,8 +1,14 @@
 # Vita client
 
-This directory contains the native VitaSDK client. The first milestone is a
-credential-free smoke application that cross-compiles selected portable
-`libchiaki` primitives and packages them as a real VPK.
+This directory contains the native VitaSDK client. Its current accepted build
+streams cloud games on the Vita with native H.264 decode, audio and controls.
+The combined input-worker/deferred-log VPK is the maintainer's playable
+pre-release baseline. See the [milestone](../docs/PLAYABLE_MILESTONE.md) for the
+exact accepted package, build configuration and remaining limitations.
+
+The original smoke application established portable `libchiaki` primitives and
+VPK packaging. The smoke-target description below records that early stage;
+it does not describe the full current streaming application.
 
 The Pylux source is pinned as the `external/pylux` Git submodule. Initialize it
 after cloning this repository:
@@ -45,10 +51,15 @@ The output is `build/vita/plus_vita_smoke.vpk`. Enable the explicitly
 authorized public CH/EU catalogue hardware test with
 `-DPLUS_VITA_PUBLIC_APOLLO_TEST=ON`; it is off by default.
 
-## Next increments
+## Original increments (historical)
 
 1. Add cloud authentication without logging or persisting credentials.
 2. Add authenticated catalogue and entitlement resolution.
 3. Add cloud session provisioning and datacenter selection.
 4. Add H.264 hardware decode, Opus audio, and Vita controls.
+
+These capabilities are now present in the tested client. The current next phase
+is release preparation using the accepted playable package; see the
+[roadmap status](../docs/ROADMAP.md) and
+[completed latency phase](../docs/LATENCY_COMBINED_RESULT.md).
 

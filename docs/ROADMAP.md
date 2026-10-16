@@ -1,5 +1,19 @@
 # Roadmap
 
+## Current milestone — 2026-10-16
+
+The native Vita streaming proof of concept has reached a maintainer-accepted
+**playable pre-release milestone**. The combined input-worker/deferred-log VPK
+preserves picture, sound, controls and restart while retaining the perceived
+input-response improvement. The scoped input/logging work in issues #1–#12 is
+complete. This accepted build is the baseline for release preparation; a public
+release is still a subsequent step. See [package identity and scope](PLAYABLE_MILESTONE.md)
+and [hardware results](LATENCY_COMBINED_RESULT.md).
+
+The phase descriptions below retain the original feasibility gates and audit
+history; their older pending audit items are not a claim that live Vita
+streaming remains unimplemented.
+
 Development is gated so Vita-specific work starts only after the service can be
 used by an independent desktop reference client.
 

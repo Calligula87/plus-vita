@@ -16,8 +16,8 @@ logging** and **#9 audio investigation** are implemented/reviewed locally.
 Full host memory/undefined and relevant thread-sanitizer suites passed; input,
 logging and default Release builds passed. Both-ON was initially rejected for
 isolated tests; after #10, #11 enables a separately identified combined profile.
-Source commits: `fda4046`, `e299abb`; foundation: `82df29a`. They have not been
-pushed automatically. The historical triage table below is superseded by this
+Source commits: `fda4046`, `e299abb`; foundation: `82df29a`; combined profile:
+`5ff453b`; accepted evidence: `ef62f55`. The table below is superseded by this
 delivery update for #2/#5/#8/#9.
 
 FTP staging/readback is complete for C, L, original B and rollback S; all four

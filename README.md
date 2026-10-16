@@ -3,13 +3,19 @@
 Research and development for a native PlayStation Vita client capable of
 accessing PlayStation Plus cloud gaming with a legitimate user subscription.
 
-The project is in a native Vita feasibility phase, using the pinned
-Pylux/libchiaki source as its direct-cloud implementation basis. The current
-VitaSDK smoke target packages successfully and covers protocol serialization,
-platform primitives, network lifecycle, local TCP sockets, and the public Sony
-CH/EU Apollo catalogue. A physical Vita has completed the verified public
-catalogue traversal using an on-device curl/mbedTLS transport; authenticated
-PlayStation sessions are not implemented yet.
+The native Vita client uses pinned Pylux/libchiaki sources for direct cloud
+streaming. The maintainer has tested and accepted the combined input-worker
+and deferred-logging VPK as a **playable pre-release milestone**. Picture, sound,
+controls/releases and stop/restart passed the hardware comparison, with better
+perceived response than the original baseline retained in the combined build.
+
+The accepted package is `plus-vita-input-worker-deferred-log-1.vpk`, build
+`live-720p-refs5-input-worker-deferred-log-1`. See the
+[playable milestone](docs/PLAYABLE_MILESTONE.md) for its SHA256, build options,
+fallback and remaining limitations, and the
+[hardware comparison](docs/LATENCY_COMBINED_RESULT.md) for measured evidence.
+This closes the first input/logging improvement phase and provides the working
+baseline for release preparation. A public release has not been published.
 
 ## Project boundaries
 

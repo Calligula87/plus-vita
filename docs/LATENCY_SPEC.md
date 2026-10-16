@@ -161,8 +161,8 @@ found. Existing audio residence averaged 230.748ms, versus 250.148ms in the
 previous accepted run; it is not a newly established regression.
 
 The scoped phase is complete. Independent input sampling and deferred logging
-are implemented, tested, reviewed and committed locally; commits have not been
-pushed automatically. Baseline B was accepted, C improved perceived response,
+are implemented, tested, reviewed and committed on `main`.
+Baseline B was accepted, C improved perceived response,
 L validated bounded diagnostics, and the separately identified combined D
 retained C's response/quality/control/restart experience. All 2381 D diagnostic
 records persisted without loss. D is the accepted working build; C is the
@@ -181,8 +181,9 @@ and the rejected display-worker experiment was not reopened.
 Canonical specification and execution tasks are published in GitHub Issues.
 This document is a local snapshot. Supporting repository documents are
 `docs/LATENCY_TEST_PLAN.md`, `docs/LATENCY_BASELINE_TEST.md`, and ADR 0001;
-their evidence and decisions are committed locally. Local document paths should
-not be presented as published default-branch files before those commits are pushed.
+their evidence and decisions are committed on `main`. The maintainer subsequently
+accepted this package as the [playable milestone](PLAYABLE_MILESTONE.md) for
+release preparation and authorized publishing the code and documentation.
 
 Primary-source references inspected during planning:
 

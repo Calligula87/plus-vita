@@ -6,9 +6,11 @@ The sections below retain the delivery and review evidence leading to acceptance
 
 Changes are committed on the existing `main` branch: `82df29a` records the
 diagnostic foundation, `fda4046` implements the isolated candidates and audio
-investigation, and `e299abb` resolves the input review findings. Local commits
-are not automatically pushed or published. User-owned agent configuration was
-left separate.
+investigation, and `e299abb` resolves the input review findings. Combined
+implementation `5ff453b` and hardware acceptance `ef62f55` followed. The
+maintainer authorized publishing this code and documentation as the
+[playable milestone](PLAYABLE_MILESTONE.md). User-owned agent configuration
+was left separate.
 
 | Delivery | Result / evidence |
 | --- | --- |
