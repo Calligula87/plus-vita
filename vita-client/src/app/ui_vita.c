@@ -3,7 +3,7 @@
 #include "app.h"
 #include "account_vita.h"
 #include "font_vita.h"
-#include "render.h"
+#include "ui_flow.h"
 #include <psp2/ctrl.h>
 #include <psp2/display.h>
 #include <psp2/kernel/processmgr.h>
@@ -72,10 +72,10 @@ static bool display_open(UiDisplay *display)
 	return true;
 }
 
-static bool draw(UiDisplay *display, const PlusVitaAppView *view)
+static bool draw(UiDisplay *display, PlusVitaUiFlow *flow)
 {
 	uint64_t started = plus_vita_latency_now_us();
-	plus_vita_app_paint(display->font, display->pixels[display->back], PITCH, view);
+	plus_vita_ui_flow_paint(flow, display->font, display->pixels[display->back], PITCH);
 	uint64_t painted = plus_vita_latency_now_us();
 	if(painted >= started) plus_vita_diagnostic_ui_sample(PLUS_VITA_UI_DRAW, painted-started);
 	SceDisplayFrameBuf frame = {
@@ -91,28 +91,12 @@ static bool draw(UiDisplay *display, const PlusVitaAppView *view)
 	return true;
 }
 
-static void queue_effect(PlusVitaAppEffect *pending, PlusVitaAppEffect effect)
+static bool handle_input(PlusVitaUiFlow *flow, PlusVitaAccount *account, PlusVitaAppEvent event)
 {
-	if(effect.kind != PLUS_VITA_EFFECT_NONE)
-	{
-		plus_vita_credential_clear(&pending->credential);
-		*pending = effect;
-	}
-	plus_vita_credential_clear(&effect.credential);
-}
-
-static bool handle_input(PlusVitaApp *app, PlusVitaAccount *account, PlusVitaAppEffect *pending, PlusVitaAppEvent event)
-{
-	PlusVitaAppView before = plus_vita_app_view(app);
-	PlusVitaAppEffect effect = plus_vita_app_dispatch(app, event);
-	PlusVitaAppView after = plus_vita_app_view(app);
-	if(before.operation && after.operation != before.operation) plus_vita_account_cancel(account);
-	bool changed = effect.kind != PLUS_VITA_EFFECT_NONE || memcmp(&before, &after, sizeof(before)) != 0;
-	queue_effect(pending, effect);
-	plus_vita_credential_clear(&effect.credential);
+	bool changed = plus_vita_ui_flow_event(flow, event, plus_vita_latency_now_us());
+	if(flow->cancel_account) plus_vita_account_cancel(account);
 	return changed;
 }
-
 static bool storage_effect(PlusVitaAppEffectKind kind)
 {
 	return kind == PLUS_VITA_EFFECT_LOAD_ACCOUNT || kind == PLUS_VITA_EFFECT_SAVE_ACCOUNT
@@ -151,20 +135,20 @@ int plus_vita_app_run(void)
 	bool touch_ready = sceTouchGetPanelInfo(SCE_TOUCH_PORT_FRONT, &panel) == 0
 		&& panel.maxAaX > panel.minAaX && panel.maxAaY > panel.minAaY
 		&& sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START) == 0;
-	bool touched = false, dirty = true;
-	PlusVitaAppEffect pending = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START });
+	bool touched = false;
+	PlusVitaUiFlow flow = { .app = app, .dirty = true };
+	plus_vita_ui_flow_event(&flow, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START }, 0);
 	int result = 0;
-	uint64_t input_since = 0, previous_poll = 0, last_report = plus_vita_latency_now_us();
+	uint64_t previous_poll = 0, last_report = plus_vita_latency_now_us();
 	while(plus_vita_app_view(app).screen != PLUS_VITA_APP_CLOSED)
 	{
-		if(dirty)
+		if(flow.dirty)
 		{
-			PlusVitaAppView view = plus_vita_app_view(app);
-			if(!draw(display, &view)) { result = 1; break; }
+			if(!draw(display, &flow)) { result = 1; break; }
 			uint64_t shown = plus_vita_latency_now_us();
-			if(input_since && shown >= input_since) plus_vita_diagnostic_ui_sample(PLUS_VITA_UI_INPUT_PRESENT, shown-input_since);
-			input_since = 0;
-			dirty = false;
+			if(flow.input_since && shown >= flow.input_since) plus_vita_diagnostic_ui_sample(PLUS_VITA_UI_INPUT_PRESENT, shown-flow.input_since);
+			flow.input_since = 0;
+			flow.dirty = false;
 		}
 		SceCtrlData pad = { 0 };
 		uint64_t polled = plus_vita_latency_now_us();
@@ -173,7 +157,7 @@ int plus_vita_app_run(void)
 		bool input_changed = false;
 		if(sceCtrlPeekBufferPositive(0, &pad, 1) > 0)
 		{
-			input_changed = handle_input(app, account, &pending, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_PAD,
+			input_changed = handle_input(&flow, account, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_PAD,
 				.pad = { .buttons = pad.buttons, .left_y = pad.ly, .time_us = sceKernelGetProcessTimeWide() } });
 		}
 		SceTouchData touch = { 0 };
@@ -181,20 +165,18 @@ int plus_vita_app_run(void)
 		{
 			if(!input_changed && touch.reportNum && !touched)
 			{
-				input_changed = handle_input(app, account, &pending, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_TOUCH,
+				input_changed = handle_input(&flow, account, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_TOUCH,
 					.x = (touch.report[0].x - panel.minAaX) * (WIDTH - 1) / (panel.maxAaX - panel.minAaX),
 					.y = (touch.report[0].y - panel.minAaY) * (HEIGHT - 1) / (panel.maxAaY - panel.minAaY) });
 			}
 			touched = touch.reportNum != 0;
 		}
-		dirty = dirty || input_changed;
-		if(input_changed && !input_since) input_since = polled;
-		if(!input_changed && pending.kind != PLUS_VITA_EFFECT_NONE
-			&& (!storage_effect(pending.kind) || plus_vita_account_idle(storage)))
+		flow.dirty = flow.dirty || input_changed;
+		if(input_changed && !flow.input_since) flow.input_since = polled;
+		if(!input_changed && flow.pending.kind != PLUS_VITA_EFFECT_NONE
+			&& (!storage_effect(flow.pending.kind) || plus_vita_account_idle(storage)))
 		{
-			PlusVitaAppEffect effect = pending;
-			plus_vita_credential_clear(&pending.credential);
-			pending.kind = PLUS_VITA_EFFECT_NONE;
+			PlusVitaAppEffect effect = plus_vita_ui_flow_take(&flow);
 			if(effect.operation && effect.operation == plus_vita_app_view(app).operation)
 			{
 				if(effect.kind == PLUS_VITA_EFFECT_PREPARE_SETUP)
@@ -205,33 +187,33 @@ int plus_vita_app_run(void)
 					plus_vita_account_label_read(label, &keyboard);
 					PlusVitaAppResult status = !keyboard.initialized ? PLUS_VITA_RESULT_STORAGE_ERROR
 						: !keyboard.accepted ? PLUS_VITA_RESULT_CANCELLED : !keyboard.validated ? PLUS_VITA_RESULT_STORAGE_ERROR : PLUS_VITA_RESULT_OK;
-					queue_effect(&pending, plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_LABEL_ENTERED,
-						.operation = effect.operation, .status = status, .data = label, .data_size = strlen(label) }));
+					plus_vita_ui_flow_event(&flow, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_LABEL_ENTERED,
+						.operation = effect.operation, .status = status, .data = label, .data_size = strlen(label) }, 0);
 					memset(label, 0, sizeof(label));
 					SceCtrlData after = {0};
 					sceCtrlPeekBufferPositive(0, &after, 1);
 					plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_PAD_RESET,
 						.pad = { .buttons = after.buttons, .left_y = after.ly, .time_us = sceKernelGetProcessTimeWide() } });
 					touched = true;
-					previous_poll = input_since = 0; /* Human keyboard time is not menu latency. */
+					previous_poll = flow.input_since = 0; /* Human keyboard time is not menu latency. */
 				}
 				else if(!plus_vita_account_start(storage_effect(effect.kind) ? storage : account, &effect))
 				{
-					queue_effect(&pending, plus_vita_app_dispatch(app, (PlusVitaAppEvent){
+					plus_vita_ui_flow_event(&flow, (PlusVitaAppEvent){
 						.kind = completion(effect.kind), .operation = effect.operation,
-						.status = storage_effect(effect.kind) ? PLUS_VITA_RESULT_STORAGE_ERROR : PLUS_VITA_RESULT_BUSY }));
+						.status = storage_effect(effect.kind) ? PLUS_VITA_RESULT_STORAGE_ERROR : PLUS_VITA_RESULT_BUSY }, 0);
 				}
 			}
 			plus_vita_credential_clear(&effect.credential);
-			dirty = true;
+			flow.dirty = true;
 		}
 		PlusVitaAccount *workers[] = {account, storage};
 		for(unsigned i = 0; i < 2; i++) {
 			PlusVitaAppEvent service_result;
 			if(plus_vita_account_poll(workers[i], &service_result)) {
-				queue_effect(&pending, plus_vita_app_dispatch(app, service_result));
+				plus_vita_ui_flow_event(&flow, service_result, 0);
 				plus_vita_account_release_result(workers[i]);
-				dirty = true;
+				flow.dirty = true;
 			}
 		}
 		uint64_t now = plus_vita_latency_now_us();
@@ -242,7 +224,7 @@ int plus_vita_app_run(void)
 	}
 	if(restore_touch) sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, previous_touch);
 	if(restore_mode) sceCtrlSetSamplingMode(previous_mode);
-	plus_vita_credential_clear(&pending.credential);
+	plus_vita_credential_clear(&flow.pending.credential);
 	plus_vita_account_close(account);
 	plus_vita_account_close(storage);
 	plus_vita_app_destroy(app);

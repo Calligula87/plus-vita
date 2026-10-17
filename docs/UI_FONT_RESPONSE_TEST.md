@@ -20,7 +20,10 @@ For a 96-character row, the former path made 13134 system-font calls cold and
 13132 warm. Bounded glyph/line-metric caching reduces that fixture to 111 cold
 and zero warm. Layout measurements drop from 4544 to 335 by measuring the final
 line's overflow once. Welcome and catalogue focus changes exercise the same
-painter as the native UI and reuse cached glyphs; cache-pressure checks exceed
+painter and input/repaint/effect orchestration as the native UI, exercising raw
+PAD/Cross/Circle, touch, held-repeat/release and cancelled pending work. Neutral
+input produces no repaint. Missing PVF, failed rectangle lookup and failed
+raster fixtures inspect actual bounded fallback pixels. Cache-pressure checks exceed
 the 256-entry / 512-KiB alpha budget without losing glyph output. These are
 work-count results, not proof that the reported five-second Vita delay is gone.
 
