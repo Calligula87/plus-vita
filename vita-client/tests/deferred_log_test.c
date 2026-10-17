@@ -74,6 +74,22 @@ int main(void)
 	}
 	fclose(f); assert(critical && redacted && overflow);
 	assert(plus_vita_diagnostic_persistence_ok());
+	assert(plus_vita_diagnostic_ui_begin());
+	for(unsigned i=0;i<500;i++) {
+		plus_vita_diagnostic_ui_sample(PLUS_VITA_UI_DRAW, 123);
+		plus_vita_diagnostic_ui_sample((PlusVitaUiTiming)999, 999999);
+		plus_vita_diagnostic_ui_flush();
+	}
+	plus_vita_diagnostic_ui_end();
+	f = fopen("plus-vita-allocation.log", "r"); assert(f);
+	bool ui_build=false, ui_timing=false; size_t bytes=0;
+	while(fgets(line,sizeof(line),f)) {
+		bytes+=strlen(line);
+		assert(!strstr(line,"synthetic critical failure") && !strstr(line,"999999"));
+		if(strstr(line,"build=ui-font-response-1")) ui_build=true;
+		if(strstr(line,"draw count=500")) ui_timing=true;
+	}
+	fclose(f); assert(ui_build && ui_timing && bytes < 65536);
 	/* Full critical reserve keeps the latest final records, with explicit loss;
 	 * producer entrypoints remain callable during a blocked stop/drain. */
 	assert(plus_vita_diagnostic_begin());

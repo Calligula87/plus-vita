@@ -394,3 +394,52 @@ bool plus_vita_diagnostic_persistence_ok(void)
 	pthread_mutex_unlock(&diagnostic_write_mutex);
 	return ok;
 }
+
+static PlusVitaLatencyStats ui_timings[PLUS_VITA_UI_TIMINGS];
+static unsigned ui_snapshots;
+static bool ui_active;
+
+bool plus_vita_diagnostic_ui_begin(void)
+{
+	ui_active = false;
+	memset(ui_timings, 0, sizeof(ui_timings)); ui_snapshots = 0;
+	if(!plus_vita_diagnostic_begin()) return false;
+	ui_active = true;
+	write_line("UI", "build=ui-font-response-1 graphical=1 glyph_budget_bytes=524288", 0);
+	return true;
+}
+
+void plus_vita_diagnostic_ui_sample(PlusVitaUiTiming stage, uint64_t duration_us)
+{
+	if(ui_active && (unsigned)stage < PLUS_VITA_UI_TIMINGS) plus_vita_latency_add(&ui_timings[stage], duration_us);
+}
+
+static void ui_report(bool final)
+{
+	static const char *const names[] = {"draw", "present", "sampled_input_to_present", "poll_gap"};
+	if(!ui_active) return;
+	for(unsigned i = 0; i < PLUS_VITA_UI_TIMINGS; i++) {
+		char record[256];
+		snprintf(record, sizeof(record), "%s%s count=%llu total_us=%llu max_us=%llu invalid=%llu",
+			final ? "final summary " : "", names[i], (unsigned long long)ui_timings[i].count,
+			(unsigned long long)ui_timings[i].total_us, (unsigned long long)ui_timings[i].max_us,
+			(unsigned long long)ui_timings[i].invalid);
+		write_line("UI", record, 0);
+	}
+}
+
+void plus_vita_diagnostic_ui_flush(void)
+{
+#if PLUS_VITA_DEFERRED_LOG
+	if(ui_snapshots >= 64) return;
+	ui_snapshots++;
+	ui_report(false);
+#endif
+}
+
+void plus_vita_diagnostic_ui_end(void)
+{
+	ui_report(true);
+	ui_active = false;
+	plus_vita_diagnostic_end();
+}

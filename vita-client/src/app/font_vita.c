@@ -6,6 +6,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define GLYPH_SLOTS 256u
+#define GLYPH_BYTES (512u * 1024u)
+typedef struct {
+	unsigned code;
+	int size;
+	PlusVitaGlyph metrics;
+	unsigned char *alpha;
+} CachedGlyph;
 struct plus_vita_font_t {
 	ScePvfLibId library;
 	ScePvfFontId latin, japanese;
@@ -13,6 +21,11 @@ struct plus_vita_font_t {
 	int size, pitch;
 	uint32_t *pixels, color;
 	unsigned char glyph[128 * 128];
+	CachedGlyph cache[GLYPH_SLOTS];
+	unsigned next;
+	size_t cached_bytes;
+	struct { int size, ascent, descent; } lines[8];
+	unsigned next_line;
 };
 static void *allocate(void *user, unsigned size) { (void)user; return malloc(size); }
 static void *reallocate(void *user, void *old, unsigned size) { (void)user; return realloc(old, size); }
@@ -48,6 +61,7 @@ PlusVitaFont *plus_vita_font_create(void)
 void plus_vita_font_free(PlusVitaFont *font)
 {
 	if(!font) return;
+	for(unsigned i = 0; i < GLYPH_SLOTS; i++) free(font->cache[i].alpha);
 	if(font->latin) scePvfClose(font->latin);
 	if(font->japanese) scePvfClose(font->japanese);
 	if(font->library) scePvfDoneLib(font->library);
@@ -91,18 +105,69 @@ static bool outline(PlusVitaFont *font, unsigned *code, int size, ScePvfFontId *
 	return false;
 }
 
+static void evict(PlusVitaFont *font, CachedGlyph *entry)
+{
+	if(entry->alpha) font->cached_bytes -= (size_t)entry->metrics.width * entry->metrics.height;
+	free(entry->alpha);
+	memset(entry, 0, sizeof(*entry));
+}
+
+static CachedGlyph *resolve(PlusVitaFont *font, unsigned code, int size)
+{
+	for(unsigned i = 0; i < GLYPH_SLOTS; i++)
+		if(font->cache[i].size == size && font->cache[i].code == code) return &font->cache[i];
+	CachedGlyph *entry = &font->cache[font->next++ % GLYPH_SLOTS];
+	evict(font, entry);
+	entry->size = size; entry->code = code;
+	ScePvfFontId selected; ScePvfCharInfo info;
+	bool outlined = outline(font, &code, size, &selected, &info, &entry->metrics);
+	if(!outlined) {
+		int sx = size / 12, sy = size / 8; if(sx < 1) sx = 1; if(sy < 1) sy = 1;
+		entry->metrics = (PlusVitaGlyph){ .advance = 8*sx, .width = 8*sx, .height = 8*sy, .top = 8*sy };
+	}
+	PlusVitaGlyph glyph = entry->metrics;
+	size_t bytes = (size_t)glyph.width * glyph.height;
+	if(!bytes || bytes > GLYPH_BYTES) return entry;
+	while(font->cached_bytes + bytes > GLYPH_BYTES) evict(font, &font->cache[font->next++ % GLYPH_SLOTS]);
+	entry->alpha = calloc(bytes, 1);
+	if(!entry->alpha) return entry;
+	font->cached_bytes += bytes;
+	if(outlined) {
+		memset(font->glyph, 0, sizeof(font->glyph));
+		ScePvfUserImageBufferRec image = { .pixelFormat = SCE_PVF_USERIMAGE_DIRECT8,
+			.xPos64 = 128 - info.glyphMetrics.horizontalBearingX64,
+			.yPos64 = 128 + info.glyphMetrics.horizontalBearingY64,
+			.rect = {128,128}, .bytesPerLine = 128, .buffer = font->glyph };
+		if(scePvfGetCharGlyphImage(selected, (ScePvfCharCode)code, &image) == 0) {
+			for(int row = 0; row < glyph.height; row++)
+				memcpy(entry->alpha + row * glyph.width, font->glyph + (row+2)*128+2, glyph.width);
+			return entry;
+		}
+		/* Keep the measured ink bounds on external raster failure. */
+		for(int row = 0; row < glyph.height; row++) for(int col = 0; col < glyph.width; col++)
+			if(!row || !col || row == glyph.height-1 || col == glyph.width-1) entry->alpha[row*glyph.width+col] = 255;
+	} else {
+		PsvDebugScreenFont *bitmap = psvDebugScreenGetFont();
+		if(code > 127) code = '?';
+		int sx = glyph.width / 8, sy = glyph.height / 8;
+		for(int row=0; row<8; row++) for(int col=0; col<8; col++)
+			if(bitmap->glyphs[code*8+row] & (0x80 >> col)) for(int dy=0; dy<sy; dy++) for(int dx=0; dx<sx; dx++)
+				entry->alpha[(row*sy+dy)*glyph.width+col*sx+dx] = 255;
+	}
+	return entry;
+}
+
 static PlusVitaGlyph measure(void *context, unsigned code, int size)
 {
-	ScePvfFontId selected; ScePvfCharInfo info; PlusVitaGlyph glyph;
-	if(outline(context, &code, size, &selected, &info, &glyph)) return glyph;
-	int horizontal = size / 12; if(horizontal < 1) horizontal = 1;
-	int vertical = size / 8; if(vertical < 1) vertical = 1;
-	return (PlusVitaGlyph){ .advance = 8 * horizontal, .width = 8 * horizontal, .height = 8 * vertical, .top = 8 * vertical };
+	return resolve(context, code, size)->metrics;
 }
 
 static void metrics(void *context, int size, int *ascent, int *descent)
 {
 	PlusVitaFont *font = context;
+	for(unsigned i = 0; i < 8; i++) if(font->lines[i].size == size) {
+		*ascent = font->lines[i].ascent; *descent = font->lines[i].descent; return;
+	}
 	*ascent = size; *descent = size / 4;
 	ScePvfFontInfo info;
 	if(resize(font, size) && scePvfGetFontInfo(font->latin, &info) == 0) {
@@ -110,6 +175,8 @@ static void metrics(void *context, int size, int *ascent, int *descent)
 		int d = abs(info.maxIGlyphMetrics.descender64) / 64 + 1;
 		if(a > 0 && a <= size * 2 && d <= size) { *ascent = a; *descent = d; }
 	}
+	unsigned slot = font->next_line++ % 8;
+	font->lines[slot].size = size; font->lines[slot].ascent = *ascent; font->lines[slot].descent = *descent;
 }
 
 static void pixel(PlusVitaFont *font, int x, int y, unsigned alpha, const PlusVitaTextBox *clip)
@@ -125,31 +192,13 @@ static void pixel(PlusVitaFont *font, int x, int y, unsigned alpha, const PlusVi
 static void draw(void *context, unsigned code, int x, int baseline, int size, const PlusVitaTextBox *clip)
 {
 	PlusVitaFont *font = context;
-	PlusVitaGlyph glyph; ScePvfFontId selected; ScePvfCharInfo info;
-	if(outline(font, &code, size, &selected, &info, &glyph)) {
-		memset(font->glyph, 0, sizeof(font->glyph));
-		ScePvfUserImageBufferRec image = { .pixelFormat = SCE_PVF_USERIMAGE_DIRECT8,
-			.xPos64 = 128 - info.glyphMetrics.horizontalBearingX64,
-			.yPos64 = 128 + info.glyphMetrics.horizontalBearingY64,
-			.rect = {128,128}, .bytesPerLine = 128, .buffer = font->glyph };
-		if(scePvfGetCharGlyphImage(selected, (ScePvfCharCode)code, &image) == 0) {
-			for(int row = 0; row < glyph.height; row++) for(int col = 0; col < glyph.width; col++)
-				pixel(font, x + glyph.left + col, baseline - glyph.top + row, font->glyph[(row + 2) * 128 + col + 2], clip);
-			return;
-		}
-		/* A raster failure must not substitute wider bitmap metrics after layout.
-		 * Draw a bounded missing-glyph outline inside the measured ink region. */
-		for(int row = 0; row < glyph.height; row++) for(int col = 0; col < glyph.width; col++)
-			if(!row || !col || row == glyph.height - 1 || col == glyph.width - 1)
-				pixel(font, x + glyph.left + col, baseline - glyph.top + row, 255, clip);
-		return;
+	CachedGlyph *entry = resolve(font, code, size);
+	PlusVitaGlyph glyph = entry->metrics;
+	for(int row = 0; row < glyph.height; row++) for(int col = 0; col < glyph.width; col++) {
+		unsigned alpha = entry->alpha ? entry->alpha[row*glyph.width+col]
+			: (!row || !col || row == glyph.height-1 || col == glyph.width-1 ? 255 : 0);
+		if(alpha) pixel(font, x+glyph.left+col, baseline-glyph.top+row, alpha, clip);
 	}
-	PsvDebugScreenFont *bitmap = psvDebugScreenGetFont();
-	if(code > 127) code = '?';
-	int sx = size / 12, sy = size / 8; if(sx < 1) sx = 1; if(sy < 1) sy = 1;
-	for(int row = 0; row < 8; row++) for(int col = 0; col < 8; col++)
-		if(bitmap->glyphs[code * 8 + row] & (0x80 >> col)) for(int dy = 0; dy < sy; dy++) for(int dx = 0; dx < sx; dx++)
-			pixel(font, x + col * sx + dx, baseline - 8 * sy + row * sy + dy, 255, clip);
 }
 
 bool plus_vita_font_draw(PlusVitaFont *font, uint32_t *pixels, int pitch, const char *text,

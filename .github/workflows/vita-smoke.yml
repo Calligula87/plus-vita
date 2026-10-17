@@ -10,6 +10,7 @@ on:
       - "tools/test-app-workflow.sh"
       - "tools/test-app-account-integration.sh"
       - "tools/test-app-text.sh"
+      - "tools/test-app-font.sh"
   pull_request:
     paths:
       - ".github/workflows/vita-smoke.yml"
@@ -19,6 +20,7 @@ on:
       - "tools/test-app-workflow.sh"
       - "tools/test-app-account-integration.sh"
       - "tools/test-app-text.sh"
+      - "tools/test-app-font.sh"
   workflow_dispatch:
 
 jobs:
@@ -32,6 +34,8 @@ jobs:
         run: sh tools/test-app-workflow.sh
       - name: Test app text output and bounds
         run: sh tools/test-app-text.sh
+      - name: Test real font adapter and menu painting
+        run: sh tools/test-app-font.sh
       - name: Test native account worker with simulated Sony responses
         run: sh tools/test-app-account-integration.sh
 

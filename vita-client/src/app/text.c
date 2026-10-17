@@ -27,11 +27,23 @@ bool plus_vita_text_draw(const PlusVitaTextFont *font, const char *text, PlusVit
 	if(box.width <= 0 || box.height <= 0 || size <= 0) return false;
 	int ascent, descent;
 	font->metrics(font->context, size, &ascent, &descent);
+	/* Face-wide metrics may describe the font's original size. Place the
+	 * baseline from requested-size glyph ink as well, before applying the clip. */
+	const char *scan = text, *scan_end = text + strlen(text);
+	while(scan < scan_end) {
+		unsigned code = character(&scan, scan_end);
+		if(code == '\n') continue;
+		PlusVitaGlyph glyph = font->measure(font->context, code, size);
+		if(glyph.top > ascent) ascent = glyph.top;
+		if(glyph.height - glyph.top > descent) descent = glyph.height - glyph.top;
+	}
 	int line = ascent + descent + 4;
 	if(ascent + descent > box.height) return false;
 	int x = box.x, baseline = box.y + ascent;
 	const char *p = text, *end = text + strlen(text);
 	PlusVitaGlyph dot = font->measure(font->context, '.', size);
+	int elide_baseline = -1;
+	bool line_elide = false;
 	while(p < end)
 	{
 		bool last = !wrap || baseline + line + descent > box.y + box.height;
@@ -39,7 +51,11 @@ bool plus_vita_text_draw(const PlusVitaTextFont *font, const char *text, PlusVit
 			&& (p == text || p[-1] == ' ') && width(font, p, end, size, true) > box.x + box.width - x) {
 			x = box.x; baseline += line; continue;
 		}
-		bool elide = last && (width(font, p, end, size, false) > box.x + box.width - x || strchr(p, '\n'));
+		if(last && elide_baseline != baseline) {
+			line_elide = width(font, p, end, size, false) > box.x + box.width - x || strchr(p, '\n');
+			elide_baseline = baseline;
+		}
+		bool elide = last && line_elide;
 		const char *next = p;
 		unsigned code = character(&next, end);
 		if(code == '\n') {

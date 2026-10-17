@@ -1,5 +1,9 @@
 # Remembered account and typography candidate
 
+For the newer glyph-completeness/menu-response candidate, use
+[the current regression procedure](UI_FONT_RESPONSE_TEST.md). Account-specific
+checks below remain useful; the newer procedure supersedes typography acceptance.
+
 This development candidate addresses [#14](https://github.com/Calligula87/plus-vita/issues/14)
 and [#16](https://github.com/Calligula87/plus-vita/issues/16), specified in
 [#26](https://github.com/Calligula87/plus-vita/issues/26). The approved blue/gold

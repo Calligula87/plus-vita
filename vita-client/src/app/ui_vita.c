@@ -3,11 +3,14 @@
 #include "app.h"
 #include "account_vita.h"
 #include "font_vita.h"
+#include "render.h"
 #include <psp2/ctrl.h>
 #include <psp2/display.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/sysmem.h>
 #include "../platform/credential_ime.h"
+#include "../platform/diagnostic_log.h"
+#include "../platform/latency_clock.h"
 #include <psp2/sysmodule.h>
 #include <psp2/touch.h>
 #include <stdbool.h>
@@ -69,59 +72,12 @@ static bool display_open(UiDisplay *display)
 	return true;
 }
 
-static void rectangle(UiDisplay *display, int x, int y, int width, int height, uint32_t color)
-{
-	int right = x + width, bottom = y + height;
-	if(x < 0) x = 0;
-	if(y < 0) y = 0;
-	if(right > WIDTH) right = WIDTH;
-	if(bottom > HEIGHT) bottom = HEIGHT;
-	for(int row = y; row < bottom; row++)
-		for(int col = x; col < right; col++) display->pixels[display->back][row * PITCH + col] = color;
-}
-
-static void rounded(UiDisplay *display, int x, int y, int width, int height, uint32_t color)
-{
-	for(int row = 0; row < height; row++)
-	{
-		int inset = row == 0 || row == height - 1 ? 5 : row < 3 || row >= height - 3 ? 2 : 0;
-		rectangle(display, x + inset, y + row, width - 2 * inset, 1, color);
-	}
-}
-
-static void text(UiDisplay *display, const char *value, int x, int y, int size, int width, int height, bool wrap, uint32_t color)
-{
-	plus_vita_font_draw(display->font, display->pixels[display->back], PITCH, value,
-		(PlusVitaTextBox){x, y, width, height}, size, wrap, color);
-}
 static bool draw(UiDisplay *display, const PlusVitaAppView *view)
 {
-	for(int y = 0; y < HEIGHT; y++)
-		rectangle(display, 0, y, WIDTH, 1, RGB(0, 25 + y / 20, 70 + y / 6));
-	rectangle(display, 0, 0, WIDTH, 4, RGB(246, 198, 91));
-	text(display, "plus vita", 64, 25, 24, 400, 38, false, RGB(236, 244, 250));
-	text(display, "DEVELOPMENT BUILD", 712, 32, 14, 220, 24, false, RGB(195, 211, 239));
-	text(display, view->subtitle, 64, 94, 16, 832, 26, false, RGB(246, 198, 91));
-	text(display, view->title, 64, 128, 36, 832, 54, false, RGB(243, 247, 252));
-	int body_bottom = view->action_count ? view->actions[0].y - 12 : 480;
-	text(display, view->body, 64, 196, view->screen == PLUS_VITA_APP_ACCOUNT ? 18 : 20,
-		view->screen == PLUS_VITA_APP_WELCOME ? 520 : 832, body_bottom - 196, true, RGB(210, 224, 247));
-	if(view->screen == PLUS_VITA_APP_WELCOME)
-	{
-		rounded(display, 674, 238, 192, 192, RGB(18, 53, 113));
-		text(display, "APP LOGO", 712, 301, 18, 150, 30, false, RGB(210, 224, 247));
-		text(display, "Coming later", 709, 335, 16, 150, 28, false, RGB(195, 211, 239));
-	}
-	for(size_t i = 0; i < view->action_count; i++)
-	{
-		const PlusVitaAppButton *button = &view->actions[i];
-		bool selected = i == view->selected;
-		rounded(display, button->x, button->y, button->width, button->height,
-			selected ? RGB(246, 198, 91) : RGB(17, 57, 125));
-		text(display, button->label, button->x + 20, button->y + 8, 22, button->width - 40, button->height - 16, false,
-			selected ? RGB(9, 29, 66) : RGB(243, 247, 252));
-	}
-	text(display, view->hint, 64, 509, 16, 832, 28, false, RGB(195, 211, 239));
+	uint64_t started = plus_vita_latency_now_us();
+	plus_vita_app_paint(display->font, display->pixels[display->back], PITCH, view);
+	uint64_t painted = plus_vita_latency_now_us();
+	if(painted >= started) plus_vita_diagnostic_ui_sample(PLUS_VITA_UI_DRAW, painted-started);
 	SceDisplayFrameBuf frame = {
 		.size = sizeof(frame), .base = display->pixels[display->back], .pitch = PITCH,
 		.pixelformat = SCE_DISPLAY_PIXELFORMAT_A8B8G8R8, .width = WIDTH, .height = HEIGHT
@@ -129,6 +85,8 @@ static bool draw(UiDisplay *display, const PlusVitaAppView *view)
 	if(sceDisplaySetFrameBuf(&frame, SCE_DISPLAY_SETBUF_NEXTFRAME) < 0) return false;
 	display->displayed = true;
 	if(sceDisplayWaitSetFrameBuf() < 0) return false;
+	uint64_t presented = plus_vita_latency_now_us();
+	if(presented >= painted) plus_vita_diagnostic_ui_sample(PLUS_VITA_UI_PRESENT, presented-painted);
 	display->back ^= 1u;
 	return true;
 }
@@ -175,14 +133,15 @@ static PlusVitaAppEventKind completion(PlusVitaAppEffectKind kind)
 
 int plus_vita_app_run(void)
 {
+	plus_vita_diagnostic_ui_begin();
 	UiDisplay *display = calloc(1, sizeof(*display));
 	PlusVitaApp *app = plus_vita_app_create();
 	PlusVitaAccount *account = plus_vita_account_create();
 	PlusVitaAccount *storage = plus_vita_account_create();
 	if(!display || !app || !account || !storage)
-	{ free(display); plus_vita_app_destroy(app); plus_vita_account_close(account); plus_vita_account_close(storage); return 1; }
+	{ free(display); plus_vita_app_destroy(app); plus_vita_account_close(account); plus_vita_account_close(storage); plus_vita_diagnostic_ui_end(); return 1; }
 	if(!display_open(display))
-	{ free(display); plus_vita_app_destroy(app); plus_vita_account_close(account); plus_vita_account_close(storage); return 1; }
+	{ free(display); plus_vita_app_destroy(app); plus_vita_account_close(account); plus_vita_account_close(storage); plus_vita_diagnostic_ui_end(); return 1; }
 	SceCtrlPadInputMode previous_mode = SCE_CTRL_MODE_DIGITAL;
 	bool restore_mode = sceCtrlGetSamplingMode(&previous_mode) == 0;
 	sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
@@ -195,15 +154,22 @@ int plus_vita_app_run(void)
 	bool touched = false, dirty = true;
 	PlusVitaAppEffect pending = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START });
 	int result = 0;
+	uint64_t input_since = 0, previous_poll = 0, last_report = plus_vita_latency_now_us();
 	while(plus_vita_app_view(app).screen != PLUS_VITA_APP_CLOSED)
 	{
 		if(dirty)
 		{
 			PlusVitaAppView view = plus_vita_app_view(app);
 			if(!draw(display, &view)) { result = 1; break; }
+			uint64_t shown = plus_vita_latency_now_us();
+			if(input_since && shown >= input_since) plus_vita_diagnostic_ui_sample(PLUS_VITA_UI_INPUT_PRESENT, shown-input_since);
+			input_since = 0;
 			dirty = false;
 		}
 		SceCtrlData pad = { 0 };
+		uint64_t polled = plus_vita_latency_now_us();
+		if(previous_poll && polled >= previous_poll) plus_vita_diagnostic_ui_sample(PLUS_VITA_UI_POLL_GAP, polled-previous_poll);
+		previous_poll = polled;
 		bool input_changed = false;
 		if(sceCtrlPeekBufferPositive(0, &pad, 1) > 0)
 		{
@@ -222,6 +188,7 @@ int plus_vita_app_run(void)
 			touched = touch.reportNum != 0;
 		}
 		dirty = dirty || input_changed;
+		if(input_changed && !input_since) input_since = polled;
 		if(!input_changed && pending.kind != PLUS_VITA_EFFECT_NONE
 			&& (!storage_effect(pending.kind) || plus_vita_account_idle(storage)))
 		{
@@ -246,6 +213,7 @@ int plus_vita_app_run(void)
 					plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_PAD_RESET,
 						.pad = { .buttons = after.buttons, .left_y = after.ly, .time_us = sceKernelGetProcessTimeWide() } });
 					touched = true;
+					previous_poll = input_since = 0; /* Human keyboard time is not menu latency. */
 				}
 				else if(!plus_vita_account_start(storage_effect(effect.kind) ? storage : account, &effect))
 				{
@@ -266,6 +234,10 @@ int plus_vita_app_run(void)
 				dirty = true;
 			}
 		}
+		uint64_t now = plus_vita_latency_now_us();
+		if(now >= last_report && now-last_report >= 1000000u) {
+			plus_vita_diagnostic_ui_flush(); last_report = now;
+		}
 		sceDisplayWaitVblankStart();
 	}
 	if(restore_touch) sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, previous_touch);
@@ -275,6 +247,7 @@ int plus_vita_app_run(void)
 	plus_vita_account_close(storage);
 	plus_vita_app_destroy(app);
 	if(display_close(display)) free(display);
+	plus_vita_diagnostic_ui_end();
 	/* On failed scanout restoration leave its buffers alive until process exit. */
 	return result;
 }

@@ -24,8 +24,9 @@ retained-JSON automatic sign-in and an initial catalogue.
 Circle/back retains the runtime account; the JSON stays in place and later
 launches revalidate it while Sony accepts it. Account controls include label,
 disable-remember and Forget. Typography uses scalable system fonts and measured
-text bounds. The revised candidate needs its
-[Vita check](../docs/REMEMBER_FONT_TEST.md); see the
+text bounds, requested-size ink baselines and bounded glyph caching. The
+graphical app starts a fresh deferred UI timing log on launch. The revised
+candidate needs its [Vita check](../docs/UI_FONT_RESPONSE_TEST.md); see the
 [setup guide](../docs/ACCOUNT_SETUP.md) and
 [startup check](../docs/GRAPHICAL_STARTUP_TEST.md). Stream integration follows
 in later release tickets. Select

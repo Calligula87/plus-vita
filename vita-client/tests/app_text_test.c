@@ -6,11 +6,13 @@
 #include <string.h>
 
 typedef struct { PlusVitaTextBox box; unsigned drawn, dots; int last_baseline; } Output;
+static unsigned measurements;
 static void metrics(void *context, int size, int *ascent, int *descent)
 { (void)context; *ascent = size; *descent = 5; }
 static PlusVitaGlyph measure(void *context, unsigned code, int size)
 {
 	(void)context;
+	measurements++;
 	int width = code == 'W' ? 25 : code == 'i' ? 4 : 11;
 	return (PlusVitaGlyph){ .advance = width, .left = code == 'j' ? -2 : 0, .top = size,
 		.width = width, .height = size + 5 };
@@ -47,6 +49,11 @@ int main(void)
 	output = (Output){ .box = {64, 196, 80, 85} };
 	assert(plus_vita_text_draw(&font, "jump iii WWW", output.box, 20, true));
 	assert(output.drawn == 10);
+	char row[97]; memset(row, 'A', 96); row[96] = 0;
+	output = (Output){ .box = {64, 326, 792, 36} }; measurements = 0;
+	assert(!plus_vita_text_draw(&font, row, output.box, 22, false));
+	printf("96-character layout measurements: %u\n", measurements); fflush(stdout);
+	assert(measurements <= 96*6+20);
 	plus_vita_app_destroy(app);
 	puts("app text: complete About output, measured wrapping, bearing/descender bounds and explicit title ellipsis passed");
 	return 0;
