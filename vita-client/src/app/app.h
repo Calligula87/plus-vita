@@ -16,7 +16,7 @@ typedef enum {
 	PLUS_VITA_APP_CATALOGUE,
 	PLUS_VITA_APP_ERROR,
 	PLUS_VITA_APP_EXIT_CONFIRM,
-	PLUS_VITA_APP_CLOSED
+	PLUS_VITA_APP_CLOSED, PLUS_VITA_APP_ACCOUNT, PLUS_VITA_APP_FORGET_CONFIRM
 } PlusVitaAppScreen;
 typedef enum {
 	PLUS_VITA_ACTION_SETUP,
@@ -25,7 +25,9 @@ typedef enum {
 	PLUS_VITA_ACTION_EXIT,
 	PLUS_VITA_ACTION_BACK,
 	PLUS_VITA_ACTION_IMPORT,
-	PLUS_VITA_ACTION_GAME, PLUS_VITA_ACTION_CONTINUE
+	PLUS_VITA_ACTION_GAME, PLUS_VITA_ACTION_CONTINUE,
+	PLUS_VITA_ACTION_REMEMBER, PLUS_VITA_ACTION_ACCOUNT, PLUS_VITA_ACTION_RESTORE,
+	PLUS_VITA_ACTION_RETRY, PLUS_VITA_ACTION_LABEL, PLUS_VITA_ACTION_FORGET, PLUS_VITA_ACTION_CONFIRM_FORGET
 } PlusVitaAppAction;
 typedef struct {
 	PlusVitaAppAction id;
@@ -35,7 +37,7 @@ typedef struct {
 typedef struct {
 	PlusVitaAppScreen screen;
 	const char *title, *subtitle, *body, *hint;
-	PlusVitaAppButton actions[3];
+	PlusVitaAppButton actions[4];
 	size_t action_count, selected;
 	uint64_t operation;
 } PlusVitaAppView;
@@ -45,7 +47,9 @@ typedef enum {
 	PLUS_VITA_EVENT_ACTIVATE, PLUS_VITA_EVENT_BACK,
 	PLUS_VITA_EVENT_TOUCH, PLUS_VITA_EVENT_SETUP_READY,
 	PLUS_VITA_EVENT_IMPORT_READ, PLUS_VITA_EVENT_IMPORT_REMOVED,
-	PLUS_VITA_EVENT_AUTHORIZED
+	PLUS_VITA_EVENT_AUTHORIZED, PLUS_VITA_EVENT_START, PLUS_VITA_EVENT_ACCOUNT_LOADED,
+	PLUS_VITA_EVENT_ACCOUNT_SAVED, PLUS_VITA_EVENT_ACCOUNT_DELETED, PLUS_VITA_EVENT_LABEL_ENTERED,
+	PLUS_VITA_EVENT_PAD_RESET
 } PlusVitaAppEventKind;
 typedef enum {
 	PLUS_VITA_RESULT_OK, PLUS_VITA_RESULT_STORAGE_ERROR, PLUS_VITA_RESULT_MISSING,
@@ -72,11 +76,13 @@ typedef struct {
 	size_t data_size;
 	const PlusVitaCatalogEntry *entries;
 	size_t entry_count;
+	bool restore_blocked;
 } PlusVitaAppEvent;
 typedef enum {
 	PLUS_VITA_EFFECT_NONE, PLUS_VITA_EFFECT_EXIT, PLUS_VITA_EFFECT_PREPARE_SETUP,
 	PLUS_VITA_EFFECT_READ_IMPORT, PLUS_VITA_EFFECT_REMOVE_IMPORT,
-	PLUS_VITA_EFFECT_AUTHORIZE
+	PLUS_VITA_EFFECT_AUTHORIZE, PLUS_VITA_EFFECT_LOAD_ACCOUNT, PLUS_VITA_EFFECT_SAVE_ACCOUNT,
+	PLUS_VITA_EFFECT_DELETE_ACCOUNT, PLUS_VITA_EFFECT_EDIT_LABEL
 } PlusVitaAppEffectKind;
 /* Authorization effects contain sensitive material for the Sony adapter only.
  * Never log or render an effect/event; clear its credential after consumption. */
@@ -84,6 +90,8 @@ typedef struct {
 	PlusVitaAppEffectKind kind;
 	uint64_t operation;
 	PlusVitaCredential credential;
+	char label[129];
+	bool forget;
 } PlusVitaAppEffect;
 
 PlusVitaApp *plus_vita_app_create(void);

@@ -2,10 +2,10 @@
 
 The account-setup development candidate for
 [#15](https://github.com/Calligula87/plus-vita/issues/15) opens a basic
-alphabetical catalogue. Covers, search, settings, Remember and Play follow in
-later tickets. The maintainer reached the catalogue using file import on the
-first candidate. The revised saved-response instructions and account re-entry
-need a new [Vita check](ACCOUNT_SETUP_TEST.md).
+alphabetical catalogue. Covers, search, full help/settings and Play follow in
+later tickets. The maintainer confirmed file import and catalogue/home re-entry.
+The current candidate adds Remember and Account controls; follow the new
+[remember/font Vita check](REMEMBER_FONT_TEST.md).
 
 ## Save your sign-in JSON on a phone or PC
 
@@ -32,7 +32,9 @@ code. Sony handles sign-in. The transferred JSON supplies the Vita credential.
 1. Transfer **plus-vita-auth.json** with VitaShell to
    **ux0:data/plus-vita-auth.json**. Keep a private copy on your phone/PC if
    you will want to sign in again after exiting the app.
-2. Open Plus Vita, choose **Get started**, then **Continue** and **Import JSON**.
+2. Open Plus Vita, choose **Get started**, then **Continue**. **Remember this
+   account** defaults Off; turn it On once if you want sign-in kept across app
+   launches, then choose **Import JSON**.
 3. The app reads and removes the transferred file before authorization. It
    accepts a UTF-8 JSON response up to 4096 bytes, including a UTF-8 byte-order
    mark. Unrelated response fields are ignored. Invalid or ambiguous credential
@@ -41,10 +43,12 @@ code. Sony handles sign-in. The transferred JSON supplies the Vita credential.
 4. If cleanup fails, sign-in stops with a fixed explanation. Remove the file
    using VitaShell and transfer a fresh copy before trying again.
 
-There is no Remember switch in this candidate. Import stores your account
-**only in memory for the current app run**. Normal filesystem deletion is not
-a guarantee that old storage blocks cannot be recovered. No protected
-persistent storage is claimed.
+With Remember Off, import keeps your account only in memory for this app run.
+With Remember On, the app saves only the credential and optional user-entered
+label in locally readable app data. The transferred response is still removed;
+it is not required on later launches. A saved credential is validated again
+before opening account functionality. Normal filesystem deletion does not
+guarantee old blocks cannot be recovered; no protected credential vault is claimed.
 
 ## Keep browsing during this app run
 
@@ -54,8 +58,12 @@ persistent storage is claimed.
 - **Circle** returns to the connected home. Choose **Open catalogue** to return
   immediately with the selection retained. The imported file is no longer
   needed. About and cancelling Exit keep the account connected too.
-- Confirming Exit ends the app run. On the next launch, transfer/import your
-  JSON again. Remember and Forget controls follow in #16.
+- Confirming Exit ends the app run. With Remember On, the next launch validates
+  the saved account automatically. With it Off, another transfer/import is needed.
+  The connected home's **Account** action lets you toggle Remember, edit the
+  optional visible Account label or deliberately Forget. The label is entered
+  by you, not a Sony-verified identity. Disabling Remember retains the runtime
+  account but removes saved sign-in; Forget also clears runtime state.
 - During initial import/authorization, **Circle** or **Cancel** cancels setup.
   This does not establish a connected account. File consumption still finishes
   if already started. If it was consumed, transfer a new copy before retrying.
@@ -64,7 +72,10 @@ persistent storage is claimed.
   result cannot open a cancelled account.
 - Missing, invalid, expired/rejected credentials, cleanup failure, connectivity
   failure, unavailable catalogue and empty catalogue have readable outcomes.
-  For expired/rejected sign-in, save a fresh browser JSON response and import it.
+  Confirmed rejection asks for a fresh browser JSON response; temporary transport,
+  rate-limit and service failures retain saved sign-in and offer Retry. Unexpected
+  authorization responses are treated conservatively as retryable; Account →
+  Forget lets you deliberately replace a credential when needed.
 - This candidate has no Play action yet. A listed game does not guarantee
   streaming eligibility.
 

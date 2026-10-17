@@ -20,10 +20,12 @@ git submodule update --init --recursive
 ## Current smoke target
 
 New builds open a blue/gold graphical app with joystick/touch menu navigation,
-session-only saved-JSON import and an initial catalogue. The account remains
-connected through Circle/back and catalogue re-entry during one app run;
-Remember and Play follow in later tickets. The revised setup/navigation needs its
-[Vita check](../docs/ACCOUNT_SETUP_TEST.md); see the
+saved-JSON import, an opt-in remembered account and an initial catalogue.
+Circle/back retains the runtime account; enabling Remember once keeps sign-in
+across launches while Sony accepts it. Account controls include label,
+disable-remember and Forget. Typography uses scalable system fonts and measured
+text bounds. The revised candidate needs its
+[Vita check](../docs/REMEMBER_FONT_TEST.md); see the
 [setup guide](../docs/ACCOUNT_SETUP.md) and
 [startup check](../docs/GRAPHICAL_STARTUP_TEST.md). Stream integration follows
 in later release tickets. Select

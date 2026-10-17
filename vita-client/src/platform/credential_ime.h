@@ -22,5 +22,6 @@ void plus_vita_credential_ime_read(PlusVitaCredential *credential,
 	PlusVitaCredentialImeResult *result);
 void plus_vita_credential_ime_read_masked(PlusVitaCredential *credential,
 	PlusVitaCredentialImeResult *result);
+void plus_vita_account_label_read(char output[129], PlusVitaCredentialImeResult *result);
 
 #endif

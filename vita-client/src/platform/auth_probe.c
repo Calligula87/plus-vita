@@ -453,6 +453,12 @@ void plus_vita_auth_probe(const PlusVitaCredential *credential,
 	char code[1024] = { 0 };
 	result->authorized = result->transport_ok && response.status_code == 302
 		&& extract_parameter(response.redirect_url, "code", code, sizeof(code));
+	char error[64] = {0};
+	bool login_error = extract_parameter(response.redirect_url, "error", error, sizeof(error))
+		&& (strcmp(error, "login_required") == 0 || strcmp(error, "invalid_grant") == 0);
+	result->credential_rejected = result->transport_ok && !result->authorized
+		&& (response.status_code == 401 || login_error);
+	secure_clear(error, sizeof(error));
 
 	secure_clear(cookie, strlen(cookie));
 	free(cookie);

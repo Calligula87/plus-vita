@@ -1,5 +1,10 @@
 # Updated UI/account candidate: Vita hardware check
 
+For the newer remembered-account/font candidate, use
+[the combined procedure](REMEMBER_FONT_TEST.md). The procedure below records
+the preceding session-only candidate and must not be used to infer the newer
+Remember behavior.
+
 This procedure covers the feedback revisions to
 [#14](https://github.com/Calligula87/plus-vita/issues/14) and
 [#15](https://github.com/Calligula87/plus-vita/issues/15), specified in

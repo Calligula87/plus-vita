@@ -24,7 +24,7 @@ if(PLUS_VITA_DIAGNOSTIC_APP)
   set(PLUS_VITA_ENTRY_SOURCE src/main.c)
 else()
   set(VITA_APP_NAME "Plus Vita")
-  set(PLUS_VITA_ENTRY_SOURCE src/app/main.c src/app/app.c src/app/ui_vita.c src/app/account_vita.c)
+  set(PLUS_VITA_ENTRY_SOURCE src/app/main.c src/app/app.c src/app/utf8.c src/app/text.c src/app/font_vita.c src/app/ui_vita.c src/app/account_vita.c)
 endif()
 set(VITA_TITLEID "PLVT00001")
 set(VITA_VERSION "00.01")
@@ -738,6 +738,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   SceSsl_stub
   SceSysmodule_stub
 	ScePgf_stub
+	ScePvf_stub
   SceVideodec_stub
 )
 

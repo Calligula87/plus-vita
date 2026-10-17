@@ -14,9 +14,11 @@ static void setup(PlusVitaApp *app)
 	assert(strstr(plus_vita_app_view(app).body, "ssocookie") != NULL);
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_SETUP);
-	assert(plus_vita_app_view(app).action_count == 2);
+	assert(plus_vita_app_view(app).action_count == 3);
 	assert(strcmp(plus_vita_app_view(app).actions[0].label, "Import JSON") == 0);
-	assert(plus_vita_app_view(app).actions[1].id == PLUS_VITA_ACTION_BACK);
+	assert(plus_vita_app_view(app).actions[1].id == PLUS_VITA_ACTION_REMEMBER);
+	assert(strstr(plus_vita_app_view(app).actions[1].label, "Off"));
+	assert(plus_vita_app_view(app).actions[2].id == PLUS_VITA_ACTION_BACK);
 }
 
 static void saved_json(const char *data, size_t size, bool valid)
@@ -63,6 +65,8 @@ static void saved_response_formats(void)
 	saved_json(escaped, sizeof(escaped) - 1, true);
 	const char bom[] = "\xef\xbb\xbf{\"npsso\":\"" TOKEN "\"}";
 	saved_json(bom, sizeof(bom) - 1, true);
+	const char unicode[] = "{\"npsso\":\"" TOKEN "\",\"label\":\"Müller 日本\"}";
+	saved_json(unicode, sizeof(unicode) - 1, true);
 	const char embedded_nul[] = "{\"npsso\":\"" TOKEN "\"}\0trailing";
 	saved_json(embedded_nul, sizeof(embedded_nul) - 1, false);
 	char oversized[4097]; memset(oversized, ' ', sizeof(oversized));

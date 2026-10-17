@@ -5,6 +5,7 @@
 typedef struct plus_vita_account_t PlusVitaAccount;
 PlusVitaAccount *plus_vita_account_create(void);
 bool plus_vita_account_start(PlusVitaAccount *account, const PlusVitaAppEffect *effect);
+bool plus_vita_account_idle(const PlusVitaAccount *account);
 /* Poll returns borrowed data. Consume it synchronously, then release_result. */
 bool plus_vita_account_poll(PlusVitaAccount *account, PlusVitaAppEvent *event);
 void plus_vita_account_release_result(PlusVitaAccount *account);

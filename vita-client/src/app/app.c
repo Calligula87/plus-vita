@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "app.h"
+#include "utf8.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -17,6 +18,9 @@ struct plus_vita_app_t {
 	size_t catalogue_count, catalogue_selection;
 	char catalogue_status[128];
 	bool imported_valid, connected;
+	bool remember, saved, started, retry_account, retry_save, forgetting, expired;
+	PlusVitaAppScreen storage_return;
+	char label[129], account_status[512];
 	uint32_t previous_buttons;
 	int previous_direction;
 	uint64_t repeat_at;
@@ -40,9 +44,26 @@ static void welcome(PlusVitaApp *app)
 	if(app->connected)
 	{
 		app->view.subtitle = "YOUR ACCOUNT IS CONNECTED";
-		app->view.body = "Open your cloud catalogue and keep browsing.\nYour sign-in stays connected until you exit the app.";
+		app->view.body = app->saved ? "Your sign-in is remembered on this Vita.\nOpen your cloud catalogue and keep browsing."
+			: "Open your cloud catalogue and keep browsing.\nYour sign-in stays connected until you exit the app.";
 		app->view.actions[0].id = PLUS_VITA_ACTION_CATALOGUE;
 		app->view.actions[0].label = "Open catalogue";
+	}
+	else if(app->saved)
+	{
+		app->view.body = "Your saved sign-in is available.\nReconnect when you are ready.";
+		app->view.actions[0].id = PLUS_VITA_ACTION_RESTORE;
+		app->view.actions[0].label = "Reconnect saved account";
+	}
+	if(app->connected || app->saved)
+	{
+		app->view.actions[0].y = 284;
+		app->view.actions[1] = (PlusVitaAppButton){ PLUS_VITA_ACTION_ACCOUNT, "Account", 64, 340, 500, 48 };
+		app->view.actions[2] = (PlusVitaAppButton){ PLUS_VITA_ACTION_ABOUT, "About Plus Vita", 64, 396, 500, 48 };
+		app->view.actions[3] = (PlusVitaAppButton){ PLUS_VITA_ACTION_EXIT, "Exit", 64, 452, 500, 48 };
+		app->view.actions[0].height = 48;
+		app->view.action_count = 4;
+		if(app->view.selected >= 4) app->view.selected = 0;
 	}
 }
 
@@ -70,18 +91,18 @@ static void setup_view(PlusVitaApp *app)
 	app->view = (PlusVitaAppView){
 		.screen = PLUS_VITA_APP_SETUP,
 		.title = "Import your sign-in JSON.", .subtitle = "CONNECT TO SONY",
-		.body = "Transfer plus-vita-auth.json to ux0:data with VitaShell.\nChoose Import JSON. The transferred file is then removed.\nYour account stays connected until you exit this app.",
+		.body = "Transfer plus-vita-auth.json to ux0:data with VitaShell.\nRemember saves sign-in in locally readable files.\nThe transferred JSON is removed after import.",
 		.hint = "X  Select     O  Back",
 		.actions = {
 			{ PLUS_VITA_ACTION_IMPORT, "Import JSON", 64, 316, 832, 52 },
-			{ PLUS_VITA_ACTION_BACK, "Back", 64, 380, 832, 52 }
-		}, .action_count = 2
+			{ PLUS_VITA_ACTION_REMEMBER, app->remember ? "Remember this account: On" : "Remember this account: Off", 64, 380, 832, 52 },
+			{ PLUS_VITA_ACTION_BACK, "Back", 64, 444, 832, 52 }
+		}, .action_count = 3
 	};
 }
 
 static void account_error(PlusVitaApp *app, const char *message)
 {
-	if(!app->connected) plus_vita_credential_clear(&app->credential);
 	app->pending_operation = 0;
 	app->waiting_for = PLUS_VITA_EFFECT_NONE;
 	app->view = (PlusVitaAppView){
@@ -89,6 +110,19 @@ static void account_error(PlusVitaApp *app, const char *message)
 		.subtitle = "ACCOUNT SETUP", .body = message, .hint = "X  Select     O  Back",
 		.actions = {{ PLUS_VITA_ACTION_BACK, "Back", 64, 444, 500, 52 }}, .action_count = 1
 	};
+	if(app->retry_account || app->retry_save)
+	{
+		app->view.actions[0] = (PlusVitaAppButton){ PLUS_VITA_ACTION_RETRY, "Retry", 64, 380, 832, 52 };
+		app->view.actions[1] = (PlusVitaAppButton){ PLUS_VITA_ACTION_BACK, "Back", 64, 444, 832, 52 };
+		app->view.action_count = 2;
+	}
+	else if(app->saved || app->forgetting)
+	{
+		app->view.actions[0] = (PlusVitaAppButton){ app->forgetting ? PLUS_VITA_ACTION_CONFIRM_FORGET : PLUS_VITA_ACTION_FORGET,
+			app->forgetting ? "Retry removing account" : "Forget saved account", 64, 380, 832, 52 };
+		app->view.actions[1] = (PlusVitaAppButton){ PLUS_VITA_ACTION_BACK, "Back", 64, 444, 832, 52 };
+		app->view.action_count = 2;
+	}
 }
 
 static const char *result_message(PlusVitaAppResult result)
@@ -112,6 +146,19 @@ static const char *result_message(PlusVitaAppResult result)
 	}
 }
 
+static PlusVitaAppEffect operation(PlusVitaApp *app, PlusVitaAppEffectKind kind, const char *message, bool cancel)
+{
+	app->waiting_for = kind;
+	app->pending_operation = ++app->next_operation;
+	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_AUTHORIZING,
+		.title = "Your account.", .subtitle = "ACCOUNT", .body = message,
+		.hint = cancel ? "O  Cancel" : "Please wait", .operation = app->pending_operation };
+	if(cancel) { app->view.actions[0] = (PlusVitaAppButton){ PLUS_VITA_ACTION_BACK, "Cancel", 64, 444, 832, 52 }; app->view.action_count = 1; }
+	PlusVitaAppEffect effect = { .kind = kind, .operation = app->pending_operation, .credential = app->credential, .forget = app->forgetting };
+	memcpy(effect.label, app->label, sizeof(effect.label));
+	return effect;
+}
+
 static void json_space(const char **cursor, const char *end)
 {
 	while(*cursor < end && (**cursor == ' ' || **cursor == '\t' || **cursor == '\r' || **cursor == '\n')) ++*cursor;
@@ -119,6 +166,8 @@ static void json_space(const char **cursor, const char *end)
 
 static bool json_text_valid(const char *text, size_t size)
 {
+	const char *cursor = text;
+	while(cursor < text + size) if(plus_vita_utf8_next(&cursor, text + size) == UINT32_MAX) return false;
 	/* json-c's strict mode still accepts NaN/Infinity and raw string controls.
 	 * These are not JSON. Check their lexical forms before decoding values. */
 	bool quoted = false, escaped = false;
@@ -149,9 +198,8 @@ static bool json_value(struct json_tokener *parser, const char **cursor, const c
 	return true;
 }
 
-static bool parse_import(PlusVitaCredential *credential, const char *data, size_t size)
+static bool parse_import_ascii(PlusVitaCredential *credential, const char *data, size_t size, char *label)
 {
-	if(!data || !size || size > 4096 || !json_text_valid(data, size)) return false;
 	const char *p = data, *end = data + size;
 	/* Accept a UTF-8 BOM emitted by some save-response tools. */
 	if(size >= 3 && memcmp(p, "\xef\xbb\xbf", 3) == 0) p += 3;
@@ -159,10 +207,14 @@ static bool parse_import(PlusVitaCredential *credential, const char *data, size_
 	if(p == end || *p++ != '{') return false;
 	struct json_tokener *parser = json_tokener_new_ex(16);
 	if(!parser) return false;
-	json_tokener_set_flags(parser, JSON_TOKENER_STRICT | JSON_TOKENER_ALLOW_TRAILING_CHARS | JSON_TOKENER_VALIDATE_UTF8);
+	/* UTF-8 is validated once above, independently of tokener versions and
+	 * incremental parsing of individual root keys/values. */
+	json_tokener_set_flags(parser, JSON_TOKENER_STRICT | JSON_TOKENER_ALLOW_TRAILING_CHARS);
 	PlusVitaCredential parsed = { 0 };
 	struct json_object *value = NULL;
 	bool found = false, valid = false;
+	bool label_found = false;
+	char parsed_label[129] = { 0 };
 	/* Parse root members individually: a normal object parse would silently
 	 * overwrite duplicate npsso keys, including escaped spellings of the key.
 	 * json-c still validates/decodes each complete key and nested value. */
@@ -172,6 +224,8 @@ static bool parse_import(PlusVitaCredential *credential, const char *data, size_
 		if(p == end || *p != '"' || !json_value(parser, &p, end, &value)) goto done;
 		bool npsso = json_object_is_type(value, json_type_string)
 			&& json_object_get_string_len(value) == 5 && memcmp(json_object_get_string(value), "npsso", 5) == 0;
+		bool label_key = label && json_object_is_type(value, json_type_string)
+			&& json_object_get_string_len(value) == 5 && memcmp(json_object_get_string(value), "label", 5) == 0;
 		json_object_put(value); value = NULL;
 		json_space(&p, end);
 		if(p == end || *p++ != ':') goto done;
@@ -186,6 +240,15 @@ static bool parse_import(PlusVitaCredential *credential, const char *data, size_
 					|| (token[i] >= '0' && token[i] <= '9'))) goto done;
 			found = plus_vita_credential_set(&parsed, token, 64);
 		}
+		if(label_key)
+		{
+			if(label_found || !json_object_is_type(value, json_type_string) || json_object_get_string_len(value) > 128) goto done;
+			int length = json_object_get_string_len(value);
+			const char *name = json_object_get_string(value);
+			for(int i = 0; i < length; i++) if((unsigned char)name[i] < 0x20 || name[i] == 0x7f) goto done;
+			memcpy(parsed_label, name, (size_t)length);
+			label_found = true;
+		}
 		json_object_put(value); value = NULL;
 		json_space(&p, end);
 		if(p == end) goto done;
@@ -195,10 +258,36 @@ static bool parse_import(PlusVitaCredential *credential, const char *data, size_
 	json_space(&p, end);
 	valid = found && p == end;
 	if(valid) *credential = parsed;
+	if(valid && label) memcpy(label, parsed_label, sizeof(parsed_label));
 done:
 	json_object_put(value);
 	json_tokener_free(parser);
 	plus_vita_credential_clear(&parsed);
+	return valid;
+}
+
+static bool parse_import(PlusVitaCredential *credential, const char *data, size_t size, char *label)
+{
+	if(!data || !size || size > 4096 || !json_text_valid(data, size)) return false;
+	/* Normalize UTF-8 to JSON's UTF-16 escapes before incremental parsing.
+	 * This keeps raw Unicode handling identical across host/system json-c versions. */
+	char *normalized = malloc(size * 3 + 1);
+	if(!normalized) return false;
+	const char *p = data, *end = data + size;
+	if(size >= 3 && memcmp(p, "\xef\xbb\xbf", 3) == 0) p += 3;
+	char *out = normalized;
+	while(p < end)
+	{
+		uint32_t code = plus_vita_utf8_next(&p, end);
+		if(code < 0x80) *out++ = (char)code;
+		else if(code <= 0xffff) { snprintf(out, 7, "\\u%04x", (unsigned)code); out += 6; }
+		else { code -= 0x10000; snprintf(out, 13, "\\u%04x\\u%04x", 0xd800u + (unsigned)((code >> 10) & 1023), 0xdc00u + (unsigned)(code & 1023)); out += 12; }
+	}
+	*out = 0;
+	bool valid = parse_import_ascii(credential, normalized, (size_t)(out - normalized), label);
+	volatile char *wipe = normalized;
+	for(size_t i = 0; i < size * 3 + 1; i++) wipe[i] = 0;
+	free(normalized);
 	return valid;
 }
 
@@ -210,6 +299,48 @@ static int compare_titles(const void *left, const void *right)
 	return tolower(*a) - tolower(*b);
 }
 
+static void account_view(PlusVitaApp *app)
+{
+	snprintf(app->account_status, sizeof(app->account_status),
+		"Remember: %s. Local files are readable with file access.\nAccount label (entered by you): %s",
+		app->saved ? "On" : "Off", app->label[0] ? app->label : "Not set");
+	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_ACCOUNT, .title = "Your account.",
+		.subtitle = "ACCOUNT", .body = app->account_status, .hint = "Left stick  Move     X  Select     O  Back",
+		.actions = {
+			{ PLUS_VITA_ACTION_REMEMBER, app->saved ? "Remember: On (turn off)" : "Remember: Off (turn on)", 64, 284, 832, 48 },
+			{ PLUS_VITA_ACTION_LABEL, "Edit account label", 64, 340, 832, 48 },
+			{ PLUS_VITA_ACTION_FORGET, "Forget account", 64, 396, 832, 48 },
+			{ PLUS_VITA_ACTION_BACK, "Back", 64, 452, 832, 48 }
+		}, .action_count = 4 };
+	if(!app->connected)
+	{
+		app->view.actions[0] = app->view.actions[2];
+		app->view.actions[0].y = 396;
+		app->view.actions[1] = app->view.actions[3];
+		app->view.action_count = 2;
+	}
+}
+
+static void clear_runtime(PlusVitaApp *app)
+{
+	plus_vita_credential_clear(&app->credential);
+	free(app->catalogue);
+	app->catalogue = NULL;
+	app->catalogue_count = app->catalogue_selection = 0;
+	memset(app->label, 0, sizeof(app->label));
+	memset(app->account_status, 0, sizeof(app->account_status));
+	memset(app->catalogue_status, 0, sizeof(app->catalogue_status));
+	app->connected = app->retry_account = app->retry_save = false;
+}
+
+static PlusVitaAppEffect remove_saved(PlusVitaApp *app, bool forget, bool expired)
+{
+	app->forgetting = forget;
+	app->expired = expired;
+	if(forget || expired) clear_runtime(app);
+	return operation(app, PLUS_VITA_EFFECT_DELETE_ACCOUNT, "Removing saved sign-in from this Vita.", false);
+}
+
 static void catalogue_view(PlusVitaApp *app)
 {
 	PlusVitaAppView view = {
@@ -218,7 +349,8 @@ static void catalogue_view(PlusVitaApp *app)
 		.hint = "Left stick  Browse     O  Back"
 	};
 	snprintf(app->catalogue_status, sizeof(app->catalogue_status),
-		"%u cloud games available.\nYour sign-in is kept for this app session only.", (unsigned)app->catalogue_count);
+		"%u cloud games available.\n%s", (unsigned)app->catalogue_count,
+		app->saved ? "Your sign-in is remembered on this Vita." : "Your sign-in is kept for this app session only.");
 	if(!app->catalogue_count)
 	{
 		view.title = "No cloud games found.";
@@ -238,6 +370,7 @@ static void catalogue_view(PlusVitaApp *app)
 
 static PlusVitaAppEffect import_account(PlusVitaApp *app)
 {
+	app->retry_account = app->retry_save = false;
 	plus_vita_credential_clear(&app->credential);
 	free(app->catalogue);
 	app->catalogue = NULL;
@@ -259,7 +392,8 @@ static void confirm_exit(PlusVitaApp *app)
 	app->view = (PlusVitaAppView){
 		.screen = PLUS_VITA_APP_EXIT_CONFIRM,
 		.title = "See you next time?", .subtitle = "EXIT PLUS VITA",
-		.body = app->connected ? "Exiting ends this sign-in.\nTransfer your JSON again to sign in on the next launch."
+		.body = app->saved ? "Your sign-in is remembered on this Vita.\nThe app will validate it again next time you open it."
+			: app->connected ? "Exiting ends this sign-in.\nTurn on Remember in Account to keep it for the next launch."
 			: "You can come back whenever you are ready to play.",
 		.hint = "X  Select     O  Back",
 		.actions = {
@@ -274,6 +408,19 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	PlusVitaAppView *view = &app->view;
 	PlusVitaAppEffect effect = { .kind = PLUS_VITA_EFFECT_NONE };
 	if(view->screen == PLUS_VITA_APP_CLOSED) return effect;
+	if(event.kind == PLUS_VITA_EVENT_START)
+	{
+		if(app->started) return effect;
+		app->started = true;
+		return operation(app, PLUS_VITA_EFFECT_LOAD_ACCOUNT, "Checking for a remembered account.", true);
+	}
+	if(event.kind == PLUS_VITA_EVENT_PAD_RESET)
+	{
+		app->previous_buttons = event.pad.buttons;
+		app->previous_direction = event.pad.left_y > 180 ? 1 : event.pad.left_y < 76 ? -1 : 0;
+		app->repeat_at = event.pad.time_us + 400000u;
+		return effect;
+	}
 	if(event.kind == PLUS_VITA_EVENT_PAD)
 	{
 		PlusVitaAppPad pad = event.pad;
@@ -296,10 +443,57 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		return effect;
 	}
 	if(event.kind == PLUS_VITA_EVENT_IMPORT_READ || event.kind == PLUS_VITA_EVENT_IMPORT_REMOVED
-		|| event.kind == PLUS_VITA_EVENT_AUTHORIZED)
+		|| event.kind == PLUS_VITA_EVENT_AUTHORIZED || event.kind == PLUS_VITA_EVENT_ACCOUNT_LOADED
+		|| event.kind == PLUS_VITA_EVENT_ACCOUNT_SAVED || event.kind == PLUS_VITA_EVENT_ACCOUNT_DELETED)
 	{
 		if(view->screen != PLUS_VITA_APP_AUTHORIZING || !event.operation
 			|| event.operation != app->pending_operation) return effect;
+		if(event.kind == PLUS_VITA_EVENT_ACCOUNT_LOADED && app->waiting_for == PLUS_VITA_EFFECT_LOAD_ACCOUNT)
+		{
+			if(event.status == PLUS_VITA_RESULT_MISSING) {
+				app->pending_operation = 0; app->waiting_for = PLUS_VITA_EFFECT_NONE;
+				app->saved = app->remember = false; clear_runtime(app); welcome(app); return effect;
+			}
+			if(event.status != PLUS_VITA_RESULT_OK || !parse_import(&app->credential, event.data, event.data_size, app->label))
+			{
+				app->saved = true; /* Presence/error is not proof of a usable sign-in. */
+				account_error(app, "The saved account could not be read.\nCheck local storage or forget the saved account and import again.");
+				return effect;
+			}
+			app->saved = app->remember = true;
+			return operation(app, PLUS_VITA_EFFECT_AUTHORIZE, "Restoring your saved sign-in and loading cloud games.", true);
+		}
+		if(event.kind == PLUS_VITA_EVENT_ACCOUNT_SAVED && app->waiting_for == PLUS_VITA_EFFECT_SAVE_ACCOUNT)
+		{
+			app->pending_operation = 0;
+			app->waiting_for = PLUS_VITA_EFFECT_NONE;
+			if(event.status != PLUS_VITA_RESULT_OK)
+			{
+				app->retry_save = true;
+				account_error(app, "Your account changes could not be saved.\nYou can keep using this app run, or retry saving before exiting.");
+				return effect;
+			}
+			app->saved = app->remember = true;
+			app->retry_save = false;
+			if(app->storage_return == PLUS_VITA_APP_ACCOUNT) account_view(app); else catalogue_view(app);
+			return effect;
+		}
+		if(event.kind == PLUS_VITA_EVENT_ACCOUNT_DELETED && app->waiting_for == PLUS_VITA_EFFECT_DELETE_ACCOUNT)
+		{
+			app->pending_operation = 0;
+			app->waiting_for = PLUS_VITA_EFFECT_NONE;
+			if(event.restore_blocked) app->saved = app->remember = false;
+			if(event.status != PLUS_VITA_RESULT_OK)
+			{
+				account_error(app, "Account files could not all be removed.\nCheck storage and retry cleanup. Removal is not complete.");
+				return effect;
+			}
+			app->saved = app->remember = false;
+			if(app->expired) { app->expired = false; account_error(app, result_message(PLUS_VITA_RESULT_REJECTED)); }
+			else if(app->forgetting) { app->forgetting = false; app->welcome_selection = 0; setup_view(app); }
+			else account_view(app);
+			return effect;
+		}
 		if(event.kind == PLUS_VITA_EVENT_IMPORT_READ && app->waiting_for == PLUS_VITA_EFFECT_READ_IMPORT)
 		{
 			if(event.status != PLUS_VITA_RESULT_OK)
@@ -307,7 +501,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 				account_error(app, result_message(event.status));
 				return effect;
 			}
-			app->imported_valid = parse_import(&app->credential, event.data, event.data_size);
+			app->imported_valid = parse_import(&app->credential, event.data, event.data_size, NULL);
 			app->waiting_for = PLUS_VITA_EFFECT_REMOVE_IMPORT;
 			view->body = "Finishing sign-in file cleanup.";
 			effect = (PlusVitaAppEffect){ .kind = PLUS_VITA_EFFECT_REMOVE_IMPORT, .operation = event.operation };
@@ -332,6 +526,9 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		{
 			if(event.status != PLUS_VITA_RESULT_OK)
 			{
+				app->retry_account = event.status != PLUS_VITA_RESULT_REJECTED;
+				if(event.status == PLUS_VITA_RESULT_REJECTED && app->saved) return remove_saved(app, false, true);
+				if(event.status == PLUS_VITA_RESULT_REJECTED) plus_vita_credential_clear(&app->credential);
 				account_error(app, result_message(event.status));
 				return effect;
 			}
@@ -352,9 +549,30 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 				app->pending_operation = 0;
 				app->waiting_for = PLUS_VITA_EFFECT_NONE;
 				catalogue_view(app);
+				app->retry_account = false;
+				if(app->remember && !app->saved) {
+					app->storage_return = PLUS_VITA_APP_CATALOGUE;
+					return operation(app, PLUS_VITA_EFFECT_SAVE_ACCOUNT, "Saving your account on this Vita.", false);
+				}
 			}
 		}
 		return effect;
+	}
+	if(event.kind == PLUS_VITA_EVENT_LABEL_ENTERED)
+	{
+		if(app->waiting_for != PLUS_VITA_EFFECT_EDIT_LABEL || !event.operation || event.operation != app->pending_operation) return effect;
+		app->pending_operation = 0; app->waiting_for = PLUS_VITA_EFFECT_NONE;
+		if(event.status == PLUS_VITA_RESULT_CANCELLED) { account_view(app); return effect; }
+		bool valid = event.status == PLUS_VITA_RESULT_OK && event.data && event.data_size <= 128;
+		for(size_t i = 0; valid && i < event.data_size; i++) valid = (unsigned char)event.data[i] >= 0x20 && event.data[i] != 0x7f;
+		const char *cursor = event.data;
+		unsigned characters = 0;
+		while(valid && cursor < event.data + event.data_size) { valid = plus_vita_utf8_next(&cursor, event.data + event.data_size) != UINT32_MAX; characters++; }
+		valid = valid && characters <= 32;
+		if(!valid) { account_error(app, "The label could not be entered.\nUse up to 32 characters and try again from Account."); return effect; }
+		memset(app->label, 0, sizeof(app->label)); memcpy(app->label, event.data, event.data_size);
+		if(app->saved) { app->storage_return = PLUS_VITA_APP_ACCOUNT; return operation(app, PLUS_VITA_EFFECT_SAVE_ACCOUNT, "Saving your account label.", false); }
+		account_view(app); return effect;
 	}
 	if(event.kind == PLUS_VITA_EVENT_SETUP_READY)
 	{
@@ -404,10 +622,13 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		view->selected = (view->selected + view->action_count - 1) % view->action_count;
 	else if(event.kind == PLUS_VITA_EVENT_BACK)
 	{
+		if(app->waiting_for == PLUS_VITA_EFFECT_SAVE_ACCOUNT || app->waiting_for == PLUS_VITA_EFFECT_DELETE_ACCOUNT) return effect;
+		if(view->screen == PLUS_VITA_APP_FORGET_CONFIRM) { account_view(app); return effect; }
 		app->pending_operation = 0;
 		app->waiting_for = PLUS_VITA_EFFECT_NONE;
 		if(!app->connected) plus_vita_credential_clear(&app->credential);
-		if(view->screen == PLUS_VITA_APP_ERROR && !app->connected) setup_view(app);
+		app->retry_account = app->retry_save = false;
+		if(view->screen == PLUS_VITA_APP_ERROR && !app->connected && !app->saved) setup_view(app);
 		else if(view->screen == PLUS_VITA_APP_WELCOME)
 		{
 			app->welcome_selection = view->selected;
@@ -425,6 +646,34 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		}
 		else if(action == PLUS_VITA_ACTION_IMPORT)
 			return import_account(app);
+		else if(action == PLUS_VITA_ACTION_REMEMBER)
+		{
+			if(view->screen == PLUS_VITA_APP_ACCOUNT)
+			{
+				if(app->saved) return remove_saved(app, false, false);
+				app->storage_return = PLUS_VITA_APP_ACCOUNT;
+				return operation(app, PLUS_VITA_EFFECT_SAVE_ACCOUNT, "Saving sign-in in locally readable files on this Vita.", false);
+			}
+			app->remember = !app->remember;
+			setup_view(app);
+			app->view.selected = 1;
+		}
+		else if(action == PLUS_VITA_ACTION_RESTORE)
+			return operation(app, PLUS_VITA_EFFECT_LOAD_ACCOUNT, "Loading your remembered account.", true);
+		else if(action == PLUS_VITA_ACTION_RETRY)
+			return operation(app, app->retry_save ? PLUS_VITA_EFFECT_SAVE_ACCOUNT : PLUS_VITA_EFFECT_AUTHORIZE,
+				app->retry_save ? "Saving your account on this Vita." : "Checking your sign-in and loading cloud games.", !app->retry_save);
+		else if(action == PLUS_VITA_ACTION_ACCOUNT) account_view(app);
+		else if(action == PLUS_VITA_ACTION_LABEL)
+			return operation(app, PLUS_VITA_EFFECT_EDIT_LABEL, "Opening the account-label keyboard.", true);
+		else if(action == PLUS_VITA_ACTION_FORGET)
+		{
+			app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_FORGET_CONFIRM, .title = "Forget this account?",
+				.subtitle = "ACCOUNT", .body = "This removes saved and active sign-in and the account label.\nYou will need to transfer your JSON again to sign in.", .hint = "X  Select     O  Back",
+				.actions = {{ PLUS_VITA_ACTION_BACK, "Keep account", 64, 380, 832, 52 },
+				{ PLUS_VITA_ACTION_CONFIRM_FORGET, "Forget account", 64, 444, 832, 52 }}, .action_count = 2 };
+		}
+		else if(action == PLUS_VITA_ACTION_CONFIRM_FORGET) return remove_saved(app, true, false);
 		else if(action == PLUS_VITA_ACTION_CONTINUE) setup_view(app);
 		else if(action == PLUS_VITA_ACTION_SETUP)
 		{

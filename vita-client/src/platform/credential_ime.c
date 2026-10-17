@@ -145,12 +145,13 @@ static bool display_term(void)
 }
 
 static void credential_ime_read(PlusVitaCredential *credential,
-	PlusVitaCredentialImeResult *result, bool masked)
+	PlusVitaCredentialImeResult *result, bool masked, char *label)
 {
 	static const uint16_t title[] = {
 		'N','P','S','S','O',' ','v','i','s','i','b','l','e',' ','-',' ','n','o','t',' ','s','a','v','e','d',0
 	};
 	static const uint16_t masked_title[] = { 'E','n','t','e','r',' ','N','P','S','S','O',0 };
+	static const uint16_t label_title[] = { 'A','c','c','o','u','n','t',' ','l','a','b','e','l',0 };
 	uint16_t input[SCE_IME_DIALOG_MAX_TEXT_LENGTH + 1] = { 0 };
 	bool app_initialized = false;
 	bool gxm_initialized = false;
@@ -174,14 +175,14 @@ static void credential_ime_read(PlusVitaCredential *credential,
 
 	SceImeDialogParam param;
 	sceImeDialogParamInit(&param);
-	param.supportedLanguages = SCE_IME_LANGUAGE_ENGLISH;
-	param.languagesForced = SCE_TRUE;
-	param.type = SCE_IME_TYPE_BASIC_LATIN;
+	param.supportedLanguages = label ? 0 : SCE_IME_LANGUAGE_ENGLISH;
+	param.languagesForced = label ? SCE_FALSE : SCE_TRUE;
+	param.type = label ? SCE_IME_TYPE_DEFAULT : SCE_IME_TYPE_BASIC_LATIN;
 	param.option = SCE_IME_OPTION_NO_AUTO_CAPITALIZATION | SCE_IME_OPTION_NO_ASSISTANCE;
 	param.dialogMode = SCE_IME_DIALOG_DIALOG_MODE_WITH_CANCEL;
 	param.textBoxMode = masked ? SCE_IME_DIALOG_TEXTBOX_MODE_PASSWORD : SCE_IME_DIALOG_TEXTBOX_MODE_DEFAULT;
-	param.title = masked ? masked_title : title;
-	param.maxTextLength = masked ? 64 : PLUS_VITA_CREDENTIAL_MAX;
+	param.title = label ? label_title : masked ? masked_title : title;
+	param.maxTextLength = label ? 32 : masked ? 64 : PLUS_VITA_CREDENTIAL_MAX;
 	param.initialText = NULL;
 	param.inputTextBuffer = input;
 	if(sceImeDialogInit(&param) < 0)
@@ -209,7 +210,32 @@ static void credential_ime_read(PlusVitaCredential *credential,
 	SceImeDialogResult dialog_result = { 0 };
 	sceImeDialogGetResult(&dialog_result);
 	result->accepted = dialog_result.button == SCE_IME_DIALOG_BUTTON_ENTER;
-	if(result->accepted)
+	if(result->accepted && label)
+	{
+		size_t length = 0;
+		bool valid = true;
+		for(unsigned i = 0; valid && input[i]; i++)
+		{
+			uint32_t code = input[i];
+			if(code >= 0xd800 && code <= 0xdbff) {
+				uint32_t low = input[++i];
+				if(low < 0xdc00 || low > 0xdfff) { valid = false; break; }
+				code = 0x10000 + ((code - 0xd800) << 10) + low - 0xdc00;
+			} else if(code >= 0xdc00 && code <= 0xdfff) { valid = false; break; }
+			if(code < 32 || code == 127) { valid = false; break; }
+			unsigned count = code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+			if(length + count > 128) { valid = false; break; }
+			if(count == 1) label[length++] = (char)code;
+			else {
+				label[length++] = (char)((count == 2 ? 0xc0 : count == 3 ? 0xe0 : 0xf0) | (code >> (6 * (count - 1))));
+				for(unsigned j = count - 1; j > 0; j--) label[length++] = (char)(0x80 | ((code >> (6 * (j - 1))) & 63));
+			}
+		}
+		label[length] = 0;
+		result->entered_length = length;
+		result->validated = valid;
+	}
+	else if(result->accepted)
 	{
 		char ascii[PLUS_VITA_CREDENTIAL_MAX + 1] = { 0 };
 		size_t length = 0;
@@ -231,7 +257,10 @@ cleanup:
 		sceImeDialogTerm();
 	if(gxm_initialized && !display_term()) result->validated = false;
 	if(!result->validated)
+	{
 		plus_vita_credential_clear(credential);
+		if(label) secure_clear(label, 129);
+	}
 	result->credential_wiped = plus_vita_credential_is_clear(credential);
 	secure_clear(input, sizeof(input));
 	result->input_wiped = memory_is_clear(input, sizeof(input));
@@ -241,10 +270,18 @@ cleanup:
 
 void plus_vita_credential_ime_read(PlusVitaCredential *credential, PlusVitaCredentialImeResult *result)
 {
-	credential_ime_read(credential, result, false);
+	credential_ime_read(credential, result, false, NULL);
 }
 
 void plus_vita_credential_ime_read_masked(PlusVitaCredential *credential, PlusVitaCredentialImeResult *result)
 {
-	credential_ime_read(credential, result, true);
+	credential_ime_read(credential, result, true, NULL);
+}
+
+void plus_vita_account_label_read(char output[129], PlusVitaCredentialImeResult *result)
+{
+	PlusVitaCredential unused;
+	memset(output, 0, 129);
+	credential_ime_read(&unused, result, false, output);
+	plus_vita_credential_clear(&unused);
 }
