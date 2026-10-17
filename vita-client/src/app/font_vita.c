@@ -76,16 +76,25 @@ static ScePvfFontId face(PlusVitaFont *font, unsigned *code, int size)
 	*code = '?'; return font->latin;
 }
 
+static bool outline(PlusVitaFont *font, unsigned *code, int size, ScePvfFontId *selected,
+	ScePvfCharInfo *info, PlusVitaGlyph *glyph)
+{
+	*selected = face(font, code, size);
+	ScePvfIrect rect;
+	if(*selected && scePvfGetCharInfo(*selected, (ScePvfCharCode)*code, info) == 0
+		&& scePvfGetCharImageRect(*selected, (ScePvfCharCode)*code, &rect) == 0 && rect.width <= 124 && rect.height <= 124) {
+		*glyph = (PlusVitaGlyph){ .advance = (info->glyphMetrics.horizontalAdvance64 + 63) / 64,
+			.left = info->glyphMetrics.horizontalBearingX64 / 64, .top = (info->glyphMetrics.horizontalBearingY64 + 63) / 64,
+			.width = rect.width, .height = rect.height };
+		return true;
+	}
+	return false;
+}
+
 static PlusVitaGlyph measure(void *context, unsigned code, int size)
 {
-	PlusVitaFont *font = context;
-	ScePvfFontId selected = face(font, &code, size);
-	ScePvfCharInfo info; ScePvfIrect rect;
-	if(selected && scePvfGetCharInfo(selected, (ScePvfCharCode)code, &info) == 0
-		&& scePvfGetCharImageRect(selected, (ScePvfCharCode)code, &rect) == 0 && rect.width <= 124 && rect.height <= 124)
-		return (PlusVitaGlyph){ .advance = (info.glyphMetrics.horizontalAdvance64 + 63) / 64,
-			.left = info.glyphMetrics.horizontalBearingX64 / 64, .top = (info.glyphMetrics.horizontalBearingY64 + 63) / 64,
-			.width = rect.width, .height = rect.height };
+	ScePvfFontId selected; ScePvfCharInfo info; PlusVitaGlyph glyph;
+	if(outline(context, &code, size, &selected, &info, &glyph)) return glyph;
 	int horizontal = size / 12; if(horizontal < 1) horizontal = 1;
 	int vertical = size / 8; if(vertical < 1) vertical = 1;
 	return (PlusVitaGlyph){ .advance = 8 * horizontal, .width = 8 * horizontal, .height = 8 * vertical, .top = 8 * vertical };
@@ -116,10 +125,8 @@ static void pixel(PlusVitaFont *font, int x, int y, unsigned alpha, const PlusVi
 static void draw(void *context, unsigned code, int x, int baseline, int size, const PlusVitaTextBox *clip)
 {
 	PlusVitaFont *font = context;
-	PlusVitaGlyph glyph = measure(font, code, size);
-	ScePvfFontId selected = face(font, &code, size);
-	ScePvfCharInfo info;
-	if(selected && scePvfGetCharInfo(selected, (ScePvfCharCode)code, &info) == 0 && glyph.width <= 124 && glyph.height <= 124) {
+	PlusVitaGlyph glyph; ScePvfFontId selected; ScePvfCharInfo info;
+	if(outline(font, &code, size, &selected, &info, &glyph)) {
 		memset(font->glyph, 0, sizeof(font->glyph));
 		ScePvfUserImageBufferRec image = { .pixelFormat = SCE_PVF_USERIMAGE_DIRECT8,
 			.xPos64 = 128 - info.glyphMetrics.horizontalBearingX64,
@@ -130,6 +137,12 @@ static void draw(void *context, unsigned code, int x, int baseline, int size, co
 				pixel(font, x + glyph.left + col, baseline - glyph.top + row, font->glyph[(row + 2) * 128 + col + 2], clip);
 			return;
 		}
+		/* A raster failure must not substitute wider bitmap metrics after layout.
+		 * Draw a bounded missing-glyph outline inside the measured ink region. */
+		for(int row = 0; row < glyph.height; row++) for(int col = 0; col < glyph.width; col++)
+			if(!row || !col || row == glyph.height - 1 || col == glyph.width - 1)
+				pixel(font, x + glyph.left + col, baseline - glyph.top + row, 255, clip);
+		return;
 	}
 	PsvDebugScreenFont *bitmap = psvDebugScreenGetFont();
 	if(code > 127) code = '?';

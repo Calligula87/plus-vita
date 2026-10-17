@@ -100,8 +100,12 @@ static void save_account(PlusVitaAccount *account)
 	struct json_object *token = json_object_new_string_len(account->job.credential.value, (int)account->job.credential.length);
 	struct json_object *label = json_object_new_string(account->job.label);
 	if(!token || !label) { json_object_put(token); json_object_put(label); json_object_put(root); return; }
-	json_object_object_add(root, "npsso", token);
-	json_object_object_add(root, "label", label);
+	if(json_object_object_add(root, "npsso", token) < 0) {
+		json_object_put(token); json_object_put(label); json_object_put(root); return;
+	}
+	if(json_object_object_add(root, "label", label) < 0) {
+		json_object_put(label); json_object_put(root); return;
+	}
 	const char *data = json_object_to_json_string_ext(root, JSON_C_TO_STRING_PLAIN);
 	FILE *file = fopen(ACCOUNT_TEMP, "wb");
 	bool success = false;

@@ -18,7 +18,7 @@ struct plus_vita_app_t {
 	size_t catalogue_count, catalogue_selection;
 	char catalogue_status[128];
 	bool imported_valid, connected;
-	bool remember, saved, started, retry_account, retry_save, forgetting, expired;
+	bool remember, saved, started, retry_account, retry_save, retry_delete, forgetting, expired;
 	PlusVitaAppScreen storage_return;
 	char label[129], account_status[512];
 	uint32_t previous_buttons;
@@ -110,9 +110,9 @@ static void account_error(PlusVitaApp *app, const char *message)
 		.subtitle = "ACCOUNT SETUP", .body = message, .hint = "X  Select     O  Back",
 		.actions = {{ PLUS_VITA_ACTION_BACK, "Back", 64, 444, 500, 52 }}, .action_count = 1
 	};
-	if(app->retry_account || app->retry_save)
+	if(app->retry_account || app->retry_save || app->retry_delete)
 	{
-		app->view.actions[0] = (PlusVitaAppButton){ PLUS_VITA_ACTION_RETRY, "Retry", 64, 380, 832, 52 };
+		app->view.actions[0] = (PlusVitaAppButton){ PLUS_VITA_ACTION_RETRY, app->retry_delete ? "Retry removing saved account" : "Retry", 64, 380, 832, 52 };
 		app->view.actions[1] = (PlusVitaAppButton){ PLUS_VITA_ACTION_BACK, "Back", 64, 444, 832, 52 };
 		app->view.action_count = 2;
 	}
@@ -307,7 +307,7 @@ static void account_view(PlusVitaApp *app)
 	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_ACCOUNT, .title = "Your account.",
 		.subtitle = "ACCOUNT", .body = app->account_status, .hint = "Left stick  Move     X  Select     O  Back",
 		.actions = {
-			{ PLUS_VITA_ACTION_REMEMBER, app->saved ? "Remember: On (turn off)" : "Remember: Off (turn on)", 64, 284, 832, 48 },
+			{ PLUS_VITA_ACTION_REMEMBER, app->retry_delete ? "Retry removing saved account" : app->saved ? "Remember: On (turn off)" : "Remember: Off (turn on)", 64, 284, 832, 48 },
 			{ PLUS_VITA_ACTION_LABEL, "Edit account label", 64, 340, 832, 48 },
 			{ PLUS_VITA_ACTION_FORGET, "Forget account", 64, 396, 832, 48 },
 			{ PLUS_VITA_ACTION_BACK, "Back", 64, 452, 832, 48 }
@@ -485,10 +485,12 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 			if(event.restore_blocked) app->saved = app->remember = false;
 			if(event.status != PLUS_VITA_RESULT_OK)
 			{
+				app->retry_delete = true;
 				account_error(app, "Account files could not all be removed.\nCheck storage and retry cleanup. Removal is not complete.");
 				return effect;
 			}
 			app->saved = app->remember = false;
+			app->retry_delete = false;
 			if(app->expired) { app->expired = false; account_error(app, result_message(PLUS_VITA_RESULT_REJECTED)); }
 			else if(app->forgetting) { app->forgetting = false; app->welcome_selection = 0; setup_view(app); }
 			else account_view(app);
@@ -650,6 +652,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		{
 			if(view->screen == PLUS_VITA_APP_ACCOUNT)
 			{
+				if(app->retry_delete) return remove_saved(app, app->forgetting, app->expired);
 				if(app->saved) return remove_saved(app, false, false);
 				app->storage_return = PLUS_VITA_APP_ACCOUNT;
 				return operation(app, PLUS_VITA_EFFECT_SAVE_ACCOUNT, "Saving sign-in in locally readable files on this Vita.", false);
@@ -661,8 +664,8 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		else if(action == PLUS_VITA_ACTION_RESTORE)
 			return operation(app, PLUS_VITA_EFFECT_LOAD_ACCOUNT, "Loading your remembered account.", true);
 		else if(action == PLUS_VITA_ACTION_RETRY)
-			return operation(app, app->retry_save ? PLUS_VITA_EFFECT_SAVE_ACCOUNT : PLUS_VITA_EFFECT_AUTHORIZE,
-				app->retry_save ? "Saving your account on this Vita." : "Checking your sign-in and loading cloud games.", !app->retry_save);
+			return operation(app, app->retry_delete ? PLUS_VITA_EFFECT_DELETE_ACCOUNT : app->retry_save ? PLUS_VITA_EFFECT_SAVE_ACCOUNT : PLUS_VITA_EFFECT_AUTHORIZE,
+				app->retry_delete ? "Removing saved sign-in from this Vita." : app->retry_save ? "Saving your account on this Vita." : "Checking your sign-in and loading cloud games.", !app->retry_save && !app->retry_delete);
 		else if(action == PLUS_VITA_ACTION_ACCOUNT) account_view(app);
 		else if(action == PLUS_VITA_ACTION_LABEL)
 			return operation(app, PLUS_VITA_EFFECT_EDIT_LABEL, "Opening the account-label keyboard.", true);

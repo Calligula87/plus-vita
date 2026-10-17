@@ -266,9 +266,72 @@ static void failed_removal(void)
 	assert(plus_vita_account_close(new_worker)); plus_vita_app_destroy(new_app);
 	assert(remove("ux0:data/plus-vita/account.json/obstruction") == 0);
 	assert(rmdir("ux0:data/plus-vita/account.json") == 0);
-	finish(app, account, choose(app, PLUS_VITA_ACTION_CONFIRM_FORGET));
+	finish(app, account, choose(app, PLUS_VITA_ACTION_RETRY));
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_SETUP);
 	assert(plus_vita_account_close(account)); plus_vita_app_destroy(app);
+	assert(remove("ux0:data/plus-vita/account.blocked") == 0);
+	assert(rmdir("ux0:data/plus-vita") == 0);
+}
+
+static void failed_save_disable_and_cancelled_restore(void)
+{
+	import_file();
+	PlusVitaApp *app = plus_vita_app_create(); PlusVitaAccount *account = plus_vita_account_create();
+	finish(app, account, open_import(app));
+	choose(app, PLUS_VITA_ACTION_BACK); choose(app, PLUS_VITA_ACTION_ACCOUNT);
+	/* Block the atomic temporary write with a directory, without mocking storage. */
+	assert(mkdir("ux0:data/plus-vita", 0700) == 0);
+	assert(mkdir("ux0:data/plus-vita/account.tmp", 0700) == 0);
+	FILE *temporary_child = fopen("ux0:data/plus-vita/account.tmp/obstruction", "wb");
+	assert(temporary_child && fclose(temporary_child) == 0);
+	finish(app, account, choose(app, PLUS_VITA_ACTION_REMEMBER));
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_ERROR);
+	assert(strstr(plus_vita_app_view(app).body, "could not be saved"));
+	assert(access("ux0:data/plus-vita/account.json", F_OK) != 0);
+	/* The failed write still permits runtime catalogue use. */
+	choose(app, PLUS_VITA_ACTION_BACK); choose(app, PLUS_VITA_ACTION_CATALOGUE);
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_CATALOGUE);
+	assert(remove("ux0:data/plus-vita/account.tmp/obstruction") == 0);
+	assert(rmdir("ux0:data/plus-vita/account.tmp") == 0);
+	choose(app, PLUS_VITA_ACTION_BACK); choose(app, PLUS_VITA_ACTION_ACCOUNT);
+	finish(app, account, choose(app, PLUS_VITA_ACTION_REMEMBER));
+	assert(remove("ux0:data/plus-vita/account.json") == 0);
+	assert(mkdir("ux0:data/plus-vita/account.json", 0700) == 0);
+	FILE *child = fopen("ux0:data/plus-vita/account.json/obstruction", "wb");
+	assert(child && fclose(child) == 0);
+	finish(app, account, choose(app, PLUS_VITA_ACTION_REMEMBER));
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_ERROR);
+	assert(strstr(plus_vita_app_view(app).actions[0].label, "Retry removing"));
+	assert(remove("ux0:data/plus-vita/account.json/obstruction") == 0);
+	assert(rmdir("ux0:data/plus-vita/account.json") == 0);
+	finish(app, account, choose(app, PLUS_VITA_ACTION_RETRY));
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_ACCOUNT);
+	choose(app, PLUS_VITA_ACTION_BACK); choose(app, PLUS_VITA_ACTION_CATALOGUE);
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_CATALOGUE);
+	choose(app, PLUS_VITA_ACTION_BACK); choose(app, PLUS_VITA_ACTION_ACCOUNT);
+	finish(app, account, choose(app, PLUS_VITA_ACTION_REMEMBER));
+	assert(plus_vita_account_close(account)); plus_vita_app_destroy(app);
+	/* Let restored authorization finish externally, but cancel before its result
+	 * reaches the app. Forget must remain final even after that successful result. */
+	app = plus_vita_app_create(); account = plus_vita_account_create();
+	PlusVitaAppEffect pending = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START });
+	for(unsigned i = 0; i < 5000 && pending.kind != PLUS_VITA_EFFECT_AUTHORIZE; i++) drive(app, account, &pending);
+	assert(pending.kind == PLUS_VITA_EFFECT_AUTHORIZE);
+	assert(plus_vita_account_start(account, &pending));
+	plus_vita_credential_clear(&pending.credential);
+	PlusVitaAppEvent late; bool done = false;
+	for(unsigned i = 0; i < 5000 && !done; i++) { done = plus_vita_account_poll(account, &late); if(!done) pause_poll(); }
+	assert(done && late.status == PLUS_VITA_RESULT_OK);
+	choose(app, PLUS_VITA_ACTION_BACK); plus_vita_account_cancel(account);
+	choose(app, PLUS_VITA_ACTION_ACCOUNT); choose(app, PLUS_VITA_ACTION_FORGET);
+	PlusVitaAccount *storage = plus_vita_account_create();
+	finish(app, storage, choose(app, PLUS_VITA_ACTION_CONFIRM_FORGET));
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_SETUP);
+	assert(plus_vita_app_dispatch(app, late).kind == PLUS_VITA_EFFECT_NONE);
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_SETUP);
+	assert(access("ux0:data/plus-vita/account.json", F_OK) != 0);
+	plus_vita_account_release_result(account);
+	assert(plus_vita_account_close(account)); assert(plus_vita_account_close(storage)); plus_vita_app_destroy(app);
 	assert(remove("ux0:data/plus-vita/account.blocked") == 0);
 	assert(rmdir("ux0:data/plus-vita") == 0);
 }
@@ -386,6 +449,7 @@ int main(void)
 	remembered_restart();
 	saved_error_paths();
 	failed_removal();
+	failed_save_disable_and_cancelled_restore();
 	assert(rmdir("ux0:data") == 0);
 	puts("app account integration: real import/worker/parsers, no retained file and cancelled blocked transport passed");
 	return 0;
