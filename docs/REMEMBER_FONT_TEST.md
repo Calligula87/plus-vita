@@ -24,15 +24,15 @@ hardware acceptance.
 2. Check Get started and the full setup guide. Use the joystick, Cross/Circle
    and touch, including held input/repeat. D-pad presses must not move menu
    focus. No diagnostic terminal should appear.
-3. Transfer a fresh JSON using [the setup guide](ACCOUNT_SETUP.md). In setup,
-   **Remember this account defaults Off**. Select it once to turn it **On**, then
-   select **Import JSON**. The import is removed; sign-in must reach catalogue.
+3. Transfer a fresh JSON using [the setup guide](ACCOUNT_SETUP.md), then launch.
+   It should automatically sign in from the file without a manual import.
+   The JSON must stay in place unchanged. Fresh setup defaults Remember On.
 4. Press Circle and verify **Open catalogue** returns to the previous selection.
    Open **Account** from home: Remember should be On. This means the minimum
    credential is saved in a locally readable file on the Vita, not encrypted
    storage or a Sony password vault.
-5. **Actually close the application and reopen it.** With no transfer JSON
-   present, it should show restoration progress, validate the saved sign-in
+5. **Actually close the application and reopen it.** With the same JSON still
+   present, it should show restoration progress, validate the sign-in
    and open the catalogue. Repeat once more. No fresh transfer should be needed
    while Sony accepts the credential. This does not promise a fixed lifetime,
    automatic token renewal or continuation of the same cloud gaming session.
@@ -43,7 +43,8 @@ hardware acceptance.
    The keyboard accepts up to 32 UTF-16 code units; the label is bounded to
    32 Unicode scalars / 128 UTF-8 bytes. Unsupported font glyphs use a placeholder.
 7. Turn Remember Off in Account. The current runtime account/catalogue remains
-   usable. Close/reopen: it must no longer restore that account. Re-import or
+   usable. The original JSON must remain. Close/reopen: it must no longer restore
+   that account, despite the retained JSON. Explicitly import or
    enable Remember again before exiting if you want it retained.
 8. With a remembered account, reopen while Wi-Fi is unavailable. It should show
    a fixed failure with Retry, retaining the saved sign-in. Restore Wi-Fi and
@@ -53,8 +54,9 @@ hardware acceptance.
    and asks for fresh JSON. Other unexpected service responses remain retryable;
    you can deliberately Forget and import fresh JSON if necessary.
 9. Choose **Forget account**, cancel confirmation once, then confirm it. This
-   clears runtime credentials, label/catalogue and the saved account, removes any
-   stale managed import and returns to setup. Reopen: no account should restore.
+   clears runtime credentials, label/catalogue and the app-managed saved account,
+   keeps the original JSON and returns to setup. Reopen: no account should restore.
+   Explicit manual import must still be possible from that same file.
 10. If a storage error appears, record which action failed. Save failure must
     not claim the account changes were saved; runtime use remains possible.
     Delete failure must say removal is incomplete and offer recovery. A local

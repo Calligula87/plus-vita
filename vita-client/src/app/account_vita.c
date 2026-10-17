@@ -42,14 +42,7 @@ static void read_import(PlusVitaAccount *account)
 	size_t size = fread(account->file, 1, sizeof(account->file), file);
 	bool failed = ferror(file) != 0;
 	if(fclose(file) != 0) failed = true;
-	/* Consumption and deletion are one worker operation. UI cancellation must
-	 * never strand a file that this worker has already opened and consumed. */
-	if(remove(IMPORT_FILE) != 0 && errno != ENOENT)
-	{
-		account->result.status = PLUS_VITA_RESULT_CLEANUP_ERROR;
-		clear_bytes(account->file, sizeof(account->file));
-		return;
-	}
+	/* The user-owned browser response stays in place for subsequent launches. */
 	account->result.status = failed ? PLUS_VITA_RESULT_STORAGE_ERROR : PLUS_VITA_RESULT_OK;
 	account->result.data = account->file;
 	account->result.data_size = size;
@@ -74,10 +67,14 @@ static void authorize(PlusVitaAccount *account)
 static void load_account(PlusVitaAccount *account)
 {
 	struct stat status;
-	if(stat(ACCOUNT_BLOCK, &status) == 0) { account->result.status = PLUS_VITA_RESULT_MISSING; return; }
+	if(stat(ACCOUNT_BLOCK, &status) == 0) { account->result.status = PLUS_VITA_RESULT_MISSING; account->result.restore_blocked = true; return; }
 	if(errno != ENOENT) { account->result.status = PLUS_VITA_RESULT_STORAGE_ERROR; return; }
 	FILE *file = fopen(ACCOUNT_FILE, "rb");
-	if(!file) { account->result.status = errno == ENOENT ? PLUS_VITA_RESULT_MISSING : PLUS_VITA_RESULT_STORAGE_ERROR; return; }
+	if(!file) {
+		if(errno == ENOENT) read_import(account);
+		else account->result.status = PLUS_VITA_RESULT_STORAGE_ERROR;
+		return;
+	}
 	size_t size = fread(account->file, 1, sizeof(account->file), file);
 	bool failed = ferror(file) != 0;
 	if(fclose(file) != 0) failed = true;
@@ -133,7 +130,6 @@ static void delete_account(PlusVitaAccount *account)
 	account->result.restore_blocked = true;
 	bool success = remove(ACCOUNT_FILE) == 0 || errno == ENOENT;
 	if(remove(ACCOUNT_TEMP) != 0 && errno != ENOENT) success = false;
-	if(account->job.forget && remove(IMPORT_FILE) != 0 && errno != ENOENT) success = false;
 	account->result.status = success ? PLUS_VITA_RESULT_OK : PLUS_VITA_RESULT_STORAGE_ERROR;
 }
 
@@ -145,13 +141,6 @@ static void *worker(void *context)
 	{
 		account->result.kind = PLUS_VITA_EVENT_IMPORT_READ;
 		read_import(account);
-	}
-	else if(account->job.kind == PLUS_VITA_EFFECT_REMOVE_IMPORT)
-	{
-		account->result.kind = PLUS_VITA_EVENT_IMPORT_REMOVED;
-		errno = 0;
-		int removed = remove(IMPORT_FILE);
-		account->result.status = removed == 0 || errno == ENOENT ? PLUS_VITA_RESULT_OK : PLUS_VITA_RESULT_STORAGE_ERROR;
 	}
 	else if(account->job.kind == PLUS_VITA_EFFECT_LOAD_ACCOUNT)
 	{
@@ -191,7 +180,7 @@ PlusVitaAccount *plus_vita_account_create(void)
 bool plus_vita_account_start(PlusVitaAccount *account, const PlusVitaAppEffect *effect)
 {
 	if(account->running) return false;
-	if(effect->kind != PLUS_VITA_EFFECT_READ_IMPORT && effect->kind != PLUS_VITA_EFFECT_REMOVE_IMPORT
+	if(effect->kind != PLUS_VITA_EFFECT_READ_IMPORT
 		&& effect->kind != PLUS_VITA_EFFECT_AUTHORIZE && effect->kind != PLUS_VITA_EFFECT_LOAD_ACCOUNT
 		&& effect->kind != PLUS_VITA_EFFECT_SAVE_ACCOUNT && effect->kind != PLUS_VITA_EFFECT_DELETE_ACCOUNT) return false;
 	account->job = *effect;

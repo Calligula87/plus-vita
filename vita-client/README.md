@@ -20,9 +20,9 @@ git submodule update --init --recursive
 ## Current smoke target
 
 New builds open a blue/gold graphical app with joystick/touch menu navigation,
-saved-JSON import, an opt-in remembered account and an initial catalogue.
-Circle/back retains the runtime account; enabling Remember once keeps sign-in
-across launches while Sony accepts it. Account controls include label,
+retained-JSON automatic sign-in and an initial catalogue.
+Circle/back retains the runtime account; the JSON stays in place and later
+launches revalidate it while Sony accepts it. Account controls include label,
 disable-remember and Forget. Typography uses scalable system fonts and measured
 text bounds. The revised candidate needs its
 [Vita check](../docs/REMEMBER_FONT_TEST.md); see the

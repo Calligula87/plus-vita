@@ -31,8 +31,6 @@ ChiakiErrorCode __wrap_cc_http_perform(ChiakiLog *log, const CCHttpRequest *requ
 {
 	(void)log;
 	atomic_fetch_add(&requests, 1);
-	/* The externally observable request may occur only after file consumption. */
-	assert(access("ux0:data/plus-vita-auth.json", F_OK) != 0 && errno == ENOENT);
 	memset(response, 0, sizeof(*response));
 	atomic_store(&server_entered, true);
 	while(atomic_load(&block_server))
@@ -92,6 +90,9 @@ static PlusVitaAppEffect open_import(PlusVitaApp *app)
 	PlusVitaAppEffect effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_SETUP_READY, .operation = effect.operation });
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE }); /* Explicit runtime only. */
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_UP });
 	return plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
 }
 
@@ -141,14 +142,12 @@ static void remembered_restart(void)
 	PlusVitaAppEffect pending = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_SETUP_READY, .operation = pending.operation });
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
-	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
-	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE }); /* Remember ON */
-	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_UP });
 	pending = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
 	for(unsigned i = 0; i < 5000 && plus_vita_app_view(app).screen == PLUS_VITA_APP_AUTHORIZING; i++) drive(app, account, &pending);
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_CATALOGUE);
 	assert(access("ux0:data/plus-vita/account.json", F_OK) == 0);
-	assert(access("ux0:data/plus-vita-auth.json", F_OK) != 0);
+	assert(access("ux0:data/plus-vita-auth.json", F_OK) == 0);
+	assert(remove("ux0:data/plus-vita-auth.json") == 0); /* Also cover cache-only restart. */
 	assert(plus_vita_account_close(account));
 	plus_vita_app_destroy(app);
 	app = plus_vita_app_create(); account = plus_vita_account_create();
@@ -191,12 +190,13 @@ static void remembered_restart(void)
 	finish(app, account, choose(app, PLUS_VITA_ACTION_CONFIRM_FORGET));
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_SETUP);
 	assert(access("ux0:data/plus-vita/account.json", F_OK) != 0);
-	assert(access("ux0:data/plus-vita-auth.json", F_OK) != 0);
+	assert(access("ux0:data/plus-vita-auth.json", F_OK) == 0);
 	assert(plus_vita_account_close(account)); plus_vita_app_destroy(app);
 	app = plus_vita_app_create(); account = plus_vita_account_create();
 	finish(app, account, plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START }));
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_WELCOME);
 	assert(plus_vita_account_close(account)); plus_vita_app_destroy(app);
+	assert(remove("ux0:data/plus-vita-auth.json") == 0);
 	assert(remove("ux0:data/plus-vita/account.blocked") == 0);
 	assert(rmdir("ux0:data/plus-vita") == 0);
 }
@@ -280,7 +280,6 @@ static void failed_save_disable_and_cancelled_restore(void)
 	finish(app, account, open_import(app));
 	choose(app, PLUS_VITA_ACTION_BACK); choose(app, PLUS_VITA_ACTION_ACCOUNT);
 	/* Block the atomic temporary write with a directory, without mocking storage. */
-	assert(mkdir("ux0:data/plus-vita", 0700) == 0);
 	assert(mkdir("ux0:data/plus-vita/account.tmp", 0700) == 0);
 	FILE *temporary_child = fopen("ux0:data/plus-vita/account.tmp/obstruction", "wb");
 	assert(temporary_child && fclose(temporary_child) == 0);
@@ -332,13 +331,34 @@ static void failed_save_disable_and_cancelled_restore(void)
 	assert(access("ux0:data/plus-vita/account.json", F_OK) != 0);
 	plus_vita_account_release_result(account);
 	assert(plus_vita_account_close(account)); assert(plus_vita_account_close(storage)); plus_vita_app_destroy(app);
+	assert(remove("ux0:data/plus-vita-auth.json") == 0);
 	assert(remove("ux0:data/plus-vita/account.blocked") == 0);
 	assert(rmdir("ux0:data/plus-vita") == 0);
 }
 
+static void retained_json_launch(void)
+{
+	import_file();
+	struct stat original, current;
+	assert(stat("ux0:data/plus-vita-auth.json", &original) == 0);
+	for(unsigned launch = 0; launch < 2; launch++) {
+		PlusVitaApp *app = plus_vita_app_create(); PlusVitaAccount *worker = plus_vita_account_create();
+		finish(app, worker, plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START }));
+		assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_CATALOGUE);
+		assert(stat("ux0:data/plus-vita-auth.json", &current) == 0 && current.st_size == original.st_size);
+		/* Launch uses the original JSON without requiring an app-managed copy. */
+		assert(access("ux0:data/plus-vita/account.json", F_OK) != 0);
+		assert(plus_vita_account_close(worker)); plus_vita_app_destroy(app);
+	}
+	assert(remove("ux0:data/plus-vita-auth.json") == 0);
+	assert(rmdir("ux0:data") == 0);
+}
+
 int main(void)
 {
-	/* Cancel before delivering the read result: consumption must still finish. */
+	retained_json_launch();
+	atomic_store(&server_entered, false);
+	/* Cancel before delivering the read result: the source must stay intact. */
 	import_file();
 	PlusVitaApp *cancelled_app = plus_vita_app_create();
 	PlusVitaAccount *cancelled_account = plus_vita_account_create();
@@ -353,39 +373,13 @@ int main(void)
 		if(!read_done) pause_poll();
 	}
 	assert(read_done);
-	assert(access("ux0:data/plus-vita-auth.json", F_OK) != 0 && errno == ENOENT);
+	assert(access("ux0:data/plus-vita-auth.json", F_OK) == 0);
 	assert(plus_vita_app_dispatch(cancelled_app, consumed).kind == PLUS_VITA_EFFECT_NONE);
 	assert(plus_vita_app_view(cancelled_app).screen == PLUS_VITA_APP_WELCOME);
 	assert(!atomic_load(&server_entered));
 	plus_vita_account_release_result(cancelled_account);
 	assert(plus_vita_account_close(cancelled_account));
 	plus_vita_app_destroy(cancelled_app);
-
-	/* A nonempty directory at the import path cannot be consumed/removed.
-	 * Even after cancellation the user must see the cleanup failure. */
-	assert(mkdir("ux0:data/plus-vita-auth.json", 0700) == 0);
-	FILE *obstruction = fopen("ux0:data/plus-vita-auth.json/keep", "wb");
-	assert(obstruction && fclose(obstruction) == 0);
-	cancelled_app = plus_vita_app_create();
-	cancelled_account = plus_vita_account_create();
-	read = open_import(cancelled_app);
-	assert(plus_vita_account_start(cancelled_account, &read));
-	plus_vita_app_dispatch(cancelled_app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_BACK });
-	read_done = false;
-	for(unsigned i = 0; i < 5000 && !read_done; i++) {
-		read_done = plus_vita_account_poll(cancelled_account, &consumed);
-		if(!read_done) pause_poll();
-	}
-	assert(read_done && consumed.status == PLUS_VITA_RESULT_CLEANUP_ERROR);
-	assert(plus_vita_app_dispatch(cancelled_app, consumed).kind == PLUS_VITA_EFFECT_NONE);
-	assert(plus_vita_app_view(cancelled_app).screen == PLUS_VITA_APP_ERROR);
-	assert(strstr(plus_vita_app_view(cancelled_app).body, "Remove it with VitaShell"));
-	assert(!atomic_load(&server_entered));
-	plus_vita_account_release_result(cancelled_account);
-	assert(plus_vita_account_close(cancelled_account));
-	plus_vita_app_destroy(cancelled_app);
-	assert(remove("ux0:data/plus-vita-auth.json/keep") == 0);
-	assert(rmdir("ux0:data/plus-vita-auth.json") == 0);
 
 	import_file();
 	PlusVitaApp *app = plus_vita_app_create();
@@ -396,9 +390,9 @@ int main(void)
 	PlusVitaAppView view = plus_vita_app_view(app);
 	assert(view.screen == PLUS_VITA_APP_CATALOGUE);
 	assert(view.action_count == 2 && strcmp(view.actions[0].label, "Alpha") == 0);
-	assert(access("ux0:data/plus-vita-auth.json", F_OK) != 0);
+	assert(access("ux0:data/plus-vita-auth.json", F_OK) == 0);
 	unsigned initial_requests = atomic_load(&requests);
-	/* Source file has been consumed. Navigation must retain the runtime account. */
+	/* Navigation retains the runtime account without rereading the source. */
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
 	for(unsigned repeat = 0; repeat < 3; repeat++)
 	{
@@ -419,7 +413,7 @@ int main(void)
 		assert(reopened.kind == PLUS_VITA_EFFECT_NONE);
 		assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_CATALOGUE);
 		assert(atomic_load(&requests) == initial_requests);
-		assert(access("ux0:data/plus-vita-auth.json", F_OK) != 0);
+		assert(access("ux0:data/plus-vita-auth.json", F_OK) == 0);
 	}
 	assert(plus_vita_account_close(account));
 	plus_vita_app_destroy(app);
@@ -444,6 +438,9 @@ int main(void)
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_WELCOME);
 	assert(plus_vita_account_close(account));
 	plus_vita_app_destroy(app);
+	assert(remove("ux0:data/plus-vita-auth.json") == 0);
+	assert(remove("ux0:data/plus-vita/account.blocked") == 0);
+	assert(rmdir("ux0:data/plus-vita") == 0);
 	assert(rmdir("ux0:data") == 0);
 	atomic_store(&block_server, false);
 	remembered_restart();
@@ -451,6 +448,6 @@ int main(void)
 	failed_removal();
 	failed_save_disable_and_cancelled_restore();
 	assert(rmdir("ux0:data") == 0);
-	puts("app account integration: real import/worker/parsers, no retained file and cancelled blocked transport passed");
+	puts("app account integration: retained JSON, restore, storage recovery and stale results passed");
 	return 0;
 }

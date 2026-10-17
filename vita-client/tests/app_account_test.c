@@ -17,7 +17,7 @@ static void setup(PlusVitaApp *app)
 	assert(plus_vita_app_view(app).action_count == 3);
 	assert(strcmp(plus_vita_app_view(app).actions[0].label, "Import JSON") == 0);
 	assert(plus_vita_app_view(app).actions[1].id == PLUS_VITA_ACTION_REMEMBER);
-	assert(strstr(plus_vita_app_view(app).actions[1].label, "Off"));
+	assert(strstr(plus_vita_app_view(app).actions[1].label, "On"));
 	assert(plus_vita_app_view(app).actions[2].id == PLUS_VITA_ACTION_BACK);
 }
 
@@ -30,8 +30,6 @@ static void saved_json(const char *data, size_t size, bool valid)
 	uint64_t operation = effect.operation;
 	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_IMPORT_READ,
 		.operation = operation, .data = data, .data_size = size });
-	assert(effect.kind == PLUS_VITA_EFFECT_REMOVE_IMPORT);
-	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_IMPORT_REMOVED, .operation = operation });
 	assert(effect.kind == (valid ? PLUS_VITA_EFFECT_AUTHORIZE : PLUS_VITA_EFFECT_NONE));
 	if(valid) assert(effect.credential.length == 64);
 	else {
@@ -91,10 +89,6 @@ int main(void)
 	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){
 		.kind = PLUS_VITA_EVENT_IMPORT_READ, .operation = operation,
 		.status = PLUS_VITA_RESULT_OK, .data = file, .data_size = sizeof(file) - 1 });
-	assert(effect.kind == PLUS_VITA_EFFECT_REMOVE_IMPORT);
-	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){
-		.kind = PLUS_VITA_EVENT_IMPORT_REMOVED, .operation = operation,
-		.status = PLUS_VITA_RESULT_OK });
 	assert(effect.kind == PLUS_VITA_EFFECT_AUTHORIZE);
 	assert(effect.credential.length == 64);
 	PlusVitaCatalogEntry titles[] = { { .name = "Zulu", .id = "z" }, { .name = "Alpha", .id = "a" } };
@@ -102,6 +96,8 @@ int main(void)
 		.operation = operation, .status = PLUS_VITA_RESULT_OK,
 		.entries = titles, .entry_count = 2 });
 	PlusVitaAppView view = plus_vita_app_view(app);
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACCOUNT_SAVED, .operation = view.operation });
+	view = plus_vita_app_view(app);
 	assert(view.screen == PLUS_VITA_APP_CATALOGUE);
 	assert(view.action_count == 2 && strcmp(view.actions[0].label, "Alpha") == 0);
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
@@ -122,28 +118,13 @@ int main(void)
 	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){
 		.kind = PLUS_VITA_EVENT_IMPORT_READ, .operation = operation,
 		.status = PLUS_VITA_RESULT_OK, .data = file, .data_size = sizeof(file) - 1 });
-	assert(effect.kind == PLUS_VITA_EFFECT_REMOVE_IMPORT);
-	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){
-		.kind = PLUS_VITA_EVENT_IMPORT_REMOVED, .operation = operation, .status = PLUS_VITA_RESULT_OK });
 	assert(effect.kind == PLUS_VITA_EFFECT_AUTHORIZE);
 	assert(effect.credential.length == 64);
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_AUTHORIZED,
 		.operation = operation, .status = PLUS_VITA_RESULT_OK, .entry_count = 0 });
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACCOUNT_SAVED, .operation = plus_vita_app_view(app).operation });
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_CATALOGUE);
 	assert(plus_vita_app_view(app).actions[0].id == PLUS_VITA_ACTION_BACK);
-	plus_vita_app_destroy(app);
-	app = plus_vita_app_create();
-	assert(app);
-	setup(app);
-	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
-	operation = effect.operation;
-	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_IMPORT_READ,
-		.operation = operation, .status = PLUS_VITA_RESULT_OK, .data = file, .data_size = sizeof(file) - 1 });
-	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_IMPORT_REMOVED,
-		.operation = operation, .status = PLUS_VITA_RESULT_STORAGE_ERROR });
-	assert(effect.kind == PLUS_VITA_EFFECT_NONE);
-	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_ERROR);
-	assert(strstr(plus_vita_app_view(app).body, "remove") != NULL);
 	plus_vita_app_destroy(app);
 	app = plus_vita_app_create();
 	assert(app);
@@ -165,10 +146,14 @@ int main(void)
 		operation = effect.operation;
 		plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_IMPORT_READ,
 			.operation = operation, .data = file, .data_size = sizeof(file) - 1 });
-		plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_IMPORT_REMOVED, .operation = operation });
-		plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_AUTHORIZED,
+			plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_AUTHORIZED,
 			.operation = operation, .status = failures[i], .data = private_value, .data_size = sizeof(private_value) - 1 });
 		view = plus_vita_app_view(app);
+		if(failures[i] == PLUS_VITA_RESULT_REJECTED) {
+			plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACCOUNT_DELETED,
+				.operation = view.operation, .restore_blocked = true });
+			view = plus_vita_app_view(app);
+		}
 		assert(view.screen == PLUS_VITA_APP_ERROR && strstr(view.body, private_value) == NULL);
 		plus_vita_app_destroy(app);
 	}
@@ -179,7 +164,6 @@ int main(void)
 	operation = effect.operation;
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_IMPORT_READ,
 		.operation = operation, .data = file, .data_size = sizeof(file) - 1 });
-	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_IMPORT_REMOVED, .operation = operation });
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_BACK });
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_WELCOME);
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_AUTHORIZED,
@@ -194,10 +178,8 @@ int main(void)
 	operation = effect.operation;
 	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_IMPORT_READ,
 		.operation = operation, .data = malformed, .data_size = sizeof(malformed) - 1 });
-	assert(effect.kind == PLUS_VITA_EFFECT_REMOVE_IMPORT);
-	effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_IMPORT_REMOVED, .operation = operation });
 	assert(effect.kind == PLUS_VITA_EFFECT_NONE && plus_vita_app_view(app).screen == PLUS_VITA_APP_ERROR);
 	plus_vita_app_destroy(app);
-	puts("app account: JSON-only setup, cleanup, catalogues, safe failures and stale results passed");
+	puts("app account: retained JSON setup, catalogues, safe failures and stale results passed");
 	return 0;
 }

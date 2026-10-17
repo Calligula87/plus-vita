@@ -71,6 +71,7 @@ PlusVitaApp *plus_vita_app_create(void)
 {
 	PlusVitaApp *app = calloc(1, sizeof(*app));
 	if(!app) return NULL;
+	app->remember = true;
 	welcome(app);
 	return app;
 }
@@ -91,7 +92,7 @@ static void setup_view(PlusVitaApp *app)
 	app->view = (PlusVitaAppView){
 		.screen = PLUS_VITA_APP_SETUP,
 		.title = "Import your sign-in JSON.", .subtitle = "CONNECT TO SONY",
-		.body = "Transfer plus-vita-auth.json to ux0:data with VitaShell.\nRemember saves sign-in in locally readable files.\nThe transferred JSON is removed after import.",
+		.body = "Save plus-vita-auth.json in ux0:data with VitaShell.\nThe JSON stays there and can sign you in next launch.\nRemember Off pauses automatic sign-in; files are locally readable.",
 		.hint = "X  Select     O  Back",
 		.actions = {
 			{ PLUS_VITA_ACTION_IMPORT, "Import JSON", 64, 316, 832, 52 },
@@ -337,6 +338,7 @@ static PlusVitaAppEffect remove_saved(PlusVitaApp *app, bool forget, bool expire
 {
 	app->forgetting = forget;
 	app->expired = expired;
+	app->storage_return = PLUS_VITA_APP_ACCOUNT;
 	if(forget || expired) clear_runtime(app);
 	return operation(app, PLUS_VITA_EFFECT_DELETE_ACCOUNT, "Removing saved sign-in from this Vita.", false);
 }
@@ -435,14 +437,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		else if(navigate) event.kind = direction > 0 ? PLUS_VITA_EVENT_DOWN : PLUS_VITA_EVENT_UP;
 		else return effect;
 	}
-	/* Cleanup is a storage obligation even after sign-in ownership is cancelled.
-	 * Report failure without ever accepting the cancelled account result. */
-	if(event.kind == PLUS_VITA_EVENT_IMPORT_READ && event.status == PLUS_VITA_RESULT_CLEANUP_ERROR)
-	{
-		account_error(app, "The app could not remove the imported token file.\nSign-in was not attempted. Remove it with VitaShell and try again.");
-		return effect;
-	}
-	if(event.kind == PLUS_VITA_EVENT_IMPORT_READ || event.kind == PLUS_VITA_EVENT_IMPORT_REMOVED
+	if(event.kind == PLUS_VITA_EVENT_IMPORT_READ
 		|| event.kind == PLUS_VITA_EVENT_AUTHORIZED || event.kind == PLUS_VITA_EVENT_ACCOUNT_LOADED
 		|| event.kind == PLUS_VITA_EVENT_ACCOUNT_SAVED || event.kind == PLUS_VITA_EVENT_ACCOUNT_DELETED)
 	{
@@ -452,7 +447,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		{
 			if(event.status == PLUS_VITA_RESULT_MISSING) {
 				app->pending_operation = 0; app->waiting_for = PLUS_VITA_EFFECT_NONE;
-				app->saved = app->remember = false; clear_runtime(app); welcome(app); return effect;
+				app->saved = false; app->remember = !event.restore_blocked; clear_runtime(app); welcome(app); return effect;
 			}
 			if(event.status != PLUS_VITA_RESULT_OK || !parse_import(&app->credential, event.data, event.data_size, app->label))
 			{
@@ -493,6 +488,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 			app->retry_delete = false;
 			if(app->expired) { app->expired = false; account_error(app, result_message(PLUS_VITA_RESULT_REJECTED)); }
 			else if(app->forgetting) { app->forgetting = false; app->welcome_selection = 0; setup_view(app); }
+			else if(app->storage_return == PLUS_VITA_APP_CATALOGUE) catalogue_view(app);
 			else account_view(app);
 			return effect;
 		}
@@ -504,20 +500,9 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 				return effect;
 			}
 			app->imported_valid = parse_import(&app->credential, event.data, event.data_size, NULL);
-			app->waiting_for = PLUS_VITA_EFFECT_REMOVE_IMPORT;
-			view->body = "Finishing sign-in file cleanup.";
-			effect = (PlusVitaAppEffect){ .kind = PLUS_VITA_EFFECT_REMOVE_IMPORT, .operation = event.operation };
-		}
-		else if(event.kind == PLUS_VITA_EVENT_IMPORT_REMOVED && app->waiting_for == PLUS_VITA_EFFECT_REMOVE_IMPORT)
-		{
-			if(event.status != PLUS_VITA_RESULT_OK)
-			{
-				account_error(app, "The app could not remove the imported token file.\nSign-in was not attempted. Remove it with VitaShell and try again.");
-				return effect;
-			}
 			if(!app->imported_valid)
 			{
-				account_error(app, "The JSON file was removed, but its sign-in data was not valid.\nSave a fresh browser JSON response and transfer it again.");
+				account_error(app, "The JSON sign-in data was not valid. The file was kept.\nReplace it with a fresh browser JSON response and try again.");
 				return effect;
 			}
 			app->waiting_for = PLUS_VITA_EFFECT_AUTHORIZE;
@@ -529,8 +514,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 			if(event.status != PLUS_VITA_RESULT_OK)
 			{
 				app->retry_account = event.status != PLUS_VITA_RESULT_REJECTED;
-				if(event.status == PLUS_VITA_RESULT_REJECTED && app->saved) return remove_saved(app, false, true);
-				if(event.status == PLUS_VITA_RESULT_REJECTED) plus_vita_credential_clear(&app->credential);
+				if(event.status == PLUS_VITA_RESULT_REJECTED) return remove_saved(app, false, true);
 				account_error(app, result_message(event.status));
 				return effect;
 			}
@@ -552,6 +536,11 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 				app->waiting_for = PLUS_VITA_EFFECT_NONE;
 				catalogue_view(app);
 				app->retry_account = false;
+				if(!app->remember && !app->saved) {
+					PlusVitaAppEffect cleanup = remove_saved(app, false, false);
+					app->storage_return = PLUS_VITA_APP_CATALOGUE;
+					return cleanup;
+				}
 				if(app->remember && !app->saved) {
 					app->storage_return = PLUS_VITA_APP_CATALOGUE;
 					return operation(app, PLUS_VITA_EFFECT_SAVE_ACCOUNT, "Saving your account on this Vita.", false);
@@ -672,7 +661,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		else if(action == PLUS_VITA_ACTION_FORGET)
 		{
 			app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_FORGET_CONFIRM, .title = "Forget this account?",
-				.subtitle = "ACCOUNT", .body = "This removes saved and active sign-in and the account label.\nYou will need to transfer your JSON again to sign in.", .hint = "X  Select     O  Back",
+				.subtitle = "ACCOUNT", .body = "This clears active sign-in and saved account data.\nYour JSON stays in place, but automatic sign-in is paused.\nChoose Import JSON explicitly to connect again.", .hint = "X  Select     O  Back",
 				.actions = {{ PLUS_VITA_ACTION_BACK, "Keep account", 64, 380, 832, 52 },
 				{ PLUS_VITA_ACTION_CONFIRM_FORGET, "Forget account", 64, 444, 832, 52 }}, .action_count = 2 };
 		}
