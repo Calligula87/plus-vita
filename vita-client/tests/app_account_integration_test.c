@@ -18,6 +18,7 @@
 static atomic_bool block_server, server_entered;
 static atomic_uint requests;
 static atomic_int auth_status;
+static const char *identity_json = "\"SyntheticPlayer\"";
 static void pause_poll(void) { const struct timespec delay = { .tv_nsec = 1000000 }; nanosleep(&delay, NULL); }
 
 static void body(CCHttpResponse *response, const char *value)
@@ -54,7 +55,9 @@ ChiakiErrorCode __wrap_cc_http_perform(ChiakiLog *log, const CCHttpRequest *requ
 		response->status_code = 200;
 		response->headers = strdup("Set-Cookie: JSESSIONID=synthetic-session; Path=/\r\n");
 		response->headers_size = strlen(response->headers);
-		body(response, "{\"header\":{\"status_code\":\"0x0000\"},\"data\":{\"country\":\"CH\",\"language\":\"en\"}}");
+		char session[1024];
+		snprintf(session,sizeof(session),"{\"header\":{\"status_code\":\"0x0000\"},\"data\":{\"country\":\"CH\",\"language\":\"en\",\"onlineId\":%s}}",identity_json);
+		body(response, session);
 	}
 	else if(strstr(request->url, "/user/stores"))
 	{
@@ -158,6 +161,7 @@ static void remembered_restart(void)
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_CATALOGUE);
 	choose(app, PLUS_VITA_ACTION_BACK);
 	choose(app, PLUS_VITA_ACTION_ACCOUNT);
+	assert(strcmp(plus_vita_app_view(app).title, "SyntheticPlayer") == 0);
 	pending = choose(app, PLUS_VITA_ACTION_LABEL);
 	assert(pending.kind == PLUS_VITA_EFFECT_EDIT_LABEL);
 	const char label[] = "Müller 日本";
@@ -166,6 +170,10 @@ static void remembered_restart(void)
 	finish(app, account, pending);
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_ACCOUNT);
 	assert(strstr(plus_vita_app_view(app).body, label));
+	assert(strcmp(plus_vita_app_view(app).title, label) == 0);
+	pending = choose(app, PLUS_VITA_ACTION_LABEL);
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_LABEL_ENTERED,.operation=pending.operation,.status=PLUS_VITA_RESULT_CANCELLED});
+	assert(strcmp(plus_vita_app_view(app).title, label) == 0);
 	finish(app, account, choose(app, PLUS_VITA_ACTION_REMEMBER));
 	assert(access("ux0:data/plus-vita/account.json", F_OK) != 0);
 	choose(app, PLUS_VITA_ACTION_BACK);
@@ -179,7 +187,10 @@ static void remembered_restart(void)
 	/* A service outage must retain saved sign-in, and Retry needs no JSON. */
 	atomic_store(&auth_status, 503);
 	app = plus_vita_app_create(); account = plus_vita_account_create();
-	finish(app, account, plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START }));
+	pending = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START });
+	for(unsigned i=0;i<5000 && pending.kind!=PLUS_VITA_EFFECT_AUTHORIZE;i++) drive(app,account,&pending);
+	assert(pending.kind==PLUS_VITA_EFFECT_AUTHORIZE && strcmp(plus_vita_app_view(app).title,label)==0);
+	finish(app, account, pending);
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_ERROR);
 	assert(access("ux0:data/plus-vita/account.json", F_OK) == 0);
 	atomic_store(&auth_status, 0);
@@ -377,9 +388,30 @@ static void retained_json_launch(void)
 	assert(rmdir("ux0:data") == 0);
 }
 
+static void optional_account_names(void)
+{
+	const char *names[]={"null","12","\"bad\\nname\"","\"Müller 日本\""};
+	for(unsigned i=0;i<4;i++) {
+		identity_json=names[i]; import_file();
+		PlusVitaApp *app=plus_vita_app_create(); PlusVitaAccount *worker=plus_vita_account_create();
+		finish(app,worker,plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_START}));
+		choose(app,PLUS_VITA_ACTION_BACK); choose(app,PLUS_VITA_ACTION_ACCOUNT);
+		assert(strcmp(plus_vita_app_view(app).title,i==3 ? "Müller 日本" : "Your account.")==0);
+		choose(app,PLUS_VITA_ACTION_FORGET); finish(app,worker,choose(app,PLUS_VITA_ACTION_CONFIRM_FORGET));
+		assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_SETUP);
+		assert(plus_vita_account_close(worker)); plus_vita_app_destroy(app);
+		assert(remove("ux0:data/plus-vita-auth.json")==0);
+		assert(remove("ux0:data/plus-vita/account.blocked")==0);
+		assert(rmdir("ux0:data/plus-vita")==0);
+		assert(rmdir("ux0:data")==0);
+	}
+	identity_json="\"SyntheticPlayer\"";
+}
+
 int main(void)
 {
 	retained_json_launch();
+	optional_account_names();
 	atomic_store(&server_entered, false);
 	/* Cancel before delivering the read result: the source must stay intact. */
 	import_file();

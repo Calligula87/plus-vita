@@ -19,3 +19,15 @@ uint32_t plus_vita_utf8_next(const char **cursor, const char *end)
 	*cursor += count;
 	return code;
 }
+
+bool plus_vita_utf8_label(const char *text, size_t bytes)
+{
+	if(!text || bytes > 128) return false;
+	const char *cursor = text, *end = text+bytes;
+	unsigned count = 0;
+	while(cursor < end) {
+		uint32_t code = plus_vita_utf8_next(&cursor, end);
+		if(code == UINT32_MAX || code < 32 || (code >= 127 && code <= 159) || ++count > 32) return false;
+	}
+	return true;
+}

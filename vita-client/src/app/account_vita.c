@@ -62,6 +62,7 @@ static void authorize(PlusVitaAccount *account)
 	else account->result.status = PLUS_VITA_RESULT_OK;
 	account->result.entries = result->native_titles;
 	account->result.entry_count = result->native_titles_count;
+	if(account->result.status == PLUS_VITA_RESULT_OK) memcpy(account->result.account_name, result->online_id, sizeof(result->online_id));
 }
 
 static void load_account(PlusVitaAccount *account)

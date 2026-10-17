@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 #include "auth_probe.h"
+#include "../app/utf8.h"
 
 #include <chiaki/random.h>
 #include <curl_http.h>
@@ -65,7 +66,7 @@ static void wipe_response(CCHttpResponse *response)
 }
 
 static bool parse_session_region(const CCHttpResponse *response,
-	char *country, size_t country_size, char *language, size_t language_size)
+	char *country, size_t country_size, char *language, size_t language_size, char online_id[129])
 {
 	if(!response->data || !response->size)
 		return false;
@@ -81,6 +82,12 @@ static bool parse_session_region(const CCHttpResponse *response,
 		snprintf(country, country_size, "%s", json_object_get_string(country_obj));
 	if(ok && json_object_object_get_ex(data, "language", &language_obj))
 		snprintf(language, language_size, "%s", json_object_get_string(language_obj));
+	struct json_object *name = NULL;
+	if(ok && json_object_object_get_ex(data, "onlineId", &name) && json_object_is_type(name, json_type_string)) {
+		const char *text = json_object_get_string(name);
+		size_t length = (size_t)json_object_get_string_len(name);
+		if(plus_vita_utf8_label(text, length)) { memcpy(online_id, text, length); online_id[length] = 0; }
+	}
 	if(root)
 		json_object_put(root);
 	return ok && country[0] && language[0];
@@ -494,7 +501,7 @@ void plus_vita_auth_probe(const PlusVitaCredential *credential,
 	result->session_created = result->session_transport_ok
 		&& session_response.status_code == 200
 		&& parse_session_region(&session_response, result->country,
-			sizeof(result->country), result->language, sizeof(result->language))
+			sizeof(result->country), result->language, sizeof(result->language), result->online_id)
 		&& extract_jsessionid(session_response.headers, jsession, sizeof(jsession));
 	wipe_response(&session_response);
 	secure_clear(body, sizeof(body));
@@ -553,4 +560,5 @@ void plus_vita_auth_probe_result_fini(PlusVitaAuthProbeResult *result)
 	free(result->native_titles);
 	result->native_titles = NULL;
 	result->native_titles_count = 0;
+	secure_clear(result->online_id, sizeof(result->online_id));
 }

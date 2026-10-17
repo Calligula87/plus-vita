@@ -35,6 +35,12 @@ remains your file. The app may separately save only the needed NPSSO and optiona
 user-entered label; it does not claim an encrypted credential vault. The label
 is not a Sony-verified identity.
 
+Account headings use the authenticated Sony `onlineId` when available. A local
+label entered in Account overrides it and is shown as a user-entered label.
+Before authorization completes, a saved local label may appear; otherwise the
+heading stays generic. The Sony name is runtime-only and is not saved alongside
+the credential or written to diagnostics.
+
 ## Account controls and recovery
 
 - Circle returns to connected home. Open catalogue, About and cancelled Exit

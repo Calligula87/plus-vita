@@ -32,6 +32,7 @@ typedef struct plus_vita_auth_probe_result_t
 	bool native_catalog_complete;
 	bool owned_authorized;
 	bool owned_complete;
+	char online_id[129]; /* Runtime-only authenticated identity; never log/persist. */
 	long http_status;
 	long session_http_status;
 	long store_http_status;

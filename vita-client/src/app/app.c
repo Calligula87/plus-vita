@@ -20,7 +20,7 @@ struct plus_vita_app_t {
 	bool imported_valid, connected;
 	bool remember, saved, started, retry_account, retry_save, retry_delete, forgetting, expired;
 	PlusVitaAppScreen storage_return;
-	char label[129], account_status[512];
+	char label[129], online_id[129], account_status[512];
 	uint32_t previous_buttons;
 	int previous_direction;
 	uint64_t repeat_at;
@@ -147,12 +147,17 @@ static const char *result_message(PlusVitaAppResult result)
 	}
 }
 
+static const char *account_name(const PlusVitaApp *app)
+{
+	return app->label[0] ? app->label : app->online_id[0] ? app->online_id : "Your account.";
+}
+
 static PlusVitaAppEffect operation(PlusVitaApp *app, PlusVitaAppEffectKind kind, const char *message, bool cancel)
 {
 	app->waiting_for = kind;
 	app->pending_operation = ++app->next_operation;
 	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_AUTHORIZING,
-		.title = "Your account.", .subtitle = "ACCOUNT", .body = message,
+		.title = account_name(app), .subtitle = app->label[0] ? "ACCOUNT LABEL" : "ACCOUNT", .body = message,
 		.hint = cancel ? "O  Cancel" : "Please wait", .operation = app->pending_operation };
 	if(cancel) { app->view.actions[0] = (PlusVitaAppButton){ PLUS_VITA_ACTION_BACK, "Cancel", 64, 444, 832, 52 }; app->view.action_count = 1; }
 	PlusVitaAppEffect effect = { .kind = kind, .operation = app->pending_operation, .credential = app->credential, .forget = app->forgetting };
@@ -246,7 +251,7 @@ static bool parse_import_ascii(PlusVitaCredential *credential, const char *data,
 			if(label_found || !json_object_is_type(value, json_type_string) || json_object_get_string_len(value) > 128) goto done;
 			int length = json_object_get_string_len(value);
 			const char *name = json_object_get_string(value);
-			for(int i = 0; i < length; i++) if((unsigned char)name[i] < 0x20 || name[i] == 0x7f) goto done;
+			if(!plus_vita_utf8_label(name, (size_t)length)) goto done;
 			memcpy(parsed_label, name, (size_t)length);
 			label_found = true;
 		}
@@ -303,9 +308,9 @@ static int compare_titles(const void *left, const void *right)
 static void account_view(PlusVitaApp *app)
 {
 	snprintf(app->account_status, sizeof(app->account_status),
-		"Remember: %s. Local files are readable with file access.\nAccount label (entered by you): %s",
-		app->saved ? "On" : "Off", app->label[0] ? app->label : "Not set");
-	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_ACCOUNT, .title = "Your account.",
+		"Remember: %s. Local files are readable with file access.\nAccount label (entered by you): %s\nSony account name: %s",
+		app->saved ? "On" : "Off", app->label[0] ? app->label : "Not set", app->online_id[0] ? app->online_id : "Unavailable");
+	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_ACCOUNT, .title = account_name(app),
 		.subtitle = "ACCOUNT", .body = app->account_status, .hint = "Left stick  Move     X  Select     O  Back",
 		.actions = {
 			{ PLUS_VITA_ACTION_REMEMBER, app->retry_delete ? "Retry removing saved account" : app->saved ? "Remember: On (turn off)" : "Remember: Off (turn on)", 64, 284, 832, 48 },
@@ -329,6 +334,7 @@ static void clear_runtime(PlusVitaApp *app)
 	app->catalogue = NULL;
 	app->catalogue_count = app->catalogue_selection = 0;
 	memset(app->label, 0, sizeof(app->label));
+	memset(app->online_id, 0, sizeof(app->online_id));
 	memset(app->account_status, 0, sizeof(app->account_status));
 	memset(app->catalogue_status, 0, sizeof(app->catalogue_status));
 	app->connected = app->retry_account = app->retry_save = false;
@@ -530,6 +536,10 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 				account_error(app, "The catalogue could not be loaded. Please try again later.");
 			else
 			{
+				const char *end = memchr(event.account_name, 0, sizeof(event.account_name));
+				memset(app->online_id, 0, sizeof(app->online_id));
+				if(end && plus_vita_utf8_label(event.account_name, (size_t)(end-event.account_name)))
+					memcpy(app->online_id, event.account_name, (size_t)(end-event.account_name));
 				if(event.entry_count)
 				{
 					app->catalogue = malloc(event.entry_count * sizeof(*app->catalogue));
@@ -557,12 +567,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		if(app->waiting_for != PLUS_VITA_EFFECT_EDIT_LABEL || !event.operation || event.operation != app->pending_operation) return effect;
 		app->pending_operation = 0; app->waiting_for = PLUS_VITA_EFFECT_NONE;
 		if(event.status == PLUS_VITA_RESULT_CANCELLED) { account_view(app); return effect; }
-		bool valid = event.status == PLUS_VITA_RESULT_OK && event.data && event.data_size <= 128;
-		for(size_t i = 0; valid && i < event.data_size; i++) valid = (unsigned char)event.data[i] >= 0x20 && event.data[i] != 0x7f;
-		const char *cursor = event.data;
-		unsigned characters = 0;
-		while(valid && cursor < event.data + event.data_size) { valid = plus_vita_utf8_next(&cursor, event.data + event.data_size) != UINT32_MAX; characters++; }
-		valid = valid && characters <= 32;
+		bool valid = event.status == PLUS_VITA_RESULT_OK && plus_vita_utf8_label(event.data, event.data_size);
 		if(!valid) { account_error(app, "The label could not be entered.\nUse up to 32 characters and try again from Account."); return effect; }
 		memset(app->label, 0, sizeof(app->label)); memcpy(app->label, event.data, event.data_size);
 		if(app->saved) { app->storage_return = PLUS_VITA_APP_ACCOUNT; return operation(app, PLUS_VITA_EFFECT_SAVE_ACCOUNT, "Saving your account label.", false); }

@@ -76,6 +76,7 @@ typedef struct {
 	const PlusVitaCatalogEntry *entries;
 	size_t entry_count;
 	bool restore_blocked, retained_json;
+	char account_name[129];
 } PlusVitaAppEvent;
 typedef enum {
 	PLUS_VITA_EFFECT_NONE, PLUS_VITA_EFFECT_EXIT, PLUS_VITA_EFFECT_PREPARE_SETUP,
