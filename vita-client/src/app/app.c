@@ -439,17 +439,24 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	}
 	if(event.kind == PLUS_VITA_EVENT_IMPORT_READ
 		|| event.kind == PLUS_VITA_EVENT_AUTHORIZED || event.kind == PLUS_VITA_EVENT_ACCOUNT_LOADED
-		|| event.kind == PLUS_VITA_EVENT_ACCOUNT_SAVED || event.kind == PLUS_VITA_EVENT_ACCOUNT_DELETED)
+		|| event.kind == PLUS_VITA_EVENT_ACCOUNT_SAVED || event.kind == PLUS_VITA_EVENT_ACCOUNT_DELETED
+		|| event.kind == PLUS_VITA_EVENT_AUTO_ENABLED)
 	{
 		if(view->screen != PLUS_VITA_APP_AUTHORIZING || !event.operation
 			|| event.operation != app->pending_operation) return effect;
+		if(event.kind == PLUS_VITA_EVENT_AUTO_ENABLED && app->waiting_for == PLUS_VITA_EFFECT_ENABLE_AUTO) {
+			if(event.status != PLUS_VITA_RESULT_OK) account_error(app, "Automatic sign-in could not be enabled.\nCheck storage and try again from setup.");
+			else { app->remember = true; setup_view(app); app->view.selected = 1; }
+			return effect;
+		}
 		if(event.kind == PLUS_VITA_EVENT_ACCOUNT_LOADED && app->waiting_for == PLUS_VITA_EFFECT_LOAD_ACCOUNT)
 		{
 			if(event.status == PLUS_VITA_RESULT_MISSING) {
 				app->pending_operation = 0; app->waiting_for = PLUS_VITA_EFFECT_NONE;
 				app->saved = false; app->remember = !event.restore_blocked; clear_runtime(app); welcome(app); return effect;
 			}
-			if(event.status != PLUS_VITA_RESULT_OK || !parse_import(&app->credential, event.data, event.data_size, app->label))
+			if(event.status != PLUS_VITA_RESULT_OK || !parse_import(&app->credential, event.data, event.data_size,
+				event.retained_json ? NULL : app->label))
 			{
 				app->saved = true; /* Presence/error is not proof of a usable sign-in. */
 				account_error(app, "The saved account could not be read.\nCheck local storage or forget the saved account and import again.");
@@ -488,6 +495,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 			app->retry_delete = false;
 			if(app->expired) { app->expired = false; account_error(app, result_message(PLUS_VITA_RESULT_REJECTED)); }
 			else if(app->forgetting) { app->forgetting = false; app->welcome_selection = 0; setup_view(app); }
+			else if(app->storage_return == PLUS_VITA_APP_SETUP) { setup_view(app); app->view.selected = 1; }
 			else if(app->storage_return == PLUS_VITA_APP_CATALOGUE) catalogue_view(app);
 			else account_view(app);
 			return effect;
@@ -536,11 +544,6 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 				app->waiting_for = PLUS_VITA_EFFECT_NONE;
 				catalogue_view(app);
 				app->retry_account = false;
-				if(!app->remember && !app->saved) {
-					PlusVitaAppEffect cleanup = remove_saved(app, false, false);
-					app->storage_return = PLUS_VITA_APP_CATALOGUE;
-					return cleanup;
-				}
 				if(app->remember && !app->saved) {
 					app->storage_return = PLUS_VITA_APP_CATALOGUE;
 					return operation(app, PLUS_VITA_EFFECT_SAVE_ACCOUNT, "Saving your account on this Vita.", false);
@@ -613,7 +616,8 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		view->selected = (view->selected + view->action_count - 1) % view->action_count;
 	else if(event.kind == PLUS_VITA_EVENT_BACK)
 	{
-		if(app->waiting_for == PLUS_VITA_EFFECT_SAVE_ACCOUNT || app->waiting_for == PLUS_VITA_EFFECT_DELETE_ACCOUNT) return effect;
+		if(app->waiting_for == PLUS_VITA_EFFECT_SAVE_ACCOUNT || app->waiting_for == PLUS_VITA_EFFECT_DELETE_ACCOUNT
+			|| app->waiting_for == PLUS_VITA_EFFECT_ENABLE_AUTO) return effect;
 		if(view->screen == PLUS_VITA_APP_FORGET_CONFIRM) { account_view(app); return effect; }
 		app->pending_operation = 0;
 		app->waiting_for = PLUS_VITA_EFFECT_NONE;
@@ -646,9 +650,12 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 				app->storage_return = PLUS_VITA_APP_ACCOUNT;
 				return operation(app, PLUS_VITA_EFFECT_SAVE_ACCOUNT, "Saving sign-in in locally readable files on this Vita.", false);
 			}
-			app->remember = !app->remember;
-			setup_view(app);
-			app->view.selected = 1;
+			if(app->remember) {
+				PlusVitaAppEffect disable = remove_saved(app, false, false);
+				app->storage_return = PLUS_VITA_APP_SETUP;
+				return disable;
+			}
+			return operation(app, PLUS_VITA_EFFECT_ENABLE_AUTO, "Enabling automatic use of your retained JSON.", false);
 		}
 		else if(action == PLUS_VITA_ACTION_RESTORE)
 			return operation(app, PLUS_VITA_EFFECT_LOAD_ACCOUNT, "Loading your remembered account.", true);

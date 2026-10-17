@@ -71,7 +71,7 @@ static void load_account(PlusVitaAccount *account)
 	if(errno != ENOENT) { account->result.status = PLUS_VITA_RESULT_STORAGE_ERROR; return; }
 	FILE *file = fopen(ACCOUNT_FILE, "rb");
 	if(!file) {
-		if(errno == ENOENT) read_import(account);
+		if(errno == ENOENT) { account->result.retained_json = true; read_import(account); }
 		else account->result.status = PLUS_VITA_RESULT_STORAGE_ERROR;
 		return;
 	}
@@ -157,6 +157,12 @@ static void *worker(void *context)
 		account->result.kind = PLUS_VITA_EVENT_ACCOUNT_DELETED;
 		delete_account(account);
 	}
+	else if(account->job.kind == PLUS_VITA_EFFECT_ENABLE_AUTO)
+	{
+		account->result.kind = PLUS_VITA_EVENT_AUTO_ENABLED;
+		account->result.status = remove(ACCOUNT_BLOCK) == 0 || errno == ENOENT
+			? PLUS_VITA_RESULT_OK : PLUS_VITA_RESULT_STORAGE_ERROR;
+	}
 	else
 	{
 		account->result.kind = PLUS_VITA_EVENT_AUTHORIZED;
@@ -182,7 +188,8 @@ bool plus_vita_account_start(PlusVitaAccount *account, const PlusVitaAppEffect *
 	if(account->running) return false;
 	if(effect->kind != PLUS_VITA_EFFECT_READ_IMPORT
 		&& effect->kind != PLUS_VITA_EFFECT_AUTHORIZE && effect->kind != PLUS_VITA_EFFECT_LOAD_ACCOUNT
-		&& effect->kind != PLUS_VITA_EFFECT_SAVE_ACCOUNT && effect->kind != PLUS_VITA_EFFECT_DELETE_ACCOUNT) return false;
+		&& effect->kind != PLUS_VITA_EFFECT_SAVE_ACCOUNT && effect->kind != PLUS_VITA_EFFECT_DELETE_ACCOUNT
+		&& effect->kind != PLUS_VITA_EFFECT_ENABLE_AUTO) return false;
 	account->job = *effect;
 	account->complete = account->joined = false;
 	memset(&account->result, 0, sizeof(account->result));

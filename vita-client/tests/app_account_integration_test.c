@@ -85,13 +85,15 @@ static void import_file(void)
 	assert(fclose(file) == 0);
 }
 
-static PlusVitaAppEffect open_import(PlusVitaApp *app)
+static void finish(PlusVitaApp *app, PlusVitaAccount *account, PlusVitaAppEffect pending);
+
+static PlusVitaAppEffect open_import(PlusVitaApp *app, PlusVitaAccount *account)
 {
 	PlusVitaAppEffect effect = plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_SETUP_READY, .operation = effect.operation });
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
-	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE }); /* Explicit runtime only. */
+	finish(app, account, plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE })); /* Runtime only. */
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_UP });
 	return plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
 }
@@ -277,7 +279,7 @@ static void failed_save_disable_and_cancelled_restore(void)
 {
 	import_file();
 	PlusVitaApp *app = plus_vita_app_create(); PlusVitaAccount *account = plus_vita_account_create();
-	finish(app, account, open_import(app));
+	finish(app, account, open_import(app, account));
 	choose(app, PLUS_VITA_ACTION_BACK); choose(app, PLUS_VITA_ACTION_ACCOUNT);
 	/* Block the atomic temporary write with a directory, without mocking storage. */
 	assert(mkdir("ux0:data/plus-vita/account.tmp", 0700) == 0);
@@ -350,7 +352,28 @@ static void retained_json_launch(void)
 		assert(access("ux0:data/plus-vita/account.json", F_OK) != 0);
 		assert(plus_vita_account_close(worker)); plus_vita_app_destroy(app);
 	}
+	/* An explicit Off choice survives exit before importing/authorizing. */
+	PlusVitaApp *app = plus_vita_app_create(); PlusVitaAccount *worker = plus_vita_account_create();
+	PlusVitaAppEffect prepare = choose(app, PLUS_VITA_ACTION_SETUP);
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_SETUP_READY, .operation = prepare.operation });
+	choose(app, PLUS_VITA_ACTION_CONTINUE);
+	finish(app, worker, choose(app, PLUS_VITA_ACTION_REMEMBER));
+	assert(strstr(plus_vita_app_view(app).actions[1].label, "Off"));
+	assert(plus_vita_account_close(worker)); plus_vita_app_destroy(app);
+	app = plus_vita_app_create(); worker = plus_vita_account_create();
+	finish(app, worker, plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START }));
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_WELCOME);
+	prepare = choose(app, PLUS_VITA_ACTION_SETUP);
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_SETUP_READY, .operation = prepare.operation });
+	choose(app, PLUS_VITA_ACTION_CONTINUE);
+	finish(app, worker, choose(app, PLUS_VITA_ACTION_REMEMBER)); /* On, without importing. */
+	assert(plus_vita_account_close(worker)); plus_vita_app_destroy(app);
+	app = plus_vita_app_create(); worker = plus_vita_account_create();
+	finish(app, worker, plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START }));
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_CATALOGUE);
+	assert(plus_vita_account_close(worker)); plus_vita_app_destroy(app);
 	assert(remove("ux0:data/plus-vita-auth.json") == 0);
+	assert(rmdir("ux0:data/plus-vita") == 0);
 	assert(rmdir("ux0:data") == 0);
 }
 
@@ -362,7 +385,7 @@ int main(void)
 	import_file();
 	PlusVitaApp *cancelled_app = plus_vita_app_create();
 	PlusVitaAccount *cancelled_account = plus_vita_account_create();
-	PlusVitaAppEffect read = open_import(cancelled_app);
+	PlusVitaAppEffect read = open_import(cancelled_app, cancelled_account);
 	assert(plus_vita_account_start(cancelled_account, &read));
 	plus_vita_app_dispatch(cancelled_app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_BACK });
 	plus_vita_account_cancel(cancelled_account);
@@ -385,7 +408,7 @@ int main(void)
 	PlusVitaApp *app = plus_vita_app_create();
 	PlusVitaAccount *account = plus_vita_account_create();
 	assert(app && account);
-	PlusVitaAppEffect pending = open_import(app);
+	PlusVitaAppEffect pending = open_import(app, account);
 	for(unsigned i = 0; i < 5000 && plus_vita_app_view(app).screen == PLUS_VITA_APP_AUTHORIZING; i++) drive(app, account, &pending);
 	PlusVitaAppView view = plus_vita_app_view(app);
 	assert(view.screen == PLUS_VITA_APP_CATALOGUE);
@@ -424,7 +447,7 @@ int main(void)
 	app = plus_vita_app_create();
 	account = plus_vita_account_create();
 	assert(app && account);
-	pending = open_import(app);
+	pending = open_import(app, account);
 	for(unsigned i = 0; i < 5000 && !atomic_load(&server_entered); i++) drive(app, account, &pending);
 	assert(atomic_load(&server_entered));
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_BACK });

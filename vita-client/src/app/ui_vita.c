@@ -157,7 +157,8 @@ static bool handle_input(PlusVitaApp *app, PlusVitaAccount *account, PlusVitaApp
 
 static bool storage_effect(PlusVitaAppEffectKind kind)
 {
-	return kind == PLUS_VITA_EFFECT_LOAD_ACCOUNT || kind == PLUS_VITA_EFFECT_SAVE_ACCOUNT || kind == PLUS_VITA_EFFECT_DELETE_ACCOUNT;
+	return kind == PLUS_VITA_EFFECT_LOAD_ACCOUNT || kind == PLUS_VITA_EFFECT_SAVE_ACCOUNT
+		|| kind == PLUS_VITA_EFFECT_DELETE_ACCOUNT || kind == PLUS_VITA_EFFECT_ENABLE_AUTO;
 }
 
 static PlusVitaAppEventKind completion(PlusVitaAppEffectKind kind)
@@ -166,6 +167,7 @@ static PlusVitaAppEventKind completion(PlusVitaAppEffectKind kind)
 		case PLUS_VITA_EFFECT_LOAD_ACCOUNT: return PLUS_VITA_EVENT_ACCOUNT_LOADED;
 		case PLUS_VITA_EFFECT_SAVE_ACCOUNT: return PLUS_VITA_EVENT_ACCOUNT_SAVED;
 		case PLUS_VITA_EFFECT_DELETE_ACCOUNT: return PLUS_VITA_EVENT_ACCOUNT_DELETED;
+		case PLUS_VITA_EFFECT_ENABLE_AUTO: return PLUS_VITA_EVENT_AUTO_ENABLED;
 		case PLUS_VITA_EFFECT_READ_IMPORT: return PLUS_VITA_EVENT_IMPORT_READ;
 		default: return PLUS_VITA_EVENT_AUTHORIZED;
 	}
