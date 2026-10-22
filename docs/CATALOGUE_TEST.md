@@ -9,7 +9,8 @@ Candidate: `plus-vita-catalogue-1.vpk`, graphical Release, independent input and
 deferred logging enabled. SHA256:
 `4F3DFA1951388338BAC5EECA2EC291343662ECBF52E31723B6F75A7CC10731CC`.
 Source commits: `21a680d`, `19125f8`, `8e52ba5`.
-The authorized device FTP transfer timed out; delivery is not yet verified.
+Delivered to `ux0:data/plus-vita-catalogue-1.vpk` after the FTP retry. Downloaded
+readback matches the SHA256 above; installation and Vita acceptance are pending.
 
 ## Vita checks
 
