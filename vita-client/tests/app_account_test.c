@@ -99,11 +99,14 @@ int main(void)
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACCOUNT_SAVED, .operation = view.operation });
 	view = plus_vita_app_view(app);
 	assert(view.screen == PLUS_VITA_APP_CATALOGUE);
-	assert(view.action_count == 2 && strcmp(view.actions[0].label, "Alpha") == 0);
+	assert(view.action_count == 3 && strcmp(view.actions[0].label, "Alpha") == 0);
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
 	view = plus_vita_app_view(app);
 	assert(strcmp(view.actions[view.selected].label, "Zulu") == 0);
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_TOUCH, .x = 120, .y = 340 });
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_DETAILS);
+	assert(strcmp(plus_vita_app_view(app).title, "Alpha") == 0);
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_BACK });
 	assert(plus_vita_app_view(app).selected == 0);
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
 	view = plus_vita_app_view(app);

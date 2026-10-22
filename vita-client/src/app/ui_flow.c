@@ -35,7 +35,7 @@ bool plus_vita_ui_flow_paint(PlusVitaUiFlow *flow, PlusVitaFont *font, uint32_t 
 {
 	if(!flow->dirty) return false;
 	PlusVitaAppView view = plus_vita_app_view(flow->app);
-	plus_vita_app_paint(font, pixels, pitch, &view);
+	plus_vita_app_paint_with_covers(font, pixels, pitch, &view, flow->covers);
 	flow->dirty = false;
 	return true;
 }

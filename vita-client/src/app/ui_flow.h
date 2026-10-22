@@ -8,6 +8,7 @@ typedef struct {
 	PlusVitaAppEffect pending;
 	bool dirty, cancel_account;
 	uint64_t input_since;
+	const PlusVitaCovers *covers;
 } PlusVitaUiFlow;
 bool plus_vita_ui_flow_event(PlusVitaUiFlow *flow, PlusVitaAppEvent event, uint64_t sampled_us);
 PlusVitaAppEffect plus_vita_ui_flow_take(PlusVitaUiFlow *flow);

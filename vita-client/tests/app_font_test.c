@@ -45,7 +45,7 @@ static void input_journey(PlusVitaFont *font)
 {
  PlusVitaApp *app=plus_vita_app_create(); PlusVitaUiFlow flow={.app=app,.dirty=true};
  assert(plus_vita_ui_flow_paint(&flow,font,pixels,960));
- PlusVitaAppEvent pad={.kind=PLUS_VITA_EVENT_PAD,.pad={.left_y=255,.time_us=1000}};
+ PlusVitaAppEvent pad={.kind=PLUS_VITA_EVENT_PAD,.pad={.left_x=128,.left_y=255,.time_us=1000}};
  assert(plus_vita_ui_flow_event(&flow,pad,1000));
  assert(plus_vita_ui_flow_paint(&flow,font,pixels,960));
  assert(pixels[400*960+70]==0xff5bc6f6);
@@ -122,7 +122,7 @@ int main(void) {
   view=plus_vita_app_view(app); api_calls=0;
   plus_vita_app_paint(font,pixels,960,&view); assert(api_calls==0);
   unsigned y=view.actions[view.selected].y+20;
-  assert(pixels[y*960+70]==0xff5bc6f6);
+  assert(pixels[y*960+view.actions[view.selected].x+6]==0xff5bc6f6);
  }
  plus_vita_app_destroy(app);
  /* Working sets larger than both bounded caches remain safe and reusable. */

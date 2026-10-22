@@ -6,7 +6,7 @@
 static void menu_pad(PlusVitaApp *app, uint32_t buttons, unsigned char y, uint64_t time)
 {
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_PAD,
-		.pad = { .buttons = buttons, .left_y = y, .time_us = time } });
+		.pad = { .buttons = buttons, .left_x = 128, .left_y = y, .time_us = time } });
 }
 
 static void joystick_menu(void)

@@ -145,13 +145,14 @@ static bool display_term(void)
 }
 
 static void credential_ime_read(PlusVitaCredential *credential,
-	PlusVitaCredentialImeResult *result, bool masked, char *label)
+	PlusVitaCredentialImeResult *result, bool masked, char *label, bool search)
 {
 	static const uint16_t title[] = {
 		'N','P','S','S','O',' ','v','i','s','i','b','l','e',' ','-',' ','n','o','t',' ','s','a','v','e','d',0
 	};
 	static const uint16_t masked_title[] = { 'E','n','t','e','r',' ','N','P','S','S','O',0 };
 	static const uint16_t label_title[] = { 'A','c','c','o','u','n','t',' ','l','a','b','e','l',0 };
+	static const uint16_t search_title[] = { 'S','e','a','r','c','h',' ','g','a','m','e','s',0 };
 	uint16_t input[SCE_IME_DIALOG_MAX_TEXT_LENGTH + 1] = { 0 };
 	bool app_initialized = false;
 	bool gxm_initialized = false;
@@ -181,7 +182,7 @@ static void credential_ime_read(PlusVitaCredential *credential,
 	param.option = SCE_IME_OPTION_NO_AUTO_CAPITALIZATION | SCE_IME_OPTION_NO_ASSISTANCE;
 	param.dialogMode = SCE_IME_DIALOG_DIALOG_MODE_WITH_CANCEL;
 	param.textBoxMode = masked ? SCE_IME_DIALOG_TEXTBOX_MODE_PASSWORD : SCE_IME_DIALOG_TEXTBOX_MODE_DEFAULT;
-	param.title = label ? label_title : masked ? masked_title : title;
+	param.title = label ? (search ? search_title : label_title) : masked ? masked_title : title;
 	param.maxTextLength = label ? 32 : masked ? 64 : PLUS_VITA_CREDENTIAL_MAX;
 	param.initialText = NULL;
 	param.inputTextBuffer = input;
@@ -270,18 +271,26 @@ cleanup:
 
 void plus_vita_credential_ime_read(PlusVitaCredential *credential, PlusVitaCredentialImeResult *result)
 {
-	credential_ime_read(credential, result, false, NULL);
+	credential_ime_read(credential, result, false, NULL, false);
 }
 
 void plus_vita_credential_ime_read_masked(PlusVitaCredential *credential, PlusVitaCredentialImeResult *result)
 {
-	credential_ime_read(credential, result, true, NULL);
+	credential_ime_read(credential, result, true, NULL, false);
 }
 
 void plus_vita_account_label_read(char output[129], PlusVitaCredentialImeResult *result)
 {
 	PlusVitaCredential unused;
 	memset(output, 0, 129);
-	credential_ime_read(&unused, result, false, output);
+	credential_ime_read(&unused, result, false, output, false);
+	plus_vita_credential_clear(&unused);
+}
+
+void plus_vita_catalogue_search_read(char output[129], PlusVitaCredentialImeResult *result)
+{
+	PlusVitaCredential unused;
+	memset(output,0,129);
+	credential_ime_read(&unused,result,false,output,true);
 	plus_vita_credential_clear(&unused);
 }

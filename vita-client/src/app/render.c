@@ -29,7 +29,16 @@ static void text(Canvas *display, const char *value, int x, int y, int size, int
 	plus_vita_font_draw(display->font, display->pixels, display->pitch, value,
 		(PlusVitaTextBox){x, y, width, height}, size, wrap, color);
 }
-void plus_vita_app_paint(PlusVitaFont *font, uint32_t *pixels, int pitch, const PlusVitaAppView *view)
+static void cover(Canvas *display,const PlusVitaCovers *covers,const PlusVitaCatalogEntry *game,int x,int y)
+{
+	const PlusVitaCoverImage *image=game ? plus_vita_covers_find(covers,game->cover_url) : NULL;
+	rectangle(display,x,y,128,128,RGB(9,29,66));
+	if(image && image->state==PLUS_VITA_COVER_READY) {
+		for(int row=0;row<128;row++) for(int col=0;col<128;col++) display->pixels[(y+row)*display->pitch+x+col]=image->pixels[row*128+col];
+	} else text(display,!game || !game->cover_url[0] ? "No cover" : !covers ? "Cover unavailable" : !image || image->state==PLUS_VITA_COVER_LOADING ? "Loading cover" : "Cover unavailable",x+6,y+48,14,116,58,true,RGB(195,211,239));
+}
+
+void plus_vita_app_paint_with_covers(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view,const PlusVitaCovers *covers)
 {
 	Canvas canvas = {pixels, pitch, font}; Canvas *display = &canvas;
 	for(int y = 0; y < HEIGHT; y++)
@@ -40,8 +49,10 @@ void plus_vita_app_paint(PlusVitaFont *font, uint32_t *pixels, int pitch, const 
 	text(display, view->subtitle, 64, 94, 16, 832, 26, false, RGB(246, 198, 91));
 	text(display, view->title, 64, 128, 36, 832, 54, false, RGB(243, 247, 252));
 	int body_bottom = view->action_count ? view->actions[0].y - 12 : 480;
+	if(view->screen==PLUS_VITA_APP_CATALOGUE) body_bottom=224;
 	text(display, view->body, 64, 196, view->screen == PLUS_VITA_APP_ACCOUNT ? 18 : 20,
-		view->screen == PLUS_VITA_APP_WELCOME ? 520 : 832, body_bottom - 196, true, RGB(210, 224, 247));
+		view->screen == PLUS_VITA_APP_WELCOME ? 520 : view->screen==PLUS_VITA_APP_DETAILS ? 624 : 832, body_bottom - 196, view->screen!=PLUS_VITA_APP_CATALOGUE, RGB(210, 224, 247));
+	if(view->screen==PLUS_VITA_APP_DETAILS) cover(display,covers,view->detail,744,216);
 	if(view->screen == PLUS_VITA_APP_WELCOME)
 	{
 		rounded(display, 674, 238, 192, 192, RGB(18, 53, 113));
@@ -54,8 +65,14 @@ void plus_vita_app_paint(PlusVitaFont *font, uint32_t *pixels, int pitch, const 
 		bool selected = i == view->selected;
 		rounded(display, button->x, button->y, button->width, button->height,
 			selected ? RGB(246, 198, 91) : RGB(17, 57, 125));
-		text(display, button->label, button->x + 20, button->y + 8, 22, button->width - 40, button->height - 16, false,
+		if(view->screen==PLUS_VITA_APP_CATALOGUE && button->id==PLUS_VITA_ACTION_GAME) {
+			cover(display,covers,view->games[i],button->x+66,button->y+10);
+			text(display,button->label,button->x+12,button->y+146,18,button->width-24,48,true,selected ? RGB(9,29,66) : RGB(243,247,252));
+		} else text(display, button->label, button->x + 20, button->y + 8, 22, button->width - 40, button->height - 16, false,
 			selected ? RGB(9, 29, 66) : RGB(243, 247, 252));
 	}
 	text(display, view->hint, 64, 509, 16, 832, 28, false, RGB(195, 211, 239));
 }
+
+void plus_vita_app_paint(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view)
+{ plus_vita_app_paint_with_covers(font,pixels,pitch,view,NULL); }

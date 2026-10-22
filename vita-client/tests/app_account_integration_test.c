@@ -72,7 +72,7 @@ ChiakiErrorCode __wrap_cc_http_perform(ChiakiLog *log, const CCHttpRequest *requ
 	else if(strstr(request->url, "/category/ab"))
 	{
 		response->status_code = 200;
-		body(response, "{\"links\":[{\"name\":\"Zulu\",\"productId\":\"FAKECUSA00002\"},{\"name\":\"Alpha\",\"productId\":\"FAKECUSA00001\"}]}");
+		body(response, "{\"links\":[{\"name\":\"Zulu\",\"productId\":\"FAKECUSA00002\",\"imageUrl\":\"http://127.0.0.1/private\"},{\"name\":\"Alpha\",\"productId\":\"FAKECUSA00001\",\"images\":[null,42,\"invalid\",{\"type\":10,\"url\":\"https://image.api.playstation.com/fixture.png\"}]}]}");
 	}
 	else if(strstr(request->url, "response_type=token")) response->status_code = 403;
 	else assert(!"Unexpected HTTP route; test transport never contacts a server");
@@ -444,7 +444,9 @@ int main(void)
 	for(unsigned i = 0; i < 5000 && plus_vita_app_view(app).screen == PLUS_VITA_APP_AUTHORIZING; i++) drive(app, account, &pending);
 	PlusVitaAppView view = plus_vita_app_view(app);
 	assert(view.screen == PLUS_VITA_APP_CATALOGUE);
-	assert(view.action_count == 2 && strcmp(view.actions[0].label, "Alpha") == 0);
+	assert(view.action_count == 3 && strcmp(view.actions[0].label, "Alpha") == 0);
+	assert(strcmp(view.games[0]->cover_url, "https://image.api.playstation.com/fixture.png") == 0);
+	assert(view.games[1]->cover_url[0] == 0);
 	assert(access("ux0:data/plus-vita-auth.json", F_OK) == 0);
 	unsigned initial_requests = atomic_load(&requests);
 	/* Navigation retains the runtime account without rereading the source. */
@@ -506,3 +508,4 @@ int main(void)
 	puts("app account integration: retained JSON, restore, storage recovery and stale results passed");
 	return 0;
 }
+

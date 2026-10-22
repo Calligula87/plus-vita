@@ -63,7 +63,12 @@ the credential or written to diagnostics.
   Network cancellation is cooperative; allow an existing worker to finish before
   retrying if it is still busy.
 
-This development candidate has an alphabetical catalogue, without Play, covers
-or search yet. A listed game does not guarantee streaming eligibility.
-Follow [the current test procedure](REMEMBER_FONT_TEST.md). Report step numbers
+The development catalogue shows alphabetical cover tiles. Browse with the left
+stick (left/right or up/down), open details with Cross or touch, and use Triangle
+or the Search button to enter a title using the Vita keyboard. Search ignores
+ASCII case and accepts supported non-ASCII text. Circle returns without losing
+the current search and position. Missing or failed covers use placeholders.
+A listed game does not guarantee streaming eligibility. The Play handoff is
+prepared, but the graphical streaming connection is still the next ticket.
+Follow [the catalogue test procedure](CATALOGUE_TEST.md). Report step numbers
 and symptoms, never credential files or a full app-data folder.

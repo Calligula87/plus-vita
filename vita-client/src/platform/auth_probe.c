@@ -2,6 +2,7 @@
 
 #include "auth_probe.h"
 #include "../app/utf8.h"
+#include "cover_policy.h"
 
 #include <chiaki/random.h>
 #include <curl_http.h>
@@ -194,7 +195,7 @@ static bool append_catalog_entry(PlusVitaAuthProbeResult *result,
 	static const char *const name_keys[] = { "name", "title", "displayName", NULL };
 	static const char *const id_keys[] = { "productId", "product_id", "id", "titleId", "url", NULL };
 	static const char *const platform_keys[] = { "platform", "platformType", "console", NULL };
-	if(!item || json_object_get_type(item) != json_type_object) return false;
+	if(!item || json_object_get_type(item) != json_type_object || result->native_titles_count >= 4096) return false;
 	PlusVitaCatalogEntry *grown = realloc(result->native_titles,
 		(result->native_titles_count + 1) * sizeof(*grown));
 	if(!grown) return false;
@@ -204,6 +205,24 @@ static bool append_catalog_entry(PlusVitaAuthProbeResult *result,
 	const char *name = catalog_string(item, name_keys);
 	const char *id = catalog_string(item, id_keys);
 	const char *platform = catalog_string(item, platform_keys);
+	struct json_object *images=NULL;
+	if(json_object_object_get_ex(item,"images",&images) && json_object_is_type(images,json_type_array)) {
+		const int types[]={10,12,13};
+		for(unsigned t=0;t<3 && !entry->cover_url[0];t++)
+			for(size_t i=0;i<json_object_array_length(images) && i<128;i++) {
+				struct json_object *image=json_object_array_get_idx(images,i), *kind=NULL, *url=NULL;
+				if(json_object_is_type(image,json_type_object) && json_object_object_get_ex(image,"type",&kind)
+					&& json_object_is_type(kind,json_type_int) && json_object_get_int(kind)==types[t]
+					&& json_object_object_get_ex(image,"url",&url) && json_object_is_type(url,json_type_string)
+					&& plus_vita_cover_url_allowed(json_object_get_string(url))) {
+					snprintf(entry->cover_url,sizeof(entry->cover_url),"%s",json_object_get_string(url)); break;
+				}
+			}
+	}
+	struct json_object *image_url=NULL;
+	if(!entry->cover_url[0] && json_object_object_get_ex(item,"imageUrl",&image_url)
+		&& json_object_is_type(image_url,json_type_string) && plus_vita_cover_url_allowed(json_object_get_string(image_url)))
+		snprintf(entry->cover_url,sizeof(entry->cover_url),"%s",json_object_get_string(image_url));
 	if(id)
 	{
 		const char *slash = strrchr(id, '/');
@@ -316,8 +335,7 @@ static bool fetch_native_catalog(const char *base_url, const char *jsession,
 			break;
 	}
 	secure_clear(category_urls, sizeof(category_urls));
-	return ok && result->native_title_count > 0
-		&& result->native_titles_count == result->native_title_count;
+	return ok && result->native_titles_count == result->native_title_count;
 }
 
 static bool entitlement_is_game(struct json_object *entitlement)

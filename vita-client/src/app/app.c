@@ -12,11 +12,14 @@ struct plus_vita_app_t {
 	PlusVitaAppView view;
 	size_t welcome_selection;
 	uint64_t next_operation, pending_operation;
+	uint64_t account_epoch;
 	PlusVitaAppEffectKind waiting_for;
 	PlusVitaCredential credential;
 	PlusVitaCatalogEntry *catalogue;
 	size_t catalogue_count, catalogue_selection;
-	char catalogue_status[128];
+	size_t matches[4096], matches_count;
+	bool search_focus;
+	char search[129], search_button[160], catalogue_status[512], detail_status[512];
 	bool imported_valid, connected;
 	bool remember, saved, started, retry_account, retry_save, retry_delete, forgetting, expired;
 	PlusVitaAppScreen storage_return;
@@ -83,7 +86,7 @@ void plus_vita_app_destroy(PlusVitaApp *app)
 	free(app->catalogue);
 	free(app);
 }
-PlusVitaAppView plus_vita_app_view(const PlusVitaApp *app) { return app->view; }
+PlusVitaAppView plus_vita_app_view(const PlusVitaApp *app) { PlusVitaAppView view=app->view; view.account_epoch=app->account_epoch; return view; }
 
 static void setup_view(PlusVitaApp *app)
 {
@@ -160,6 +163,7 @@ static PlusVitaAppEffect operation(PlusVitaApp *app, PlusVitaAppEffectKind kind,
 		.title = account_name(app), .subtitle = app->label[0] ? "ACCOUNT LABEL" : "ACCOUNT", .body = message,
 		.hint = cancel ? "O  Cancel" : "Please wait", .operation = app->pending_operation };
 	if(cancel) { app->view.actions[0] = (PlusVitaAppButton){ PLUS_VITA_ACTION_BACK, "Cancel", 64, 444, 832, 52 }; app->view.action_count = 1; }
+	if(kind==PLUS_VITA_EFFECT_EDIT_SEARCH) { app->view.title="Search your games."; app->view.subtitle="CATALOGUE SEARCH"; }
 	PlusVitaAppEffect effect = { .kind = kind, .operation = app->pending_operation, .credential = app->credential, .forget = app->forgetting };
 	memcpy(effect.label, app->label, sizeof(effect.label));
 	return effect;
@@ -329,6 +333,7 @@ static void account_view(PlusVitaApp *app)
 
 static void clear_runtime(PlusVitaApp *app)
 {
+	app->account_epoch++;
 	plus_vita_credential_clear(&app->credential);
 	free(app->catalogue);
 	app->catalogue = NULL;
@@ -337,6 +342,9 @@ static void clear_runtime(PlusVitaApp *app)
 	memset(app->online_id, 0, sizeof(app->online_id));
 	memset(app->account_status, 0, sizeof(app->account_status));
 	memset(app->catalogue_status, 0, sizeof(app->catalogue_status));
+	memset(app->search, 0, sizeof(app->search));
+	memset(app->search_button,0,sizeof(app->search_button)); memset(app->detail_status,0,sizeof(app->detail_status));
+	app->matches_count = 0; app->search_focus = false;
 	app->connected = app->retry_account = app->retry_save = false;
 }
 
@@ -349,40 +357,85 @@ static PlusVitaAppEffect remove_saved(PlusVitaApp *app, bool forget, bool expire
 	return operation(app, PLUS_VITA_EFFECT_DELETE_ACCOUNT, "Removing saved sign-in from this Vita.", false);
 }
 
+static bool title_matches(const char *title, const char *query)
+{
+	if(!*query) return true;
+	for(; *title; title++) {
+		const unsigned char *a=(const unsigned char *)title, *b=(const unsigned char *)query;
+		while(*a && *b && tolower(*a)==tolower(*b)) { a++; b++; }
+		if(!*b) return true;
+	}
+	return false;
+}
+
+static int menu_direction(const PlusVitaApp *app, PlusVitaAppPad pad)
+{
+	int axis = pad.left_y;
+	if(app->view.screen == PLUS_VITA_APP_CATALOGUE
+		&& abs((int)pad.left_x - 128) > abs(axis - 128)) axis = pad.left_x;
+	return axis > 180 ? 1 : axis < 76 ? -1 : 0;
+}
+
+static void filter_catalogue(PlusVitaApp *app)
+{
+	app->matches_count = 0;
+	for(size_t i=0;i<app->catalogue_count;i++) if(title_matches(app->catalogue[i].name,app->search)) app->matches[app->matches_count++]=i;
+	app->catalogue_selection = 0;
+}
+
 static void catalogue_view(PlusVitaApp *app)
 {
 	PlusVitaAppView view = {
 		.screen = PLUS_VITA_APP_CATALOGUE, .title = "Choose your next game.",
 		.subtitle = "CLOUD CATALOGUE", .body = app->catalogue_status,
-		.hint = "Left stick  Browse     O  Back"
+		.hint = "Left stick  Browse     X  Details     Triangle  Search     O  Back"
 	};
 	snprintf(app->catalogue_status, sizeof(app->catalogue_status),
-		"%u cloud games available.\n%s", (unsigned)app->catalogue_count,
-		app->saved ? "Your sign-in is remembered on this Vita." : "Your sign-in is kept for this app session only.");
+		"%u of %u games%s", (unsigned)app->matches_count, (unsigned)app->catalogue_count,
+		app->search[0] ? " match your search." : " available.");
 	if(!app->catalogue_count)
 	{
 		view.title = "No cloud games found.";
 		view.actions[0] = (PlusVitaAppButton){ PLUS_VITA_ACTION_BACK, "Back", 64, 444, 500, 52 };
 		view.action_count = 1;
 	}
+	else if(!app->matches_count)
+	{
+		view.title = "No search results.";
+		view.actions[0] = (PlusVitaAppButton){ PLUS_VITA_ACTION_SEARCH, "Edit search", 64, 228, 832, 42 };
+		view.actions[1] = (PlusVitaAppButton){ PLUS_VITA_ACTION_CLEAR_SEARCH, "Clear search", 64, 380, 832, 52 };
+		view.actions[2] = (PlusVitaAppButton){ PLUS_VITA_ACTION_BACK, "Back", 64, 444, 832, 52 };
+		view.action_count = 3;
+	}
 	else
 	{
 		size_t first = app->catalogue_selection / 3 * 3;
-		for(size_t i = first; i < app->catalogue_count && i < first + 3; i++)
+		for(size_t i = first; i < app->matches_count && i < first + 3; i++) {
+			const PlusVitaCatalogEntry *game=&app->catalogue[app->matches[i]];
+			view.games[view.action_count]=game;
 			view.actions[view.action_count++] = (PlusVitaAppButton){
-				PLUS_VITA_ACTION_GAME, app->catalogue[i].name, 64, 316 + (int)(i - first) * 64, 832, 52 };
+				PLUS_VITA_ACTION_GAME, game->name, 64 + (int)(i-first)*286, 282, 260, 204 };
+		}
+		snprintf(app->search_button,sizeof(app->search_button),"Search: %s",app->search[0] ? app->search : "All games");
+		view.actions[view.action_count++] = (PlusVitaAppButton){PLUS_VITA_ACTION_SEARCH,app->search_button,64,228,832,42};
 		view.selected = app->catalogue_selection - first;
+		if(app->search_focus) view.selected = view.action_count-1;
 	}
 	app->view = view;
 }
 
+static void detail_view(PlusVitaApp *app, const char *notice)
+{
+	const PlusVitaCatalogEntry *game=&app->catalogue[app->matches[app->catalogue_selection]];
+	snprintf(app->detail_status,sizeof(app->detail_status),"Platform: %s\n%s",game->platform[0] ? game->platform : "Not specified",
+		notice ? notice : game->launch_id_valid ? "Cloud catalogue title. Streaming eligibility is checked at launch." : "Play unavailable: required launch information is missing.");
+	app->view=(PlusVitaAppView){.screen=PLUS_VITA_APP_DETAILS,.title=game->name,.subtitle="GAME DETAILS",.body=app->detail_status,.hint="X  Select     O  Back",.detail=game,
+		.actions={{game->launch_id_valid ? PLUS_VITA_ACTION_PLAY : PLUS_VITA_ACTION_DISABLED,game->launch_id_valid ? "Play" : "Play unavailable",64,380,832,52},{PLUS_VITA_ACTION_BACK,"Back",64,444,832,52}},.action_count=2};
+}
+
 static PlusVitaAppEffect import_account(PlusVitaApp *app)
 {
-	app->retry_account = app->retry_save = false;
-	plus_vita_credential_clear(&app->credential);
-	free(app->catalogue);
-	app->catalogue = NULL;
-	app->catalogue_count = app->catalogue_selection = 0;
+	clear_runtime(app);
 	app->pending_operation = ++app->next_operation;
 	app->waiting_for = PLUS_VITA_EFFECT_READ_IMPORT;
 	app->view = (PlusVitaAppView){
@@ -425,7 +478,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	if(event.kind == PLUS_VITA_EVENT_PAD_RESET)
 	{
 		app->previous_buttons = event.pad.buttons;
-		app->previous_direction = event.pad.left_y > 180 ? 1 : event.pad.left_y < 76 ? -1 : 0;
+		app->previous_direction = menu_direction(app, event.pad);
 		app->repeat_at = event.pad.time_us + 400000u;
 		return effect;
 	}
@@ -433,12 +486,13 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	{
 		PlusVitaAppPad pad = event.pad;
 		uint32_t pressed = pad.buttons & ~app->previous_buttons;
-		int direction = pad.left_y > 180 ? 1 : pad.left_y < 76 ? -1 : 0;
+		int direction = menu_direction(app, pad);
 		bool navigate = direction && (direction != app->previous_direction || pad.time_us >= app->repeat_at);
 		if(navigate) app->repeat_at = pad.time_us + (direction != app->previous_direction ? 400000u : 160000u);
 		app->previous_direction = direction;
 		app->previous_buttons = pad.buttons;
 		if(pressed & PLUS_VITA_MENU_CIRCLE) event.kind = PLUS_VITA_EVENT_BACK;
+		else if(pressed & PLUS_VITA_MENU_TRIANGLE) event.kind = PLUS_VITA_EVENT_SEARCH;
 		else if(pressed & PLUS_VITA_MENU_CROSS) event.kind = PLUS_VITA_EVENT_ACTIVATE;
 		else if(navigate) event.kind = direction > 0 ? PLUS_VITA_EVENT_DOWN : PLUS_VITA_EVENT_UP;
 		else return effect;
@@ -549,6 +603,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 					qsort(app->catalogue, event.entry_count, sizeof(*app->catalogue), compare_titles);
 				}
 				app->catalogue_count = event.entry_count;
+				filter_catalogue(app);
 				app->connected = true;
 				app->pending_operation = 0;
 				app->waiting_for = PLUS_VITA_EFFECT_NONE;
@@ -561,6 +616,27 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 			}
 		}
 		return effect;
+	}
+	if(event.kind == PLUS_VITA_EVENT_SEARCH_ENTERED)
+	{
+		if(app->waiting_for!=PLUS_VITA_EFFECT_EDIT_SEARCH || !event.operation || event.operation!=app->pending_operation) return effect;
+		app->pending_operation=0; app->waiting_for=PLUS_VITA_EFFECT_NONE;
+		if(event.status==PLUS_VITA_RESULT_CANCELLED) { catalogue_view(app); return effect; }
+		if(event.status!=PLUS_VITA_RESULT_OK || !plus_vita_utf8_label(event.data,event.data_size)) {
+			catalogue_view(app); app->view.body="Search could not be entered. Please try again."; return effect;
+		}
+		memset(app->search,0,sizeof(app->search)); memcpy(app->search,event.data,event.data_size);
+		filter_catalogue(app); app->search_focus=false; catalogue_view(app); return effect;
+	}
+	if(event.kind==PLUS_VITA_EVENT_PLAY_ENDED)
+	{
+		if(app->waiting_for!=PLUS_VITA_EFFECT_PLAY || !event.operation || event.operation!=app->pending_operation) return effect;
+		app->pending_operation=0; app->waiting_for=PLUS_VITA_EFFECT_NONE;
+		detail_view(app,"Streaming is not connected in this development build yet."); return effect;
+	}
+	if(event.kind==PLUS_VITA_EVENT_SEARCH && view->screen==PLUS_VITA_APP_CATALOGUE && app->catalogue_count) {
+		app->search_focus=true;
+		return operation(app,PLUS_VITA_EFFECT_EDIT_SEARCH,"Opening title search.",true);
 	}
 	if(event.kind == PLUS_VITA_EVENT_LABEL_ENTERED)
 	{
@@ -601,18 +677,19 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 			{
 				view->selected = i;
 				if(view->screen == PLUS_VITA_APP_CATALOGUE && button->id == PLUS_VITA_ACTION_GAME)
-					app->catalogue_selection = app->catalogue_selection / 3 * 3 + i;
+				{ app->catalogue_selection = app->catalogue_selection / 3 * 3 + i; app->search_focus=false; }
 				return plus_vita_app_dispatch(app,
 					(PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
 			}
 		}
 		return effect;
 	}
-	if(view->screen == PLUS_VITA_APP_CATALOGUE && app->catalogue_count
+	if(view->screen == PLUS_VITA_APP_CATALOGUE && app->matches_count
 		&& (event.kind == PLUS_VITA_EVENT_DOWN || event.kind == PLUS_VITA_EVENT_UP))
 	{
-		if(event.kind == PLUS_VITA_EVENT_DOWN) app->catalogue_selection = (app->catalogue_selection + 1) % app->catalogue_count;
-		else app->catalogue_selection = (app->catalogue_selection + app->catalogue_count - 1) % app->catalogue_count;
+		if(app->search_focus) { app->search_focus=false; app->catalogue_selection=event.kind==PLUS_VITA_EVENT_DOWN ? 0 : app->matches_count-1; }
+		else if(event.kind==PLUS_VITA_EVENT_DOWN) { if(app->catalogue_selection+1==app->matches_count) app->search_focus=true; else app->catalogue_selection++; }
+		else { if(!app->catalogue_selection) app->search_focus=true; else app->catalogue_selection--; }
 		catalogue_view(app);
 	}
 	else if(event.kind == PLUS_VITA_EVENT_DOWN && view->action_count)
@@ -624,6 +701,9 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		if(app->waiting_for == PLUS_VITA_EFFECT_SAVE_ACCOUNT || app->waiting_for == PLUS_VITA_EFFECT_DELETE_ACCOUNT
 			|| app->waiting_for == PLUS_VITA_EFFECT_ENABLE_AUTO) return effect;
 		if(view->screen == PLUS_VITA_APP_FORGET_CONFIRM) { account_view(app); return effect; }
+		if(view->screen==PLUS_VITA_APP_DETAILS || app->waiting_for==PLUS_VITA_EFFECT_EDIT_SEARCH || app->waiting_for==PLUS_VITA_EFFECT_PLAY) {
+			app->pending_operation=0; app->waiting_for=PLUS_VITA_EFFECT_NONE; catalogue_view(app); return effect;
+		}
 		app->pending_operation = 0;
 		app->waiting_for = PLUS_VITA_EFFECT_NONE;
 		if(!app->connected) plus_vita_credential_clear(&app->credential);
@@ -639,7 +719,14 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	else if(event.kind == PLUS_VITA_EVENT_ACTIVATE && view->action_count)
 	{
 		PlusVitaAppAction action = view->actions[view->selected].id;
-		if(action == PLUS_VITA_ACTION_CATALOGUE)
+		if(action==PLUS_VITA_ACTION_SEARCH) return plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_SEARCH});
+		else if(action==PLUS_VITA_ACTION_CLEAR_SEARCH) { app->search[0]=0; filter_catalogue(app); app->search_focus=false; catalogue_view(app); }
+		else if(action==PLUS_VITA_ACTION_GAME && view->screen==PLUS_VITA_APP_CATALOGUE) detail_view(app,NULL);
+		else if(action==PLUS_VITA_ACTION_PLAY && view->screen==PLUS_VITA_APP_DETAILS) {
+			PlusVitaCatalogEntry game=*view->detail;
+			effect=operation(app,PLUS_VITA_EFFECT_PLAY,"Preparing to play.",true); effect.game=game; return effect;
+		}
+		else if(action == PLUS_VITA_ACTION_CATALOGUE)
 		{
 			app->welcome_selection = view->selected;
 			catalogue_view(app);
@@ -708,6 +795,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		}
 		else if(action == PLUS_VITA_ACTION_BACK)
 		{
+			if(view->screen==PLUS_VITA_APP_DETAILS) { catalogue_view(app); return effect; }
 			app->pending_operation = 0;
 			app->waiting_for = PLUS_VITA_EFFECT_NONE;
 			if(!app->connected) plus_vita_credential_clear(&app->credential);
