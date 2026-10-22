@@ -2,8 +2,14 @@
 
 This is development work for #16/#17, not a public release or an accepted stream
 build. The accepted blue/gold design, font adapter and retained-JSON setup stay
-in use. Hardware acceptance and the independent review are pending.
+in use. Hardware acceptance is pending; independent software reviews completed.
 The current-session diagnostic marker is `build=ui-catalogue-1`.
+
+Candidate: `plus-vita-catalogue-1.vpk`, graphical Release, independent input and
+deferred logging enabled. SHA256:
+`4F3DFA1951388338BAC5EECA2EC291343662ECBF52E31723B6F75A7CC10731CC`.
+Source commits: `21a680d`, `19125f8`, `8e52ba5`.
+The authorized device FTP transfer timed out; delivery is not yet verified.
 
 ## Vita checks
 
@@ -44,3 +50,30 @@ Keep the accepted font/response and streaming VPKs available for rollback.
 
 The DNS adapter uses the native [VitaSDK resolver API](https://github.com/vitasdk/vita-headers/blob/master/include/psp2/net/net.h)
 to avoid the unbounded libc resolver and libcurl's threaded resolver on Vita.
+
+## Software validation
+
+All native host regression scripts and the combined input/deferred-log variant
+passed under the existing sanitizer harnesses. Both graphical and historical
+diagnostic Vita targets built. The updated diagnostic identity/privacy test
+passed. The package contains only its executable, SFO, public CA bundle and four
+dependency licenses; no account files or game artwork are bundled. This is a
+candidate inventory check, not the full publication/privacy gate in #22.
+
+## Standards review
+
+The reviewer identified artwork DNS running outside the HTTP timeout. The fix
+adds bounded native resolution and tests the real resolver/downloader with
+simulated platform calls. Re-review found no new actionable API, ownership,
+memory or privacy defect. Repeated numeric limits remain a possible
+maintainability improvement, not a documented rule breach.
+
+## Spec review
+
+The reviewer identified missing touch access to later catalogue pages. Prev/Next
+and a fourth-title regression resolve it; re-review found no further actionable
+spec mismatch. Account-name behavior matches #16's amended requirements.
+
+Review summary: one actionable finding per axis, both resolved. Vita acceptance
+remains open. #18 is natively blocked by #17; streaming is not enabled in this
+candidate. No 45-minute play, recovery or release-readiness claim is made.
