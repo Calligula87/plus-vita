@@ -417,9 +417,15 @@ static void catalogue_view(PlusVitaApp *app)
 				PLUS_VITA_ACTION_GAME, game->name, 64 + (int)(i-first)*286, 282, 260, 204 };
 		}
 		snprintf(app->search_button,sizeof(app->search_button),"Search: %s",app->search[0] ? app->search : "All games");
+		size_t search_index = view.action_count;
 		view.actions[view.action_count++] = (PlusVitaAppButton){PLUS_VITA_ACTION_SEARCH,app->search_button,64,228,832,42};
+		if(app->matches_count > 3) {
+			view.actions[view.action_count-1].width = 548;
+			view.actions[view.action_count++] = (PlusVitaAppButton){PLUS_VITA_ACTION_PREVIOUS_PAGE,"Prev",624,228,128,42};
+			view.actions[view.action_count++] = (PlusVitaAppButton){PLUS_VITA_ACTION_NEXT_PAGE,"Next",764,228,132,42};
+		}
 		view.selected = app->catalogue_selection - first;
-		if(app->search_focus) view.selected = view.action_count-1;
+		if(app->search_focus) view.selected = search_index;
 	}
 	app->view = view;
 }
@@ -719,7 +725,14 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	else if(event.kind == PLUS_VITA_EVENT_ACTIVATE && view->action_count)
 	{
 		PlusVitaAppAction action = view->actions[view->selected].id;
-		if(action==PLUS_VITA_ACTION_SEARCH) return plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_SEARCH});
+		if((action==PLUS_VITA_ACTION_PREVIOUS_PAGE || action==PLUS_VITA_ACTION_NEXT_PAGE)
+			&& view->screen==PLUS_VITA_APP_CATALOGUE && app->matches_count) {
+			size_t page = app->catalogue_selection / 3, pages = (app->matches_count + 2) / 3;
+			page = action==PLUS_VITA_ACTION_NEXT_PAGE ? (page+1)%pages : (page+pages-1)%pages;
+			app->catalogue_selection = page * 3; app->search_focus = false;
+			catalogue_view(app);
+		}
+		else if(action==PLUS_VITA_ACTION_SEARCH) return plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_SEARCH});
 		else if(action==PLUS_VITA_ACTION_CLEAR_SEARCH) { app->search[0]=0; filter_catalogue(app); app->search_focus=false; catalogue_view(app); }
 		else if(action==PLUS_VITA_ACTION_GAME && view->screen==PLUS_VITA_APP_CATALOGUE) detail_view(app,NULL);
 		else if(action==PLUS_VITA_ACTION_PLAY && view->screen==PLUS_VITA_APP_DETAILS) {

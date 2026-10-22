@@ -86,7 +86,7 @@ int main(void)
 	while(fgets(line,sizeof(line),f)) {
 		bytes+=strlen(line);
 		assert(!strstr(line,"synthetic critical failure") && !strstr(line,"999999"));
-		if(strstr(line,"build=ui-font-response-1")) ui_build=true;
+		if(strstr(line,"build=ui-catalogue-1")) ui_build=true;
 		if(strstr(line,"draw count=500")) ui_timing=true;
 	}
 	fclose(f); assert(ui_build && ui_timing && bytes < 65536);

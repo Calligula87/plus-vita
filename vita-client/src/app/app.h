@@ -28,7 +28,8 @@ typedef enum {
 	PLUS_VITA_ACTION_GAME, PLUS_VITA_ACTION_CONTINUE,
 	PLUS_VITA_ACTION_REMEMBER, PLUS_VITA_ACTION_ACCOUNT, PLUS_VITA_ACTION_RESTORE,
 	PLUS_VITA_ACTION_RETRY, PLUS_VITA_ACTION_LABEL, PLUS_VITA_ACTION_FORGET, PLUS_VITA_ACTION_CONFIRM_FORGET,
-	PLUS_VITA_ACTION_SEARCH, PLUS_VITA_ACTION_CLEAR_SEARCH, PLUS_VITA_ACTION_PLAY, PLUS_VITA_ACTION_DISABLED
+	PLUS_VITA_ACTION_SEARCH, PLUS_VITA_ACTION_CLEAR_SEARCH, PLUS_VITA_ACTION_PLAY, PLUS_VITA_ACTION_DISABLED,
+	PLUS_VITA_ACTION_PREVIOUS_PAGE, PLUS_VITA_ACTION_NEXT_PAGE
 } PlusVitaAppAction;
 typedef struct {
 	PlusVitaAppAction id;
@@ -38,7 +39,7 @@ typedef struct {
 typedef struct {
 	PlusVitaAppScreen screen;
 	const char *title, *subtitle, *body, *hint;
-	PlusVitaAppButton actions[4];
+	PlusVitaAppButton actions[6];
 	size_t action_count, selected;
 	uint64_t operation;
 	const PlusVitaCatalogEntry *games[3], *detail;

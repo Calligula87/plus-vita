@@ -405,7 +405,7 @@ bool plus_vita_diagnostic_ui_begin(void)
 	memset(ui_timings, 0, sizeof(ui_timings)); ui_snapshots = 0;
 	if(!plus_vita_diagnostic_begin()) return false;
 	ui_active = true;
-	write_line("UI", "build=ui-font-response-1 graphical=1 glyph_budget_bytes=524288", 0);
+	write_line("UI", "build=ui-catalogue-1 graphical=1 glyph_budget_bytes=524288", 0);
 	return true;
 }
 

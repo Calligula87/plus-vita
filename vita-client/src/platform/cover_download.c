@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "cover_download.h"
 #include "cover_policy.h"
-#include "curl_resolve.h"
+#include "cover_resolve.h"
 #include <curl/curl.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +26,7 @@ bool plus_vita_cover_download(const char *url,unsigned char **data,size_t *size,
 	if(!plus_vita_cover_url_allowed(url) || atomic_load(cancel)) return false;
 	CURL *curl=curl_easy_init(); if(!curl) return false;
 	Download download={.cancel=cancel}; struct curl_slist *resolved=NULL;
-	CURLcode result=plus_vita_curl_prepare_resolve(curl,url,&resolved);
+	CURLcode result=plus_vita_cover_resolve(curl,url,&resolved,cancel);
 	if(result==CURLE_OK && !atomic_load(cancel)) {
 		curl_easy_setopt(curl,CURLOPT_URL,url); curl_easy_setopt(curl,CURLOPT_CAINFO,"app0:/cacert.pem");
 		curl_easy_setopt(curl,CURLOPT_SSL_VERIFYPEER,1L); curl_easy_setopt(curl,CURLOPT_SSL_VERIFYHOST,2L);

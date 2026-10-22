@@ -9,6 +9,7 @@ cc -D_POSIX_C_SOURCE=200809L -std=c11 -g -O1 -Wall -Wextra -Werror -fsanitize=ad
  -Wl,--wrap=plus_vita_cover_download -o "$dir/test"
 timeout 15 "$dir/test"
 cc -D_POSIX_C_SOURCE=200809L -std=c11 -g -O1 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer \
- -Ivita-client/src/platform -Iexternal/pylux/third-party/curl/include \
- vita-client/src/platform/cover_download.c vita-client/tests/cover_download_test.c -o "$dir/download-test"
+ -Ivita-client/src/platform -Ivita-client/tests/cover_stubs -Iexternal/pylux/third-party/curl/include \
+ vita-client/src/platform/cover_download.c vita-client/src/platform/cover_resolve.c \
+ vita-client/tests/cover_download_test.c -o "$dir/download-test"
 "$dir/download-test"

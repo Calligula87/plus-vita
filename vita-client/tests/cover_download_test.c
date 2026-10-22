@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "cover_download.h"
-#include "curl_resolve.h"
+#include "cover_resolve.h"
+#include <psp2/net/net.h>
 #undef curl_easy_setopt
 #undef curl_easy_getinfo
 #include <assert.h>
@@ -19,9 +20,24 @@ static unsigned requests, mode;
 static int handle;
 CURL *curl_easy_init(void) { return (CURL *)&handle; }
 void curl_easy_cleanup(CURL *curl) { assert(curl == (CURL *)&handle); }
-void curl_slist_free_all(struct curl_slist *list) { assert(!list); }
-CURLcode plus_vita_curl_prepare_resolve(CURL *curl,const char *url,struct curl_slist **list)
-{ (void)curl; (void)url; *list=NULL; return CURLE_OK; }
+void curl_slist_free_all(struct curl_slist *list) { if(list) { free(list->data); free(list); } }
+struct curl_slist *curl_slist_append(struct curl_slist *list,const char *text)
+{
+ assert(!list && strstr(text,":443:127.0.0.1"));
+ list=calloc(1,sizeof(*list)); assert(list); list->data=strdup(text); assert(list->data); return list;
+}
+int sceNetResolverCreate(const char *name,void *param,int flags)
+{ (void)name; assert(!param && !flags); return 7; }
+int sceNetResolverDestroy(int resolver) { assert(resolver==7); return 0; }
+static atomic_bool *dns_cancel;
+int sceNetResolverStartNtoa(int resolver,const char *name,SceNetInAddr *address,int timeout,int retry,int flags)
+{
+ assert(resolver==7 && timeout==1000000 && retry==1 && !flags);
+ assert(strcmp(name,"image.api.playstation.com")==0 || strcmp(name,"gmedia.playstation.com")==0);
+ if(mode==4) return -1;
+ if(mode==5) atomic_store(dns_cancel,true);
+ address->s_addr=htonl(0x7f000001); return 0;
+}
 /* Only the external HTTP adapter is simulated. The real downloader owns the
  * receive buffer, limits, cancellation, response status and TLS configuration. */
 CURLcode curl_easy_setopt(CURL *curl,CURLoption option,...)
@@ -29,6 +45,8 @@ CURLcode curl_easy_setopt(CURL *curl,CURLoption option,...)
  (void)curl; va_list args; va_start(args,option);
  switch(option) {
  case CURLOPT_URL: (void)va_arg(args,const char *); break;
+ case CURLOPT_IPRESOLVE: assert(va_arg(args,long)==CURL_IPRESOLVE_V4); break;
+ case CURLOPT_RESOLVE: assert(va_arg(args,struct curl_slist *)); break;
  case CURLOPT_CAINFO: ca=va_arg(args,const char *); break;
  case CURLOPT_SSL_VERIFYPEER: peer=va_arg(args,long); break;
  case CURLOPT_SSL_VERIFYHOST: host=va_arg(args,long); break;
@@ -71,7 +89,10 @@ int main(void)
  atomic_store(&cancel,false); mode=3; assert(!plus_vita_cover_download(url,&data,&size,&cancel));
  mode=0; status=302; assert(!plus_vita_cover_download(url,&data,&size,&cancel));
  unsigned before=requests;
+ status=200; mode=4; assert(!plus_vita_cover_download(url,&data,&size,&cancel));
+ mode=5; dns_cancel=&cancel; assert(!plus_vita_cover_download(url,&data,&size,&cancel));
+ assert(requests==before); atomic_store(&cancel,false);
  assert(!plus_vita_cover_download("http://127.0.0.1/private",&data,&size,&cancel));
  assert(requests==before);
- puts("cover HTTP boundary: TLS, no redirects, size bounds, overflow, status and cancellation passed");
+ puts("cover HTTP boundary: bounded native DNS, TLS, no redirects, size bounds, overflow, status and cancellation passed");
 }

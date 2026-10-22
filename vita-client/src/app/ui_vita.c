@@ -11,6 +11,8 @@
 #include "../platform/credential_ime.h"
 #include "../platform/diagnostic_log.h"
 #include "../platform/latency_clock.h"
+#include "../platform/network.h"
+#include <curl/curl.h>
 #include <psp2/sysmodule.h>
 #include <psp2/touch.h>
 #include <stdbool.h>
@@ -123,11 +125,17 @@ int plus_vita_app_run(void)
 	PlusVitaApp *app = plus_vita_app_create();
 	PlusVitaAccount *account = plus_vita_account_create();
 	PlusVitaAccount *storage = plus_vita_account_create();
-	PlusVitaCovers *covers = plus_vita_covers_create();
+	PlusVitaCovers *covers = NULL;
 	if(!display || !app || !account || !storage)
 	{ free(display); plus_vita_app_destroy(app); plus_vita_account_close(account); plus_vita_account_close(storage); plus_vita_covers_close(covers); plus_vita_diagnostic_ui_end(); return 1; }
 	if(!display_open(display))
 	{ free(display); plus_vita_app_destroy(app); plus_vita_account_close(account); plus_vita_account_close(storage); plus_vita_covers_close(covers); plus_vita_diagnostic_ui_end(); return 1; }
+	/* Keep a process-lifetime reference while account HTTP and artwork overlap.
+	 * Individual account requests balance their own curl reference as before. */
+	bool network_owned = !plus_vita_network_is_initialized();
+	bool network_ready = plus_vita_network_init() == CHIAKI_ERR_SUCCESS;
+	bool curl_ready = network_ready && curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK;
+	if(curl_ready) covers = plus_vita_covers_create();
 	SceCtrlPadInputMode previous_mode = SCE_CTRL_MODE_DIGITAL;
 	bool restore_mode = sceCtrlGetSamplingMode(&previous_mode) == 0;
 	sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
@@ -238,9 +246,13 @@ int plus_vita_app_run(void)
 	if(restore_touch) sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, previous_touch);
 	if(restore_mode) sceCtrlSetSamplingMode(previous_mode);
 	plus_vita_credential_clear(&flow.pending.credential);
-	plus_vita_account_close(account);
-	plus_vita_account_close(storage);
-	plus_vita_covers_close(covers);
+	bool account_closed = plus_vita_account_close(account);
+	bool storage_closed = plus_vita_account_close(storage);
+	bool covers_closed = plus_vita_covers_close(covers);
+	if(account_closed && storage_closed && covers_closed) {
+		if(curl_ready) curl_global_cleanup();
+		if(network_ready && network_owned) plus_vita_network_fini();
+	} /* A live cancelled worker retains its resources until process exit. */
 	plus_vita_app_destroy(app);
 	if(display_close(display)) free(display);
 	plus_vita_diagnostic_ui_end();

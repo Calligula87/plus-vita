@@ -3,6 +3,7 @@
 This is development work for #16/#17, not a public release or an accepted stream
 build. The accepted blue/gold design, font adapter and retained-JSON setup stay
 in use. Hardware acceptance and the independent review are pending.
+The current-session diagnostic marker is `build=ui-catalogue-1`.
 
 ## Vita checks
 
@@ -11,7 +12,8 @@ in use. Hardware acceptance and the independent review are pending.
    an explicit local Account label overrides it. Do not include the name in a
    shared screenshot or log report.
 2. Browse multiple pages using the left stick in both axes. Check initial focus,
-   held-stick repeat and release. Cross and touch should open the chosen title's
+   held-stick repeat and release. Touch Prev/Next to reach later pages without
+   the stick. Cross and touch should open the chosen title's
    details. D-pad presses must not move menu focus.
 3. Use Triangle or Search. Search a partial English title in another letter case,
    cancel the keyboard, clear the query, and try a query with no results. Try a
@@ -29,7 +31,9 @@ in use. Hardware acceptance and the independent review are pending.
 
 The artwork worker permits only public PlayStation HTTPS CDN hosts, verifies
 TLS, sends no account credentials, rejects redirects, and retains no artwork on
-disk. Downloads are capped at 2 MiB/10 seconds; PNG/JPEG decoding and the six-entry
+disk. HTTP transfers are capped at 2 MiB/10 seconds; native DNS uses a one-second
+timeout with one retry and checks cancellation immediately afterwards.
+PNG/JPEG decoding and the six-entry
 thumbnail cache have fixed memory bounds. Failed artwork never disables details.
 
 Host tests cover the real app workflow, render/font/input flow, optional artwork
@@ -37,3 +41,6 @@ metadata, actual PNG/JPEG decoder and asynchronous cache, plus the downloader's
 HTTP/TLS/size/cancellation boundary with synthetic transport. These checks do
 not establish Vita responsiveness, service artwork availability or streaming.
 Keep the accepted font/response and streaming VPKs available for rollback.
+
+The DNS adapter uses the native [VitaSDK resolver API](https://github.com/vitasdk/vita-headers/blob/master/include/psp2/net/net.h)
+to avoid the unbounded libc resolver and libcurl's threaded resolver on Vita.
