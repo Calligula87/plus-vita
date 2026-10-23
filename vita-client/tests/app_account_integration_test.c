@@ -32,6 +32,7 @@ static atomic_bool block_server, server_entered;
 static atomic_uint requests;
 static atomic_int auth_status;
 static const char *identity_json = "\"SyntheticPlayer\"";
+static const char *category_json;
 static void pause_poll(void) { const struct timespec delay = { .tv_nsec = 1000000 }; nanosleep(&delay, NULL); }
 
 static void body(CCHttpResponse *response, const char *value)
@@ -85,7 +86,7 @@ ChiakiErrorCode __wrap_cc_http_perform(ChiakiLog *log, const CCHttpRequest *requ
 	else if(strstr(request->url, "/category/ab"))
 	{
 		response->status_code = 200;
-		body(response, "{\"links\":[{\"name\":\"Zulu\",\"productId\":\"FAKECUSA00002\",\"imageUrl\":\"http://127.0.0.1/private\"},{\"name\":\"Alpha\",\"productId\":\"FAKECUSA00001\",\"images\":[null,42,\"invalid\",{\"type\":10,\"url\":\"https://vulcan.dl.playstation.net/fixture.png\"}]}]}");
+		body(response, category_json ? category_json : "{\"links\":[{\"name\":\"Zulu\",\"productId\":\"FAKECUSA00002\",\"imageUrl\":\"http://127.0.0.1/private\"},{\"name\":\"Alpha\",\"productId\":\"FAKECUSA00001\",\"images\":[null,42,\"invalid\",{\"type\":10,\"url\":\"https://vulcan.dl.playstation.net/fixture.png\"}]}]}");
 	}
 	else if(strstr(request->url, "response_type=token")) response->status_code = 403;
 	else assert(!"Unexpected HTTP route; test transport never contacts a server");
@@ -425,6 +426,21 @@ int main(void)
 {
 	retained_json_launch();
 	optional_account_names();
+	/* Present malformed metadata is distinct from absent artwork; a valid
+	 * legacy URL still recovers a cover from an unsupported images shape. */
+	category_json="{\"links\":[{\"name\":\"Object\",\"images\":{}},{\"name\":\"String\",\"images\":\"bad\"},{\"name\":\"Null\",\"images\":null},{\"name\":\"Missing\"},{\"name\":\"Fallback\",\"images\":{},\"imageUrl\":\"https://vulcan.dl.playstation.net/fixture.png\"}]}";
+	import_file();
+	PlusVitaApp *metadata_app=plus_vita_app_create();
+	PlusVitaAccount *metadata_account=plus_vita_account_create();
+	PlusVitaAppEffect metadata_pending=open_import(metadata_app,metadata_account);
+	for(unsigned i=0;i<5000 && plus_vita_app_view(metadata_app).screen==PLUS_VITA_APP_AUTHORIZING;i++) drive(metadata_app,metadata_account,&metadata_pending);
+	PlusVitaAppView metadata_view=plus_vita_app_view(metadata_app);
+	assert(metadata_view.screen==PLUS_VITA_APP_CATALOGUE);
+	assert(metadata_view.artwork_metadata[PLUS_VITA_ARTWORK_UNSUPPORTED]==3);
+	assert(metadata_view.artwork_metadata[PLUS_VITA_ARTWORK_MISSING]==1);
+	assert(metadata_view.artwork_metadata[PLUS_VITA_ARTWORK_AVAILABLE]==1);
+	assert(plus_vita_account_close(metadata_account)); plus_vita_app_destroy(metadata_app);
+	category_json=NULL;
 	atomic_store(&server_entered, false);
 	/* Cancel before delivering the read result: the source must stay intact. */
 	import_file();

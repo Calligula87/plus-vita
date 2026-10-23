@@ -72,6 +72,11 @@ int main(void)
  }
  plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK});
  assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_ABOUT);
- plus_vita_app_destroy(app); plus_vita_font_free(a); plus_vita_font_free(b);
+ plus_vita_app_destroy(app);
+ /* Same reverse ownership order as display_close: the alternative borrows
+  * the module loaded by A. The fixture rejects unload with live libraries. */
+ assert(live_libraries==2 && module_loaded);
+ plus_vita_font_free(b); assert(live_libraries==1 && module_loaded);
+ plus_vita_font_free(a); assert(live_libraries==0 && !module_loaded);
  puts("FreeType: real pinned raster preserves full alpha at all UI sizes; cache and bounds passed");
 }

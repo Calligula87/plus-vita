@@ -206,6 +206,8 @@ static bool append_catalog_entry(PlusVitaAuthProbeResult *result,
 	const char *id = catalog_string(item, id_keys);
 	const char *platform = catalog_string(item, platform_keys);
 	struct json_object *images=NULL;
+	if(json_object_object_get_ex(item,"images",&images) && !json_object_is_type(images,json_type_array))
+		entry->cover_metadata=PLUS_VITA_ARTWORK_UNSUPPORTED;
 	if(json_object_object_get_ex(item,"images",&images) && json_object_is_type(images,json_type_array)) {
 		if(json_object_array_length(images)) entry->cover_metadata=PLUS_VITA_ARTWORK_UNSUPPORTED;
 		const int types[]={10,12,13};

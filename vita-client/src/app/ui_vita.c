@@ -53,8 +53,9 @@ static bool display_close(UiDisplay *display)
 	}
 	for(unsigned i = 0; i < 2; i++)
 		if(display->blocks[i] >= 0) sceKernelFreeMemBlock(display->blocks[i]);
-	plus_vita_font_free(display->font);
+	/* The base font owns PGF; close its alternative's PVF fallback first. */
 	plus_vita_font_free(display->alternative);
+	plus_vita_font_free(display->font);
 	return true;
 }
 

@@ -2,13 +2,15 @@ static int pixelsize=20;
 static unsigned api_calls;
 static int glyph_width=10;
 static bool unavailable, bad_rect, bad_raster;
+static bool module_loaded;
+static unsigned live_libraries;
 
 static unsigned char bitmap[128*8];
-int sceSysmoduleLoadModule(unsigned x) { (void)x; return unavailable ? -1 : 0; }
-int sceSysmoduleIsLoaded(unsigned x) { (void)x; return unavailable ? -1 : 0; }
-int sceSysmoduleUnloadModule(unsigned x) { (void)x; return 0; }
-ScePvfLibId scePvfNewLib(ScePvfInitRec *p, ScePvfError *e) { (void)p; *e=0; return (void *)1; }
-int scePvfDoneLib(ScePvfLibId f) { (void)f; return 0; }
+int sceSysmoduleLoadModule(unsigned x) { (void)x; if(unavailable || module_loaded) return -1; module_loaded=true; return 0; }
+int sceSysmoduleIsLoaded(unsigned x) { (void)x; return module_loaded ? 0 : -1; }
+int sceSysmoduleUnloadModule(unsigned x) { (void)x; assert(live_libraries==0); module_loaded=false; return 0; }
+ScePvfLibId scePvfNewLib(ScePvfInitRec *p, ScePvfError *e) { (void)p; assert(module_loaded); live_libraries++; *e=0; return (void *)1; }
+int scePvfDoneLib(ScePvfLibId f) { (void)f; assert(module_loaded && live_libraries); live_libraries--; return 0; }
 int scePvfSetEM(ScePvfLibId f,float x) { (void)f;(void)x; return 0; }
 int scePvfSetResolution(ScePvfLibId f,float x,float y) { (void)f;(void)x;(void)y; return 0; }
 int scePvfFindOptimumFont(ScePvfLibId f,ScePvfFontStyleInfo *s,ScePvfError *e) { (void)f;(void)s; *e=0; return 0; }
