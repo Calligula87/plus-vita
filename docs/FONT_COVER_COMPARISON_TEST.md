@@ -12,6 +12,24 @@ marker is `build=ui-font-cover-compare-1`. This is a graphical Release compariso
 profile with independent input and deferred logging enabled. A successful build
 or host image does not establish Vita font or cover acceptance.
 
+Candidate built from implementation commits `8af5bf8` and `e522e8b`:
+
+- SHA-256: `78847FE1AC62C6675C0C32775FA30AC7A228A8963E7DED3BF299ED228B267CE5`
+- Size: 1,878,691 bytes.
+- Delivered to `ux0:data/plus-vita-font-cover-compare-1.vpk` on 2026-10-23;
+  FTP readback matched the checksum. Earlier trial files are not this candidate.
+- Full host regression suite passed, including actual pinned FreeType raster,
+  native artwork integration, input/deferred logging and stream baseline checks.
+  Default graphical, historical diagnostic and comparison Vita targets built.
+- Independent Standards and Spec reviews completed. Both findings were fixed:
+  malformed metadata classification and borrowed PVF context cleanup order.
+  Regressions reproduced both failures before passing with the fixes.
+- Package inventory contains executable/metadata, CA trust, licensed font and
+  notices only; no account JSON, logs, screenshots or game artwork is bundled.
+
+Hardware results are pending. #28 and #30 await this device test; #29 remains
+blocked until a renderer is selected from the comparison.
+
 ## Font comparison
 
 1. Open About Plus Vita, then Compare text rendering. This works without signing
