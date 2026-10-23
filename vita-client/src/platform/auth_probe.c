@@ -207,22 +207,33 @@ static bool append_catalog_entry(PlusVitaAuthProbeResult *result,
 	const char *platform = catalog_string(item, platform_keys);
 	struct json_object *images=NULL;
 	if(json_object_object_get_ex(item,"images",&images) && json_object_is_type(images,json_type_array)) {
+		if(json_object_array_length(images)) entry->cover_metadata=PLUS_VITA_ARTWORK_UNSUPPORTED;
 		const int types[]={10,12,13};
 		for(unsigned t=0;t<3 && !entry->cover_url[0];t++)
 			for(size_t i=0;i<json_object_array_length(images) && i<128;i++) {
 				struct json_object *image=json_object_array_get_idx(images,i), *kind=NULL, *url=NULL;
 				if(json_object_is_type(image,json_type_object) && json_object_object_get_ex(image,"type",&kind)
 					&& json_object_is_type(kind,json_type_int) && json_object_get_int(kind)==types[t]
-					&& json_object_object_get_ex(image,"url",&url) && json_object_is_type(url,json_type_string)
-					&& plus_vita_cover_url_allowed(json_object_get_string(url))) {
-					snprintf(entry->cover_url,sizeof(entry->cover_url),"%s",json_object_get_string(url)); break;
+					&& json_object_object_get_ex(image,"url",&url) && json_object_is_type(url,json_type_string)) {
+					const char *text=json_object_get_string(url);
+					if((size_t)json_object_get_string_len(url)!=strlen(text) || !plus_vita_cover_url_allowed(text)) {
+						entry->cover_metadata=PLUS_VITA_ARTWORK_REJECTED; continue;
+					}
+					snprintf(entry->cover_url,sizeof(entry->cover_url),"%s",text); break;
 				}
 			}
 	}
 	struct json_object *image_url=NULL;
-	if(!entry->cover_url[0] && json_object_object_get_ex(item,"imageUrl",&image_url)
-		&& json_object_is_type(image_url,json_type_string) && plus_vita_cover_url_allowed(json_object_get_string(image_url)))
-		snprintf(entry->cover_url,sizeof(entry->cover_url),"%s",json_object_get_string(image_url));
+	if(!entry->cover_url[0] && json_object_object_get_ex(item,"imageUrl",&image_url)) {
+		if(!json_object_is_type(image_url,json_type_string)) entry->cover_metadata=PLUS_VITA_ARTWORK_UNSUPPORTED;
+		else {
+			const char *text=json_object_get_string(image_url);
+			if((size_t)json_object_get_string_len(image_url)==strlen(text) && plus_vita_cover_url_allowed(text))
+				snprintf(entry->cover_url,sizeof(entry->cover_url),"%s",text);
+			else entry->cover_metadata=PLUS_VITA_ARTWORK_REJECTED;
+		}
+	}
+	if(entry->cover_url[0]) entry->cover_metadata=PLUS_VITA_ARTWORK_AVAILABLE;
 	if(id)
 	{
 		const char *slash = strrchr(id, '/');

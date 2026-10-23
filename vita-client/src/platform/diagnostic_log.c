@@ -398,14 +398,32 @@ bool plus_vita_diagnostic_persistence_ok(void)
 static PlusVitaLatencyStats ui_timings[PLUS_VITA_UI_TIMINGS];
 static unsigned ui_snapshots;
 static bool ui_active;
+static unsigned artwork_metadata[PLUS_VITA_ARTWORK_METADATA_STATES];
+static uint64_t artwork_results[PLUS_VITA_ARTWORK_RESULTS];
+
+void plus_vita_diagnostic_artwork_metadata(const unsigned counts[PLUS_VITA_ARTWORK_METADATA_STATES])
+{
+	if(!ui_active || !counts) return;
+	for(unsigned i=0;i<PLUS_VITA_ARTWORK_METADATA_STATES;i++) artwork_metadata[i]=counts[i]>4096 ? 4096 : counts[i];
+}
+void plus_vita_diagnostic_artwork_result(PlusVitaArtworkResult result)
+{
+	if(ui_active && (unsigned)result<PLUS_VITA_ARTWORK_RESULTS && artwork_results[result]!=UINT64_MAX)
+		artwork_results[result]++;
+}
 
 bool plus_vita_diagnostic_ui_begin(void)
 {
 	ui_active = false;
 	memset(ui_timings, 0, sizeof(ui_timings)); ui_snapshots = 0;
+	memset(artwork_metadata,0,sizeof(artwork_metadata)); memset(artwork_results,0,sizeof(artwork_results));
 	if(!plus_vita_diagnostic_begin()) return false;
 	ui_active = true;
-	write_line("UI", "build=ui-catalogue-1 graphical=1 glyph_budget_bytes=524288", 0);
+#if PLUS_VITA_FONT_COMPARISON
+	write_line("UI", "build=ui-font-cover-compare-1 graphical=1 glyph_budget_bytes=524288", 0);
+#else
+	write_line("UI", "build=ui-cover-fix-1 graphical=1 glyph_budget_bytes=524288", 0);
+#endif
 	return true;
 }
 
@@ -416,7 +434,7 @@ void plus_vita_diagnostic_ui_sample(PlusVitaUiTiming stage, uint64_t duration_us
 
 static void ui_report(bool final)
 {
-	static const char *const names[] = {"draw", "present", "sampled_input_to_present", "poll_gap"};
+	static const char *const names[] = {"draw", "present", "sampled_input_to_present", "poll_gap", "font_A_draw", "font_B_draw"};
 	if(!ui_active) return;
 	for(unsigned i = 0; i < PLUS_VITA_UI_TIMINGS; i++) {
 		char record[256];
@@ -426,6 +444,15 @@ static void ui_report(bool final)
 			(unsigned long long)ui_timings[i].invalid);
 		write_line("UI", record, 0);
 	}
+	char record[512];
+	snprintf(record,sizeof(record),"%s summary metadata_missing=%u available=%u unsupported=%u rejected=%u loaded=%llu dns=%llu http=%llu tls=%llu transport=%llu limit=%llu decode=%llu cancelled=%llu unavailable=%llu policy=%llu",
+		final ? "final" : "current",artwork_metadata[0],artwork_metadata[1],artwork_metadata[2],artwork_metadata[3],
+		(unsigned long long)artwork_results[PLUS_VITA_ARTWORK_OK],(unsigned long long)artwork_results[PLUS_VITA_ARTWORK_DNS],
+		(unsigned long long)artwork_results[PLUS_VITA_ARTWORK_HTTP],(unsigned long long)artwork_results[PLUS_VITA_ARTWORK_TLS],
+		(unsigned long long)artwork_results[PLUS_VITA_ARTWORK_TRANSPORT],(unsigned long long)artwork_results[PLUS_VITA_ARTWORK_LIMIT],
+		(unsigned long long)artwork_results[PLUS_VITA_ARTWORK_DECODE],(unsigned long long)artwork_results[PLUS_VITA_ARTWORK_CANCELLED],
+		(unsigned long long)artwork_results[PLUS_VITA_ARTWORK_UNAVAILABLE],(unsigned long long)artwork_results[PLUS_VITA_ARTWORK_POLICY]);
+	write_line("ARTWORK",record,0);
 }
 
 void plus_vita_diagnostic_ui_flush(void)

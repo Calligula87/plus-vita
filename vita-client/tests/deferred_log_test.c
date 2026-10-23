@@ -75,6 +75,11 @@ int main(void)
 	fclose(f); assert(critical && redacted && overflow);
 	assert(plus_vita_diagnostic_persistence_ok());
 	assert(plus_vita_diagnostic_ui_begin());
+	const unsigned artwork[]={2,3,4,5};
+	plus_vita_diagnostic_artwork_metadata(artwork);
+	plus_vita_diagnostic_artwork_result(PLUS_VITA_ARTWORK_OK);
+	plus_vita_diagnostic_artwork_result(PLUS_VITA_ARTWORK_DNS);
+	plus_vita_diagnostic_artwork_result((PlusVitaArtworkResult)999999);
 	for(unsigned i=0;i<500;i++) {
 		plus_vita_diagnostic_ui_sample(PLUS_VITA_UI_DRAW, 123);
 		plus_vita_diagnostic_ui_sample((PlusVitaUiTiming)999, 999999);
@@ -82,14 +87,15 @@ int main(void)
 	}
 	plus_vita_diagnostic_ui_end();
 	f = fopen("plus-vita-allocation.log", "r"); assert(f);
-	bool ui_build=false, ui_timing=false; size_t bytes=0;
+	bool ui_build=false, ui_timing=false, artwork_summary=false; size_t bytes=0;
 	while(fgets(line,sizeof(line),f)) {
 		bytes+=strlen(line);
 		assert(!strstr(line,"synthetic critical failure") && !strstr(line,"999999"));
-		if(strstr(line,"build=ui-catalogue-1")) ui_build=true;
+		if(strstr(line,"build=ui-cover-fix-1")) ui_build=true;
 		if(strstr(line,"draw count=500")) ui_timing=true;
+		if(strstr(line,"metadata_missing=2 available=3 unsupported=4 rejected=5 loaded=1 dns=1")) artwork_summary=true;
 	}
-	fclose(f); assert(ui_build && ui_timing && bytes < 65536);
+	fclose(f); assert(ui_build && ui_timing && artwork_summary && bytes < 65536);
 	/* Full critical reserve keeps the latest final records, with explicit loss;
 	 * producer entrypoints remain callable during a blocked stop/drain. */
 	assert(plus_vita_diagnostic_begin());

@@ -13,12 +13,15 @@ struct plus_vita_app_t {
 	size_t welcome_selection;
 	uint64_t next_operation, pending_operation;
 	uint64_t account_epoch;
+	unsigned artwork_metadata[PLUS_VITA_ARTWORK_METADATA_STATES];
 	PlusVitaAppEffectKind waiting_for;
 	PlusVitaCredential credential;
 	PlusVitaCatalogEntry *catalogue;
 	size_t catalogue_count, catalogue_selection;
 	size_t matches[4096], matches_count;
 	bool search_focus;
+	bool alternative_font;
+	unsigned comparison_page;
 	char search[129], search_button[160], catalogue_status[512], detail_status[512];
 	bool imported_valid, connected;
 	bool remember, saved, started, retry_account, retry_save, retry_delete, forgetting, expired;
@@ -70,6 +73,18 @@ static void welcome(PlusVitaApp *app)
 	}
 }
 
+static void about_view(PlusVitaApp *app)
+{
+	app->view=(PlusVitaAppView){.screen=PLUS_VITA_APP_ABOUT,
+		.title="Made for your handheld.",.subtitle="ABOUT PLUS VITA",
+		.body="An independent cloud gaming client for PlayStation Vita.\nUse your own Sony account and eligible subscription.\n\nDevelopment build. Not a public release.",
+		.hint="X  Select     O  Back",.actions={{PLUS_VITA_ACTION_BACK,"Back",64,444,500,52}},.action_count=1};
+#if PLUS_VITA_FONT_COMPARISON
+	app->view.actions[0]=(PlusVitaAppButton){PLUS_VITA_ACTION_FONT_COMPARISON,"Compare text rendering",64,380,832,52};
+	app->view.actions[1]=(PlusVitaAppButton){PLUS_VITA_ACTION_BACK,"Back",64,444,832,52}; app->view.action_count=2;
+#endif
+}
+
 PlusVitaApp *plus_vita_app_create(void)
 {
 	PlusVitaApp *app = calloc(1, sizeof(*app));
@@ -86,7 +101,11 @@ void plus_vita_app_destroy(PlusVitaApp *app)
 	free(app->catalogue);
 	free(app);
 }
-PlusVitaAppView plus_vita_app_view(const PlusVitaApp *app) { PlusVitaAppView view=app->view; view.account_epoch=app->account_epoch; return view; }
+PlusVitaAppView plus_vita_app_view(const PlusVitaApp *app) {
+	PlusVitaAppView view=app->view; view.account_epoch=app->account_epoch;
+	memcpy(view.artwork_metadata,app->artwork_metadata,sizeof(view.artwork_metadata));
+	view.account_connected=app->connected; return view;
+}
 
 static void setup_view(PlusVitaApp *app)
 {
@@ -345,6 +364,7 @@ static void clear_runtime(PlusVitaApp *app)
 	memset(app->search, 0, sizeof(app->search));
 	memset(app->search_button,0,sizeof(app->search_button)); memset(app->detail_status,0,sizeof(app->detail_status));
 	app->matches_count = 0; app->search_focus = false;
+	memset(app->artwork_metadata,0,sizeof(app->artwork_metadata));
 	app->connected = app->retry_account = app->retry_save = false;
 }
 
@@ -439,6 +459,22 @@ static void detail_view(PlusVitaApp *app, const char *notice)
 		.actions={{game->launch_id_valid ? PLUS_VITA_ACTION_PLAY : PLUS_VITA_ACTION_DISABLED,game->launch_id_valid ? "Play" : "Play unavailable",64,380,832,52},{PLUS_VITA_ACTION_BACK,"Back",64,444,832,52}},.action_count=2};
 }
 
+#if PLUS_VITA_FONT_COMPARISON
+static void font_comparison(PlusVitaApp *app)
+{
+	app->view=(PlusVitaAppView){.screen=PLUS_VITA_APP_FONT_COMPARISON,
+		.subtitle=app->alternative_font ? "B: FREETYPE / NOTO SANS" : "A: CURRENT SYSTEM FONT",
+		.title=app->comparison_page ? "Choose your next game." : "Import your sign-in JSON.",
+		.body=app->comparison_page ? "Synthetic titles. Japanese uses the system fallback." :
+			"Save plus-vita-auth.json in ux0:data with VitaShell.\nThe JSON stays there and can sign you in next launch.\nRemember Off pauses automatic sign-in; files are locally readable.",
+		.hint="Left stick  Move     X  Select     O  Back     Square  Save image",
+		.alternative_font=app->alternative_font,.comparison_page=app->comparison_page,
+		.actions={{PLUS_VITA_ACTION_FONT_TOGGLE,app->alternative_font ? "Show A: System" : "Show B: FreeType",64,444,260,48},
+			{PLUS_VITA_ACTION_FONT_SAMPLE,app->comparison_page ? "Show setup" : "Show tiles",350,444,260,48},
+			{PLUS_VITA_ACTION_BACK,"Back",636,444,260,48}},.action_count=3};
+}
+#endif
+
 static PlusVitaAppEffect import_account(PlusVitaApp *app)
 {
 	clear_runtime(app);
@@ -486,6 +522,10 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		app->previous_buttons = event.pad.buttons;
 		app->previous_direction = menu_direction(app, event.pad);
 		app->repeat_at = event.pad.time_us + 400000u;
+		return effect;
+	}
+	if(event.kind==PLUS_VITA_EVENT_FONT_CAPTURED && view->screen==PLUS_VITA_APP_FONT_COMPARISON) {
+		view->hint=event.status==PLUS_VITA_RESULT_OK ? "Synthetic screenshot saved in ux0:data. Square saves again." : "Screenshot could not be saved. Check storage.";
 		return effect;
 	}
 	if(event.kind == PLUS_VITA_EVENT_PAD)
@@ -609,6 +649,14 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 					qsort(app->catalogue, event.entry_count, sizeof(*app->catalogue), compare_titles);
 				}
 				app->catalogue_count = event.entry_count;
+				memset(app->artwork_metadata,0,sizeof(app->artwork_metadata));
+				for(size_t i=0;i<app->catalogue_count;i++) {
+					PlusVitaCatalogEntry *game=&app->catalogue[i];
+					game->cover_url[sizeof(game->cover_url)-1]=0;
+					unsigned state=game->cover_url[0] ? PLUS_VITA_ARTWORK_AVAILABLE : (unsigned)game->cover_metadata;
+					if(state>=PLUS_VITA_ARTWORK_METADATA_STATES) state=PLUS_VITA_ARTWORK_UNSUPPORTED;
+					app->artwork_metadata[state]++;
+				}
 				filter_catalogue(app);
 				app->connected = true;
 				app->pending_operation = 0;
@@ -704,6 +752,11 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		view->selected = (view->selected + view->action_count - 1) % view->action_count;
 	else if(event.kind == PLUS_VITA_EVENT_BACK)
 	{
+#if PLUS_VITA_FONT_COMPARISON
+		if(view->screen==PLUS_VITA_APP_FONT_COMPARISON) {
+			about_view(app); return effect;
+		}
+#endif
 		if(app->waiting_for == PLUS_VITA_EFFECT_SAVE_ACCOUNT || app->waiting_for == PLUS_VITA_EFFECT_DELETE_ACCOUNT
 			|| app->waiting_for == PLUS_VITA_EFFECT_ENABLE_AUTO) return effect;
 		if(view->screen == PLUS_VITA_APP_FORGET_CONFIRM) { account_view(app); return effect; }
@@ -725,6 +778,13 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	else if(event.kind == PLUS_VITA_EVENT_ACTIVATE && view->action_count)
 	{
 		PlusVitaAppAction action = view->actions[view->selected].id;
+#if PLUS_VITA_FONT_COMPARISON
+		if(action==PLUS_VITA_ACTION_FONT_COMPARISON || action==PLUS_VITA_ACTION_FONT_TOGGLE || action==PLUS_VITA_ACTION_FONT_SAMPLE) {
+			if(action==PLUS_VITA_ACTION_FONT_TOGGLE) app->alternative_font=!app->alternative_font;
+			if(action==PLUS_VITA_ACTION_FONT_SAMPLE) app->comparison_page^=1;
+			font_comparison(app); return effect;
+		}
+#endif
 		if((action==PLUS_VITA_ACTION_PREVIOUS_PAGE || action==PLUS_VITA_ACTION_NEXT_PAGE)
 			&& view->screen==PLUS_VITA_APP_CATALOGUE && app->matches_count) {
 			size_t page = app->catalogue_selection / 3, pages = (app->matches_count + 2) / 3;
@@ -797,17 +857,11 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		else if(action == PLUS_VITA_ACTION_ABOUT)
 		{
 			app->welcome_selection = view->selected;
-			*view = (PlusVitaAppView){
-				.screen = PLUS_VITA_APP_ABOUT,
-				.title = "Made for your handheld.", .subtitle = "ABOUT PLUS VITA",
-				.body = "An independent cloud gaming client for PlayStation Vita.\nUse your own Sony account and eligible subscription.\n\nDevelopment build. Not a public release.",
-				.hint = "X  Select     O  Back",
-				.actions = {{ PLUS_VITA_ACTION_BACK, "Back", 64, 444, 500, 52 }},
-				.action_count = 1
-			};
+			about_view(app);
 		}
 		else if(action == PLUS_VITA_ACTION_BACK)
 		{
+			if(view->screen==PLUS_VITA_APP_FONT_COMPARISON) { about_view(app); return effect; }
 			if(view->screen==PLUS_VITA_APP_DETAILS) { catalogue_view(app); return effect; }
 			app->pending_operation = 0;
 			app->waiting_for = PLUS_VITA_EFFECT_NONE;

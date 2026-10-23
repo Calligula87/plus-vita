@@ -5,6 +5,7 @@
 #include <stdint.h>
 typedef struct plus_vita_font_t PlusVitaFont;
 PlusVitaFont *plus_vita_font_create(void);
+PlusVitaFont *plus_vita_font_create_alternative(const char *path);
 void plus_vita_font_free(PlusVitaFont *font);
 bool plus_vita_font_draw(PlusVitaFont *font, uint32_t *pixels, int pitch, const char *text,
 	PlusVitaTextBox box, int size, bool wrap, uint32_t color);

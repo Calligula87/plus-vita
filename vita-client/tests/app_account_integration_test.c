@@ -14,6 +14,19 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+#include "font_vita.h"
+#include "render.h"
+#include "covers.h"
+#include "cover_download.h"
+#include <psp2/pvf.h>
+#include <psp2/net/net.h>
+#include <debugScreen.h>
+#include <stdarg.h>
+#undef curl_easy_setopt
+#undef curl_easy_getinfo
+#include "pvf_fixture.h"
+#include "cover_http_fixture.h"
+static uint32_t artwork_pixels[960*544];
 
 static atomic_bool block_server, server_entered;
 static atomic_uint requests;
@@ -72,7 +85,7 @@ ChiakiErrorCode __wrap_cc_http_perform(ChiakiLog *log, const CCHttpRequest *requ
 	else if(strstr(request->url, "/category/ab"))
 	{
 		response->status_code = 200;
-		body(response, "{\"links\":[{\"name\":\"Zulu\",\"productId\":\"FAKECUSA00002\",\"imageUrl\":\"http://127.0.0.1/private\"},{\"name\":\"Alpha\",\"productId\":\"FAKECUSA00001\",\"images\":[null,42,\"invalid\",{\"type\":10,\"url\":\"https://image.api.playstation.com/fixture.png\"}]}]}");
+		body(response, "{\"links\":[{\"name\":\"Zulu\",\"productId\":\"FAKECUSA00002\",\"imageUrl\":\"http://127.0.0.1/private\"},{\"name\":\"Alpha\",\"productId\":\"FAKECUSA00001\",\"images\":[null,42,\"invalid\",{\"type\":10,\"url\":\"https://vulcan.dl.playstation.net/fixture.png\"}]}]}");
 	}
 	else if(strstr(request->url, "response_type=token")) response->status_code = 403;
 	else assert(!"Unexpected HTTP route; test transport never contacts a server");
@@ -445,8 +458,26 @@ int main(void)
 	PlusVitaAppView view = plus_vita_app_view(app);
 	assert(view.screen == PLUS_VITA_APP_CATALOGUE);
 	assert(view.action_count == 3 && strcmp(view.actions[0].label, "Alpha") == 0);
-	assert(strcmp(view.games[0]->cover_url, "https://image.api.playstation.com/fixture.png") == 0);
+	assert(strcmp(view.games[0]->cover_url, "https://vulcan.dl.playstation.net/fixture.png") == 0);
 	assert(view.games[1]->cover_url[0] == 0);
+	assert(view.artwork_metadata[PLUS_VITA_ARTWORK_AVAILABLE]==1 && view.artwork_metadata[PLUS_VITA_ARTWORK_REJECTED]==1);
+	/* Same app/worker/parser/URL-policy path feeds the real downloader,
+	 * decoder, cache and painter. Only external HTTP/DNS/PVF calls are simulated. */
+	PlusVitaCovers *artwork=plus_vita_covers_create(); assert(artwork);
+	PlusVitaFont *artwork_font=plus_vita_font_create(); assert(artwork_font);
+	const char *artwork_urls[]={view.games[0]->cover_url}; cover_mode=6;
+	plus_vita_covers_request(artwork,artwork_urls,1);
+	bool artwork_done=false;
+	for(unsigned i=0;i<5000 && !artwork_done;i++) { artwork_done=plus_vita_covers_poll(artwork); if(!artwork_done) pause_poll(); }
+	assert(artwork_done && plus_vita_covers_last_result(artwork)==PLUS_VITA_ARTWORK_OK);
+	plus_vita_app_paint_with_covers(artwork_font,artwork_pixels,960,&view,artwork);
+	assert(artwork_pixels[356*960+138]==0xff0000ff && artwork_pixels[356*960+230]==0xffff0000);
+	plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_ACTIVATE});
+	view=plus_vita_app_view(app); assert(view.screen==PLUS_VITA_APP_DETAILS);
+	plus_vita_app_paint_with_covers(artwork_font,artwork_pixels,960,&view,artwork);
+	assert(artwork_pixels[280*960+752]==0xff0000ff);
+	plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK});
+	plus_vita_font_free(artwork_font); assert(plus_vita_covers_close(artwork)); cover_mode=0;
 	assert(access("ux0:data/plus-vita-auth.json", F_OK) == 0);
 	unsigned initial_requests = atomic_load(&requests);
 	/* Navigation retains the runtime account without rereading the source. */
@@ -508,4 +539,5 @@ int main(void)
 	puts("app account integration: retained JSON, restore, storage recovery and stale results passed");
 	return 0;
 }
+
 

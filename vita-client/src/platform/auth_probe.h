@@ -6,6 +6,7 @@
 #include <stdbool.h>
 
 #include "credential.h"
+#include "artwork_status.h"
 
 #define PLUS_VITA_CATALOG_NAME_MAX 96
 #define PLUS_VITA_CATALOG_ID_MAX 64
@@ -17,6 +18,7 @@ typedef struct plus_vita_catalog_entry_t
 	char platform[8];
 	bool launch_id_valid;
 	char cover_url[512];
+	PlusVitaArtworkMetadata cover_metadata;
 } PlusVitaCatalogEntry;
 
 typedef struct plus_vita_auth_probe_result_t

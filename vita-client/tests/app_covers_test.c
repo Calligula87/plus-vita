@@ -12,9 +12,9 @@
 #include <time.h>
 static atomic_bool block,entered;
 static void pause_poll(void) { const struct timespec t={.tv_nsec=1000000}; nanosleep(&t,NULL); }
-bool __wrap_plus_vita_cover_download(const char *url,unsigned char **data,size_t *size,const atomic_bool *cancel)
+bool __wrap_plus_vita_cover_download(const char *url,unsigned char **data,size_t *size,const atomic_bool *cancel,PlusVitaArtworkResult *result)
 {
-	atomic_store(&entered,true);
+	*result=PLUS_VITA_ARTWORK_OK; atomic_store(&entered,true);
 	while(atomic_load(&block) && !atomic_load(cancel)) pause_poll();
 	if(atomic_load(cancel)) return false;
 	const unsigned char *source=strstr(url,".jpg") ? cover_jpeg : cover_png;
@@ -33,6 +33,11 @@ int main(void)
 	assert(!plus_vita_cover_url_allowed("https://image.api.playstation.com.evil.invalid/a.png"));
 	assert(!plus_vita_cover_url_allowed("http://image.api.playstation.com/a.png"));
 	assert(!plus_vita_cover_url_allowed("https://image.api.playstation.com:443/a.png"));
+	assert(plus_vita_cover_url_allowed("https://vulcan.dl.playstation.net/fixture.png"));
+	assert(plus_vita_cover_url_allowed("https://apollo2.dl.playstation.net/fixture.png"));
+	assert(plus_vita_cover_url_allowed("https://gs2-sec.ww.prod.dl.playstation.net/fixture.png"));
+	assert(!plus_vita_cover_url_allowed("https://vulcan.dl.playstation.net.evil.invalid/fixture.png"));
+	assert(!plus_vita_cover_url_allowed("https://vulcan.dl.playstation.net@evil.invalid/fixture.png"));
 	uint32_t image[128*128];
 	assert(plus_vita_cover_decode(cover_png,sizeof(cover_png),image));
 	assert(image[64*128+8]==0xff0000ff && image[64*128+100]==0xffff0000);
@@ -59,3 +64,4 @@ int main(void)
 	assert(plus_vita_covers_close(covers));
 	puts("covers: real PNG/JPEG decode, bounded cache, blocked I/O, failure and stale reset passed");
 }
+

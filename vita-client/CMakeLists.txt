@@ -19,6 +19,7 @@ add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../external/opus-1.6.1" opus)
 include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 
 option(PLUS_VITA_DIAGNOSTIC_APP "Launch the historical diagnostic/test interface" OFF)
+option(PLUS_VITA_FONT_COMPARISON "Include the synthetic PVF/FreeType comparison screen" OFF)
 if(PLUS_VITA_DIAGNOSTIC_APP)
   set(VITA_APP_NAME "plus-vita smoke")
   set(PLUS_VITA_ENTRY_SOURCE src/main.c src/app/utf8.c)
@@ -659,6 +660,7 @@ if(PLUS_VITA_INPUT_WORKER)
 endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
+  PLUS_VITA_FONT_COMPARISON=$<AND:$<BOOL:${PLUS_VITA_FONT_COMPARISON}>,$<NOT:$<BOOL:${PLUS_VITA_DIAGNOSTIC_APP}>>>
   PLUS_VITA_INPUT_WORKER=$<BOOL:${PLUS_VITA_INPUT_WORKER}>
   PLUS_VITA_DEFERRED_LOG=$<OR:$<BOOL:${PLUS_VITA_DEFERRED_LOG}>,$<NOT:$<BOOL:${PLUS_VITA_DIAGNOSTIC_APP}>>>
   CHIAKI_LIB_ENABLE_MBEDTLS=1
@@ -682,6 +684,21 @@ list(APPEND PLUS_VITA_VPK_FILES FILE
   "${PLUS_VITA_JERASURE_ROOT}/License.txt" "licenses/jerasure.txt")
 if(NOT PLUS_VITA_DIAGNOSTIC_APP)
   list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/third_party/stb-image-license.txt" "licenses/stb-image.txt")
+endif()
+if(PLUS_VITA_FONT_COMPARISON AND NOT PLUS_VITA_DIAGNOSTIC_APP)
+  set(FT_DISABLE_ZLIB ON CACHE BOOL "" FORCE)
+  set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)
+  set(FT_DISABLE_PNG ON CACHE BOOL "" FORCE)
+  set(FT_DISABLE_HARFBUZZ ON CACHE BOOL "" FORCE)
+  set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
+  add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../external/freetype" "${CMAKE_BINARY_DIR}/freetype" EXCLUDE_FROM_ALL)
+  target_sources(${PROJECT_NAME} PRIVATE src/app/font_freetype.c src/app/comparison_capture.c)
+  target_link_libraries(${PROJECT_NAME} PRIVATE freetype)
+  list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/assets/fonts/NotoSans-Regular.ttf" "fonts/NotoSans-Regular.ttf")
+  list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/assets/fonts/OFL.txt" "licenses/noto-sans.txt")
+  list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/../external/freetype/docs/FTL.TXT" "licenses/freetype.txt")
+  list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/assets/fonts/NOTICE.txt" "licenses/font-notice.txt")
+  list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/assets/fonts/FreeType-ThirdParty.txt" "licenses/freetype-third-party.txt")
 endif()
 if(PLUS_VITA_TLS_TRUSTED_CA_FILE)
   if(NOT EXISTS "${PLUS_VITA_TLS_TRUSTED_CA_FILE}")

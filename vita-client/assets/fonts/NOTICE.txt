@@ -1,0 +1,18 @@
+This development font comparison uses FreeType 2.14.3 under the FreeType License.
+Portions of this software are copyright (c) The FreeType Project
+(https://freetype.org). All rights reserved.
+The FreeType License is supplied in freetype.txt.
+
+The unmodified Noto Sans Regular font is distributed under the SIL Open Font
+License 1.1. Copyright and complete terms are supplied in noto-sans.txt.
+Font source: notofonts/noto-fonts, commit
+ffebf8c1ee449e544955a7e813c54f9b73848eac,
+hinted/ttf/NotoSans/NotoSans-Regular.ttf.
+SHA256 B85C38ECEA8A7CFB39C24E395A4007474FA5A4FC864F6EE33309EB4948D232D5.
+
+FreeType source: freetype/freetype, commit
+0a0221a1347e2f1e07c395263540026e9a0aa7c7 (VER-2-14-3).
+
+Noto Sans covers Latin, Greek and Cyrillic here. Characters absent from this
+font, including Japanese, use the Vita system font at runtime. No Sony font
+file is copied or bundled.

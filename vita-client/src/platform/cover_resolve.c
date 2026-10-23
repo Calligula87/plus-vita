@@ -12,9 +12,8 @@ CURLcode plus_vita_cover_resolve(CURL *curl, const char *url,
 	struct curl_slist **list, const atomic_bool *cancel)
 {
 	*list = NULL;
-	if(!plus_vita_cover_url_allowed(url) || atomic_load(cancel)) return CURLE_ABORTED_BY_CALLBACK;
-	const char *host = strncmp(url,"https://gmedia.playstation.com/",sizeof("https://gmedia.playstation.com/")-1)==0
-		? "gmedia.playstation.com" : "image.api.playstation.com";
+	const char *host = plus_vita_cover_url_host(url);
+	if(!host || atomic_load(cancel)) return CURLE_ABORTED_BY_CALLBACK;
 	int resolver = sceNetResolverCreate("PlusVitaCover", NULL, 0);
 	if(resolver < 0) return CURLE_COULDNT_RESOLVE_HOST;
 	SceNetInAddr address = {0};

@@ -5,6 +5,9 @@
 #include <debugScreen.h>
 #include <stdlib.h>
 #include <string.h>
+#if PLUS_VITA_FONT_COMPARISON
+#include "font_freetype.h"
+#endif
 
 #define GLYPH_SLOTS 256u
 #define GLYPH_BYTES (512u * 1024u)
@@ -15,6 +18,9 @@ typedef struct {
 	unsigned char *alpha;
 } CachedGlyph;
 struct plus_vita_font_t {
+#if PLUS_VITA_FONT_COMPARISON
+	PlusVitaFtFont *alternative;
+#endif
 	ScePvfLibId library;
 	ScePvfFontId latin, japanese;
 	bool owned_module;
@@ -61,6 +67,9 @@ PlusVitaFont *plus_vita_font_create(void)
 void plus_vita_font_free(PlusVitaFont *font)
 {
 	if(!font) return;
+#if PLUS_VITA_FONT_COMPARISON
+	plus_vita_freetype_free(font->alternative);
+#endif
 	for(unsigned i = 0; i < GLYPH_SLOTS; i++) free(font->cache[i].alpha);
 	if(font->latin) scePvfClose(font->latin);
 	if(font->japanese) scePvfClose(font->japanese);
@@ -205,6 +214,20 @@ bool plus_vita_font_draw(PlusVitaFont *font, uint32_t *pixels, int pitch, const 
 	PlusVitaTextBox box, int size, bool wrap, uint32_t color)
 {
 	font->pixels = pixels; font->pitch = pitch; font->color = color;
+#if PLUS_VITA_FONT_COMPARISON
+	if(font->alternative) return plus_vita_freetype_draw(font->alternative,pixels,pitch,text,box,size,wrap,color);
+#endif
 	PlusVitaTextFont adapter = { font, metrics, measure, draw };
 	return plus_vita_text_draw(&adapter, text, box, size, wrap);
+}
+PlusVitaFont *plus_vita_font_create_alternative(const char *path)
+{
+#if PLUS_VITA_FONT_COMPARISON
+	PlusVitaFont *font=plus_vita_font_create(); if(!font) return NULL;
+	font->alternative=plus_vita_freetype_create(path,(PlusVitaTextFont){font,metrics,measure,draw});
+	if(!font->alternative) { plus_vita_font_free(font); return NULL; }
+	return font;
+#else
+	(void)path; return NULL;
+#endif
 }

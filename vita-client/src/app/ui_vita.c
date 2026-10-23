@@ -4,6 +4,9 @@
 #include "account_vita.h"
 #include "font_vita.h"
 #include "ui_flow.h"
+#if PLUS_VITA_FONT_COMPARISON
+#include "comparison_capture.h"
+#endif
 #include <psp2/ctrl.h>
 #include <psp2/display.h>
 #include <psp2/kernel/processmgr.h>
@@ -36,6 +39,7 @@ typedef struct {
 	SceDisplayFrameBuf saved;
 	bool displayed;
 	PlusVitaFont *font;
+	PlusVitaFont *alternative;
 } UiDisplay;
 
 /* Never release a buffer until scanout has moved away from it. */
@@ -50,6 +54,7 @@ static bool display_close(UiDisplay *display)
 	for(unsigned i = 0; i < 2; i++)
 		if(display->blocks[i] >= 0) sceKernelFreeMemBlock(display->blocks[i]);
 	plus_vita_font_free(display->font);
+	plus_vita_font_free(display->alternative);
 	return true;
 }
 
@@ -72,15 +77,26 @@ static bool display_open(UiDisplay *display)
 	}
 	display->font = plus_vita_font_create();
 	if(!display->font) { display_close(display); return false; }
+#if PLUS_VITA_FONT_COMPARISON
+	display->alternative=plus_vita_font_create_alternative("app0:/fonts/NotoSans-Regular.ttf");
+#endif
 	return true;
 }
 
 static bool draw(UiDisplay *display, PlusVitaUiFlow *flow)
 {
 	uint64_t started = plus_vita_latency_now_us();
-	plus_vita_ui_flow_paint(flow, display->font, display->pixels[display->back], PITCH);
+	PlusVitaAppView view=plus_vita_app_view(flow->app);
+	if(view.screen==PLUS_VITA_APP_FONT_COMPARISON && view.alternative_font && !display->alternative) {
+		view.subtitle="B: FREETYPE UNAVAILABLE";
+		view.body="The comparison font could not be loaded.\nA remains available. This is not a successful B result.";
+		plus_vita_app_paint(display->font,display->pixels[display->back],PITCH,&view); flow->dirty=false;
+	} else plus_vita_ui_flow_paint(flow,view.screen==PLUS_VITA_APP_FONT_COMPARISON && view.alternative_font ? display->alternative : display->font,
+		display->pixels[display->back],PITCH);
 	uint64_t painted = plus_vita_latency_now_us();
 	if(painted >= started) plus_vita_diagnostic_ui_sample(PLUS_VITA_UI_DRAW, painted-started);
+	if(view.screen==PLUS_VITA_APP_FONT_COMPARISON && painted>=started && (!view.alternative_font || display->alternative))
+		plus_vita_diagnostic_ui_sample(view.alternative_font ? PLUS_VITA_UI_FONT_B_DRAW : PLUS_VITA_UI_FONT_A_DRAW,painted-started);
 	SceDisplayFrameBuf frame = {
 		.size = sizeof(frame), .base = display->pixels[display->back], .pitch = PITCH,
 		.pixelformat = SCE_DISPLAY_PIXELFORMAT_A8B8G8R8, .width = WIDTH, .height = HEIGHT
@@ -146,16 +162,28 @@ int plus_vita_app_run(void)
 		&& panel.maxAaX > panel.minAaX && panel.maxAaY > panel.minAaY
 		&& sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START) == 0;
 	bool touched = false;
+#if PLUS_VITA_FONT_COMPARISON
+	uint32_t capture_buttons=0;
+#endif
 	PlusVitaUiFlow flow = { .app = app, .dirty = true, .covers = covers };
 	uint64_t artwork_epoch = UINT64_MAX;
+	bool metadata_reported=false;
 	plus_vita_ui_flow_event(&flow, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START }, 0);
 	int result = 0;
 	uint64_t previous_poll = 0, last_report = plus_vita_latency_now_us();
 	while(plus_vita_app_view(app).screen != PLUS_VITA_APP_CLOSED)
 	{
 		PlusVitaAppView current=plus_vita_app_view(app);
-		if(current.account_epoch!=artwork_epoch) { plus_vita_covers_reset(covers); artwork_epoch=current.account_epoch; }
-		if(plus_vita_covers_poll(covers)) flow.dirty=true;
+		if(current.account_epoch!=artwork_epoch) {
+			plus_vita_covers_reset(covers); artwork_epoch=current.account_epoch; metadata_reported=false;
+			plus_vita_diagnostic_artwork_metadata(current.artwork_metadata);
+		}
+		if(current.account_connected && !metadata_reported) {
+			plus_vita_diagnostic_artwork_metadata(current.artwork_metadata); metadata_reported=true;
+		}
+		if(plus_vita_covers_poll(covers)) {
+			plus_vita_diagnostic_artwork_result(plus_vita_covers_last_result(covers)); flow.dirty=true;
+		}
 		const char *urls[3]={NULL,NULL,NULL}; size_t url_count=0;
 		if(current.screen==PLUS_VITA_APP_CATALOGUE) for(unsigned i=0;i<3;i++) if(current.games[i]) urls[url_count++]=current.games[i]->cover_url;
 		if(current.screen==PLUS_VITA_APP_DETAILS && current.detail) urls[url_count++]=current.detail->cover_url;
@@ -177,6 +205,21 @@ int plus_vita_app_run(void)
 		{
 			input_changed = handle_input(&flow, account, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_PAD,
 				.pad = { .buttons = pad.buttons, .left_x = pad.lx, .left_y = pad.ly, .time_us = sceKernelGetProcessTimeWide() } });
+#if PLUS_VITA_FONT_COMPARISON
+			if(!input_changed && current.screen==PLUS_VITA_APP_FONT_COMPARISON
+				&& (pad.buttons & ~capture_buttons & SCE_CTRL_SQUARE)) {
+				const char *path=current.alternative_font
+					? (current.comparison_page ? "ux0:data/plus-vita-font-B-tiles.ppm" : "ux0:data/plus-vita-font-B-setup.ppm")
+					: (current.comparison_page ? "ux0:data/plus-vita-font-A-tiles.ppm" : "ux0:data/plus-vita-font-A-setup.ppm");
+				bool saved=plus_vita_comparison_capture(display->pixels[display->back^1u],PITCH,path);
+				plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_FONT_CAPTURED,
+					.status=saved ? PLUS_VITA_RESULT_OK : PLUS_VITA_RESULT_STORAGE_ERROR},0);
+				previous_poll=flow.input_since=0;
+			}
+#endif
+#if PLUS_VITA_FONT_COMPARISON
+			capture_buttons=pad.buttons;
+#endif
 		}
 		SceTouchData touch = { 0 };
 		if(touch_ready && sceTouchPeek(SCE_TOUCH_PORT_FRONT, &touch, 1) > 0)

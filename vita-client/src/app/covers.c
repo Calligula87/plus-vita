@@ -12,12 +12,16 @@ struct plus_vita_covers_t {
 	atomic_bool complete,cancel;
 	bool running;
 	unsigned next, generation, job_generation;
+	PlusVitaArtworkResult last_result;
 };
 static void *load_cover(void *context)
 {
 	PlusVitaCovers *covers=context; unsigned char *data=NULL; size_t size=0;
-	bool ok=plus_vita_cover_download(covers->output.url,&data,&size,&covers->cancel)
-		&& !atomic_load(&covers->cancel) && plus_vita_cover_decode(data,size,covers->output.pixels);
+	bool ok=plus_vita_cover_download(covers->output.url,&data,&size,&covers->cancel,&covers->output.result);
+	if(atomic_load(&covers->cancel)) { ok=false; covers->output.result=PLUS_VITA_ARTWORK_CANCELLED; }
+	if(ok && !atomic_load(&covers->cancel) && !plus_vita_cover_decode(data,size,covers->output.pixels)) {
+		ok=false; covers->output.result=PLUS_VITA_ARTWORK_DECODE;
+	}
 	free(data); covers->output.state=ok ? PLUS_VITA_COVER_READY : PLUS_VITA_COVER_FAILED;
 	atomic_store(&covers->complete,true); return NULL;
 }
@@ -37,6 +41,8 @@ bool plus_vita_covers_poll(PlusVitaCovers *covers)
 {
 	if(!covers || !covers->running || !atomic_load(&covers->complete)) return false;
 	pthread_join(covers->thread,NULL); covers->running=false;
+	covers->last_result=atomic_load(&covers->cancel) || covers->generation!=covers->job_generation
+		? PLUS_VITA_ARTWORK_CANCELLED : covers->output.result;
 	if(covers->generation==covers->job_generation)
 		for(unsigned i=0;i<6;i++) if(strcmp(covers->slots[i].url,covers->output.url)==0) {
 			if(atomic_load(&covers->cancel)) memset(&covers->slots[i],0,sizeof(covers->slots[i]));
@@ -44,6 +50,8 @@ bool plus_vita_covers_poll(PlusVitaCovers *covers)
 		}
 	return true;
 }
+PlusVitaArtworkResult plus_vita_covers_last_result(const PlusVitaCovers *covers)
+{ return covers ? covers->last_result : PLUS_VITA_ARTWORK_UNAVAILABLE; }
 void plus_vita_covers_request(PlusVitaCovers *covers,const char *const *urls,size_t count)
 {
 	if(!covers) return;

@@ -35,7 +35,7 @@ static void cover(Canvas *display,const PlusVitaCovers *covers,const PlusVitaCat
 	rectangle(display,x,y,128,128,RGB(9,29,66));
 	if(image && image->state==PLUS_VITA_COVER_READY) {
 		for(int row=0;row<128;row++) for(int col=0;col<128;col++) display->pixels[(y+row)*display->pitch+x+col]=image->pixels[row*128+col];
-	} else text(display,!game || !game->cover_url[0] ? "No cover" : !covers ? "Cover unavailable" : !image || image->state==PLUS_VITA_COVER_LOADING ? "Loading cover" : "Cover unavailable",x+6,y+48,14,116,58,true,RGB(195,211,239));
+	} else text(display,!game || (!game->cover_url[0] && game->cover_metadata==PLUS_VITA_ARTWORK_MISSING) ? "No cover" : !game->cover_url[0] || !covers ? "Cover unavailable" : !image || image->state==PLUS_VITA_COVER_LOADING ? "Loading cover" : "Cover unavailable",x+6,y+48,14,116,58,true,RGB(195,211,239));
 }
 
 void plus_vita_app_paint_with_covers(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view,const PlusVitaCovers *covers)
@@ -50,9 +50,27 @@ void plus_vita_app_paint_with_covers(PlusVitaFont *font,uint32_t *pixels,int pit
 	text(display, view->title, 64, 128, 36, 832, 54, false, RGB(243, 247, 252));
 	int body_bottom = view->action_count ? view->actions[0].y - 12 : 480;
 	if(view->screen==PLUS_VITA_APP_CATALOGUE) body_bottom=224;
+	if(view->screen==PLUS_VITA_APP_FONT_COMPARISON) body_bottom=view->comparison_page ? 224 : 302;
 	text(display, view->body, 64, 196, view->screen == PLUS_VITA_APP_ACCOUNT ? 18 : 20,
 		view->screen == PLUS_VITA_APP_WELCOME ? 520 : view->screen==PLUS_VITA_APP_DETAILS ? 624 : 832, body_bottom - 196, view->screen!=PLUS_VITA_APP_CATALOGUE, RGB(210, 224, 247));
 	if(view->screen==PLUS_VITA_APP_DETAILS) cover(display,covers,view->detail,744,216);
+	if(view->screen==PLUS_VITA_APP_FONT_COMPARISON) {
+		if(view->comparison_page) {
+			static const PlusVitaCatalogEntry samples[]={
+				{.name="Agjpqy: Complete letters"},{.name="Müller 日本"},
+				{.name="A long game title with complete letters and deliberate overflow"}};
+			for(unsigned i=0;i<3;i++) {
+				int x=64+(int)i*286;
+				rounded(display,x,228,260,204,i==1 ? RGB(246,198,91) : RGB(17,57,125));
+				cover(display,NULL,&samples[i],x+66,238);
+				text(display,samples[i].name,x+12,374,18,236,48,true,i==1 ? RGB(9,29,66) : RGB(243,247,252));
+			}
+		} else {
+			text(display,"14 px: Agjpqy é Å Müller",64,310,14,832,24,false,RGB(210,224,247));
+			text(display,"16 px: Agjpqy é Å Müller",64,342,16,832,28,false,RGB(210,224,247));
+			text(display,"18 px: Agjpqy é Å Müller 日本",64,376,18,832,32,false,RGB(210,224,247));
+		}
+	}
 	if(view->screen == PLUS_VITA_APP_WELCOME)
 	{
 		rounded(display, 674, 238, 192, 192, RGB(18, 53, 113));

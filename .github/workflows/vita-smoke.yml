@@ -6,6 +6,7 @@ on:
       - ".github/workflows/vita-smoke.yml"
       - ".gitmodules"
       - "external/pylux"
+      - "external/freetype"
       - "vita-client/**"
       - "tools/test-app-workflow.sh"
       - "tools/test-app-account-integration.sh"
@@ -13,11 +14,13 @@ on:
       - "tools/test-app-font.sh"
       - "tools/test-app-catalogue.sh"
       - "tools/test-app-covers.sh"
+      - "tools/test-app-freetype.sh"
   pull_request:
     paths:
       - ".github/workflows/vita-smoke.yml"
       - ".gitmodules"
       - "external/pylux"
+      - "external/freetype"
       - "vita-client/**"
       - "tools/test-app-workflow.sh"
       - "tools/test-app-account-integration.sh"
@@ -25,6 +28,7 @@ on:
       - "tools/test-app-font.sh"
       - "tools/test-app-catalogue.sh"
       - "tools/test-app-covers.sh"
+      - "tools/test-app-freetype.sh"
   workflow_dispatch:
 
 jobs:
@@ -46,13 +50,24 @@ jobs:
         run: sh tools/test-app-catalogue.sh
       - name: Test bounded asynchronous artwork and HTTP policy
         run: sh tools/test-app-covers.sh
+      - name: Test real FreeType output and synthetic comparison journey
+        run: sh tools/test-app-freetype.sh
 
   build:
     runs-on: ubuntu-latest
     container: vitasdk/vitasdk:latest
     strategy:
       matrix:
-        diagnostic: ["OFF", "ON"]
+        include:
+          - diagnostic: "OFF"
+            comparison: "OFF"
+            artifact: plus-vita-diagnostic-OFF
+          - diagnostic: "ON"
+            comparison: "OFF"
+            artifact: plus-vita-diagnostic-ON
+          - diagnostic: "OFF"
+            comparison: "ON"
+            artifact: plus-vita-font-comparison
     steps:
       - name: Check out sources
         uses: actions/checkout@v4
@@ -63,6 +78,7 @@ jobs:
         run: >-
           cmake -S vita-client -B build/vita -DCMAKE_BUILD_TYPE=Release
           -DPLUS_VITA_DIAGNOSTIC_APP=${{ matrix.diagnostic }}
+          -DPLUS_VITA_FONT_COMPARISON=${{ matrix.comparison }}
 
       - name: Build VPK
         run: cmake --build build/vita --parallel
@@ -73,6 +89,6 @@ jobs:
       - name: Upload VPK
         uses: actions/upload-artifact@v4
         with:
-          name: plus-vita-diagnostic-${{ matrix.diagnostic }}
+          name: ${{ matrix.artifact }}
           path: build/vita/plus_vita_smoke.vpk
           if-no-files-found: error
