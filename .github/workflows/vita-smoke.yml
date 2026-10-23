@@ -79,6 +79,7 @@ jobs:
           cmake -S vita-client -B build/vita -DCMAKE_BUILD_TYPE=Release
           -DPLUS_VITA_DIAGNOSTIC_APP=${{ matrix.diagnostic }}
           -DPLUS_VITA_FONT_COMPARISON=${{ matrix.comparison }}
+          -DPLUS_VITA_FONT_DEFAULT_FREETYPE=ON
 
       - name: Build VPK
         run: cmake --build build/vita --parallel

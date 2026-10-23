@@ -422,7 +422,7 @@ bool plus_vita_diagnostic_ui_begin(void)
 #if PLUS_VITA_FONT_COMPARISON
 	write_line("UI", "build=ui-font-cover-compare-1 graphical=1 glyph_budget_bytes=524288", 0);
 #else
-	write_line("UI", "build=ui-font-a-1 graphical=1 glyph_budget_bytes=524288", 0);
+	write_line("UI", "build=ui-font-b-1 graphical=1 glyph_budget_bytes=524288", 0);
 #endif
 	return true;
 }

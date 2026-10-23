@@ -1,5 +1,9 @@
 # Selected A renderer: normal app candidate
 
+Superseded: the maintainer clarified after device testing that the preferred
+second display was B/FreeType. The A normal build retained visibly clipped
+small text. See [the corrected B candidate](FONT_B_TEST.md).
+
 For #29, following the maintainer's 2026-10-23 physical comparison: “Both A
 options on fonts are the best. Implement this option for the app.” This accepts
 A for the setup and tile samples from `plus-vita-font-cover-compare-1.vpk`.

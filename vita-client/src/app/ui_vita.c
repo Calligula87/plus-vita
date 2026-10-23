@@ -76,9 +76,13 @@ static bool display_open(UiDisplay *display)
 		}
 		memset(display->pixels[i], 0, FRAME_BYTES);
 	}
-	/* Hardware-selected A: one PVF renderer for every normal app screen.
-	 * The optional B renderer remains confined to the comparison profile. */
+	/* B was the second, preferred device comparison; preserve A/B in the
+	 * explicit comparison profile while making B the normal renderer. */
+#if PLUS_VITA_FONT_DEFAULT_FREETYPE && !PLUS_VITA_FONT_COMPARISON
+	display->font = plus_vita_font_create_alternative("app0:/fonts/NotoSans-Regular.ttf");
+#else
 	display->font = plus_vita_font_create();
+#endif
 	if(!display->font) { display_close(display); return false; }
 #if PLUS_VITA_FONT_COMPARISON
 	display->alternative=plus_vita_font_create_alternative("app0:/fonts/NotoSans-Regular.ttf");

@@ -58,6 +58,17 @@ int main(void)
  plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_ACTIVATE});
  assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_FONT_COMPARISON);
  PlusVitaFont *a=plus_vita_font_create(), *b=plus_vita_font_create_alternative(path); assert(a && b);
+ /* Normal graphical screens now use the same B font context as comparison.
+  * Verify actual painter output differs from A and remains stable when warm. */
+ PlusVitaApp *normal=plus_vita_app_create(); assert(normal);
+ PlusVitaAppView normal_view=plus_vita_app_view(normal);
+ plus_vita_app_paint(a,previous,960,&normal_view);
+ plus_vita_app_paint(b,pixels,960,&normal_view);
+ assert(memcmp(previous,pixels,sizeof(pixels)));
+ memcpy(previous,pixels,sizeof(pixels)); api_calls=0;
+ plus_vita_app_paint(b,pixels,960,&normal_view);
+ assert(!memcmp(previous,pixels,sizeof(pixels)) && api_calls==0);
+ plus_vita_app_destroy(normal);
  for(unsigned page=0;page<2;page++) for(unsigned mode=0;mode<2;mode++) {
   PlusVitaAppView view=plus_vita_app_view(app);
   assert(view.comparison_page==page && view.alternative_font==(mode!=0));
