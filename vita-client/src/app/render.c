@@ -93,8 +93,14 @@ void plus_vita_app_paint_with_covers(PlusVitaFont *font,uint32_t *pixels,int pit
 		if(view->screen==PLUS_VITA_APP_CATALOGUE && button->id==PLUS_VITA_ACTION_GAME) {
 			cover(display,covers,view->games[i],button->x+66,button->y+10);
 			text(display,button->label,button->x+12,button->y+146,TEXT_COMPACT,button->width-24,48,true,selected ? RGB(9,29,66) : RGB(243,247,252));
-		} else text(display, button->label, button->x + 20, button->y + 8, TEXT_CONTROL, button->width - 40, button->height - 16, false,
-			selected ? RGB(9, 29, 66) : RGB(243, 247, 252));
+		} else {
+			bool compact = button->height < 48;
+			int inset = compact ? 6 : 8;
+			text(display, button->label, button->x + 20, button->y + inset,
+				compact ? TEXT_COMPACT : TEXT_CONTROL, button->width - 40,
+				button->height - 2 * inset, false,
+				selected ? RGB(9, 29, 66) : RGB(243, 247, 252));
+		}
 	}
 	text(display, view->hint, 64, 509, TEXT_HINT, 832, 28, false, RGB(195, 211, 239));
 }

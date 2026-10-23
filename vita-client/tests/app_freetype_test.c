@@ -13,6 +13,18 @@
 #include <string.h>
 #include "pvf_fixture.h"
 static uint32_t pixels[960*544], previous[960*544];
+static bool button_has_label(const PlusVitaAppButton *button, uint32_t color)
+{
+ for(int y=button->y;y<button->y+button->height;y++)
+  for(int x=button->x;x<button->x+button->width;x++)
+   if(pixels[y*960+x]==color) return true;
+ return false;
+}
+static void assert_button_labels(const PlusVitaAppView *view)
+{
+ for(size_t i=0;i<view->action_count;i++)
+  assert(button_has_label(&view->actions[i],i==view->selected ? 0xff421d09u : 0xfffcf7f3u));
+}
 int main(void)
 {
  const char *path="vita-client/assets/fonts/NotoSans-Regular.ttf";
@@ -65,9 +77,25 @@ int main(void)
  plus_vita_app_paint(a,previous,960,&normal_view);
  plus_vita_app_paint(b,pixels,960,&normal_view);
  assert(memcmp(previous,pixels,sizeof(pixels)));
+ assert_button_labels(&normal_view);
+ plus_vita_app_dispatch(normal,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH,.x=80,.y=360});
+ normal_view=plus_vita_app_view(normal); assert(normal_view.screen==PLUS_VITA_APP_SETTINGS);
+ plus_vita_app_paint(b,pixels,960,&normal_view); assert_button_labels(&normal_view);
  memcpy(previous,pixels,sizeof(pixels)); api_calls=0;
  plus_vita_app_paint(b,pixels,960,&normal_view);
  assert(!memcmp(previous,pixels,sizeof(pixels)) && api_calls==0);
+ plus_vita_app_destroy(normal);
+ normal=plus_vita_app_create(); assert(normal);
+ PlusVitaAppEffect load=plus_vita_app_dispatch(normal,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_START});
+ const char saved[]="{\"npsso\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}";
+ PlusVitaAppEffect auth=plus_vita_app_dispatch(normal,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_ACCOUNT_LOADED,
+  .operation=load.operation,.data=saved,.data_size=sizeof(saved)-1,.retained_json=true});
+ PlusVitaCatalogEntry title={.name="Game",.id="FAKECUSA",.launch_id_valid=true};
+ plus_vita_app_dispatch(normal,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_AUTHORIZED,
+  .operation=auth.operation,.entries=&title,.entry_count=1});
+ plus_vita_app_dispatch(normal,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK});
+ normal_view=plus_vita_app_view(normal); assert(normal_view.screen==PLUS_VITA_APP_WELCOME && normal_view.action_count==5);
+ plus_vita_app_paint(b,pixels,960,&normal_view); assert_button_labels(&normal_view);
  plus_vita_app_destroy(normal);
  for(unsigned page=0;page<2;page++) for(unsigned mode=0;mode<2;mode++) {
   PlusVitaAppView view=plus_vita_app_view(app);
