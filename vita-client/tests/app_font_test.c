@@ -96,17 +96,22 @@ static void input_journey(PlusVitaFont *font)
  PlusVitaAppEvent pad={.kind=PLUS_VITA_EVENT_PAD,.pad={.left_x=128,.left_y=255,.time_us=1000}};
  assert(plus_vita_ui_flow_event(&flow,pad,1000));
  assert(plus_vita_ui_flow_paint(&flow,font,pixels,960));
- assert(pixels[400*960+70]==0xff5bc6f6);
+ assert(pixels[370*960+70]==0xff5bc6f6);
  pad.pad.time_us=10000; assert(!plus_vita_ui_flow_event(&flow,pad,10000));
  assert(!plus_vita_ui_flow_paint(&flow,font,pixels,960));
  pad.pad.time_us=401000; assert(plus_vita_ui_flow_event(&flow,pad,401000));
  assert(plus_vita_ui_flow_paint(&flow,font,pixels,960));
- assert(pixels[464*960+70]==0xff5bc6f6);
+ assert(pixels[420*960+70]==0xff5bc6f6);
  pad.pad.left_y=128; pad.pad.time_us=402000;
  assert(!plus_vita_ui_flow_event(&flow,pad,402000));
  assert(!plus_vita_ui_flow_paint(&flow,font,pixels,960));
  pad.pad.left_y=0; pad.pad.time_us=403000;
  assert(plus_vita_ui_flow_event(&flow,pad,403000));
+ assert(plus_vita_ui_flow_paint(&flow,font,pixels,960));
+ pad.pad.left_y=128; pad.pad.time_us=404000;
+ assert(!plus_vita_ui_flow_event(&flow,pad,404000));
+ pad.pad.left_y=255; pad.pad.time_us=405000;
+ assert(plus_vita_ui_flow_event(&flow,pad,405000));
  assert(plus_vita_ui_flow_paint(&flow,font,pixels,960));
  pad.pad.left_y=128; pad.pad.buttons=PLUS_VITA_MENU_CROSS;
  assert(plus_vita_ui_flow_event(&flow,pad,11000));
@@ -165,7 +170,9 @@ int main(void) {
  plus_vita_app_paint(font,pixels,960,&view);
  printf("warm welcome focus change: %u system-font calls\n",api_calls); fflush(stdout);
  assert(api_calls==0);
- assert(pixels[400*960+70]==0xff5bc6f6 && pixels[336*960+70]==0xff7d3911);
+ view=plus_vita_app_view(app);
+ assert(pixels[(view.actions[view.selected].y+20)*960+70]==0xff5bc6f6
+  && pixels[(view.actions[0].y+20)*960+70]==0xff7d3911);
  input_journey(font);
  screen_journey(font);
  /* The same production painter handles catalogue focus and non-ASCII ink. */

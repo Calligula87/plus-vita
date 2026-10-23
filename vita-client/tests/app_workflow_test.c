@@ -2,6 +2,7 @@
 #include "app.h"
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 static void menu_pad(PlusVitaApp *app, uint32_t buttons, unsigned char y, uint64_t time)
 {
@@ -25,12 +26,15 @@ static void joystick_menu(void)
 	menu_pad(app, 0, 255, 400100);
 	assert(plus_vita_app_view(app).selected == 2);
 	menu_pad(app, 0, 255, 560100);
-	assert(plus_vita_app_view(app).selected == 0);
+	assert(plus_vita_app_view(app).selected == 3);
 	menu_pad(app, 0, 76, 560101);
-	assert(plus_vita_app_view(app).selected == 0);
+	assert(plus_vita_app_view(app).selected == 3);
 	menu_pad(app, 0, 75, 560102);
 	assert(plus_vita_app_view(app).selected == 2);
-	menu_pad(app, 0x2000, 128, 560103); /* Circle */
+	menu_pad(app, 0, 128, 560103);
+	menu_pad(app, 0, 255, 560104);
+	assert(plus_vita_app_view(app).selected == 3);
+	menu_pad(app, 0x2000, 128, 560105); /* Circle */
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_EXIT_CONFIRM);
 	menu_pad(app, 0x2000, 128, 560104);
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_EXIT_CONFIRM);
@@ -49,11 +53,33 @@ int main(void)
 	assert(app);
 	PlusVitaAppView view = plus_vita_app_view(app);
 	assert(view.screen == PLUS_VITA_APP_WELCOME);
-	assert(view.action_count == 3);
+	assert(view.action_count == 4);
 	assert(view.actions[view.selected].id == PLUS_VITA_ACTION_SETUP);
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_LOG_STATUS, .log_available = true });
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
 	view = plus_vita_app_view(app);
-	assert(view.actions[view.selected].id == PLUS_VITA_ACTION_ABOUT);
+	assert(view.actions[view.selected].id == PLUS_VITA_ACTION_SETTINGS);
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
+	view = plus_vita_app_view(app);
+	assert(view.screen == PLUS_VITA_APP_SETTINGS);
+	assert(view.action_count == 4 && view.actions[0].id == PLUS_VITA_ACTION_SETUP);
+	assert(strstr(view.body, "ux0:data/plus-vita-allocation.log"));
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_CONTROLS);
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_BACK });
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_SETTINGS);
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
+	view = plus_vita_app_view(app);
+	assert(view.screen == PLUS_VITA_APP_REPORTING && strstr(view.body, "Never share sign-in JSON"));
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_LOG_STATUS, .log_available = false });
+	assert(strstr(plus_vita_app_view(app).body, "unavailable"));
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_BACK });
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_BACK });
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_WELCOME);
+	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
 	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_ABOUT);
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_BACK });

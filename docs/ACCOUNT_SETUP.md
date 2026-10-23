@@ -71,4 +71,5 @@ the current search and position. Missing or failed covers use placeholders.
 A listed game does not guarantee streaming eligibility. The Play handoff is
 prepared, but the graphical streaming connection is still the next ticket.
 Follow [the catalogue test procedure](CATALOGUE_TEST.md). Report step numbers
-and symptoms, never credential files or a full app-data folder.
+and symptoms using the [issue-reporting guide](REPORTING_ISSUES.md), never
+credential files or a full app-data folder.

@@ -33,6 +33,11 @@ in later release tickets. Select
 `-DPLUS_VITA_DIAGNOSTIC_APP=ON` to build the historical smoke/stream interface
 described below. Retain accepted stream artifacts separately.
 
+The graphical app's Settings and help screen shows its build version, controller
+guide and current-session log availability. The
+[issue-reporting guide](../docs/REPORTING_ISSUES.md) explains how to copy and
+review the log before attaching it manually to GitHub.
+
 The target compiles Pylux's C base64 and logging implementations, threading,
 protocol sequence/service primitives, nanopb runtime, generated Takion schema,
 Vita clock/entropy adapters, json-c, and the Pylux catalogue modules. On launch

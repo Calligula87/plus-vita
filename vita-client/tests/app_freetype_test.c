@@ -53,7 +53,7 @@ int main(void)
  assert(!plus_vita_freetype_create("build/nonexistent-font.ttf",(PlusVitaTextFont){0}));
  FT_Done_Face(face); FT_Done_FreeType(reference);
  PlusVitaApp *app=plus_vita_app_create(); assert(app);
- plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH,.x=80,.y=390});
+ plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH,.x=80,.y=410});
  assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_ABOUT);
  plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_ACTIVATE});
  assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_FONT_COMPARISON);

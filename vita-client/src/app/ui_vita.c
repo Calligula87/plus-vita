@@ -143,7 +143,7 @@ static PlusVitaAppEventKind completion(PlusVitaAppEffectKind kind)
 
 int plus_vita_app_run(void)
 {
-	plus_vita_diagnostic_ui_begin();
+	bool log_available = plus_vita_diagnostic_ui_begin();
 	UiDisplay *display = calloc(1, sizeof(*display));
 	PlusVitaApp *app = plus_vita_app_create();
 	PlusVitaAccount *account = plus_vita_account_create();
@@ -175,7 +175,8 @@ int plus_vita_app_run(void)
 	PlusVitaUiFlow flow = { .app = app, .dirty = true, .covers = covers };
 	uint64_t artwork_epoch = UINT64_MAX;
 	bool metadata_reported=false;
-	plus_vita_ui_flow_event(&flow, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START }, 0);
+	plus_vita_ui_flow_event(&flow, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START,
+		.log_available = log_available }, 0);
 	int result = 0;
 	uint64_t previous_poll = 0, last_report = plus_vita_latency_now_us();
 	while(plus_vita_app_view(app).screen != PLUS_VITA_APP_CLOSED)
@@ -290,6 +291,12 @@ int plus_vita_app_run(void)
 		uint64_t now = plus_vita_latency_now_us();
 		if(now >= last_report && now-last_report >= 1000000u) {
 			plus_vita_diagnostic_ui_flush(); last_report = now;
+			bool current_log = log_available && plus_vita_diagnostic_persistence_ok();
+			if(current_log != log_available) {
+				log_available = current_log;
+				plus_vita_ui_flow_event(&flow, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_LOG_STATUS,
+					.log_available = log_available }, 0);
+			}
 		}
 		sceDisplayWaitVblankStart();
 	}

@@ -1,0 +1,45 @@
+name: Plus Vita bug report
+description: Report a reproducible app problem without sharing account data.
+title: "Bug: "
+labels: [needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please read the [reporting guide](https://github.com/Calligula87/plus-vita/blob/main/docs/REPORTING_ISSUES.md). Never post sign-in JSON, account files, Sony responses, passwords, tokens, authenticated captures, private screenshots or an entire app-data folder.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Describe the screen and actions in order.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Shown under Settings and help.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Non-unique device and network context
+      description: Vita model, software version, and whether Wi-Fi was connected. Omit serial numbers, account names and addresses.
+  - type: textarea
+    id: log
+    attributes:
+      label: Optional current-session log
+      description: Copy ux0:data/plus-vita-allocation.log with VitaShell, review it, and attach only that file if available. Do not paste account or browser-response files.

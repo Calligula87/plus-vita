@@ -8,6 +8,10 @@
 #include <json_object.h>
 #include <json_tokener.h>
 
+#ifndef PLUS_VITA_APP_VERSION
+#define PLUS_VITA_APP_VERSION "00.01"
+#endif
+
 struct plus_vita_app_t {
 	PlusVitaAppView view;
 	size_t welcome_selection;
@@ -24,9 +28,12 @@ struct plus_vita_app_t {
 	unsigned comparison_page;
 	char search[129], search_button[160], catalogue_status[512], detail_status[512];
 	bool imported_valid, connected;
+	bool log_available;
+	bool account_from_settings;
 	bool remember, saved, started, retry_account, retry_save, retry_delete, forgetting, expired;
 	PlusVitaAppScreen storage_return;
 	char label[129], online_id[129], account_status[512];
+	char settings_status[192], reporting_status[512];
 	uint32_t previous_buttons;
 	int previous_direction;
 	uint64_t repeat_at;
@@ -41,11 +48,12 @@ static void welcome(PlusVitaApp *app)
 		.body = "Play your cloud games on the handheld you love.\nConnect your own Sony account to get started.",
 		.hint = "Left stick  Move     X  Select     O  Back",
 		.actions = {
-			{ PLUS_VITA_ACTION_SETUP, "Get started", 64, 316, 500, 52 },
-			{ PLUS_VITA_ACTION_ABOUT, "About Plus Vita", 64, 380, 500, 52 },
-			{ PLUS_VITA_ACTION_EXIT, "Exit", 64, 444, 500, 52 }
+			{ PLUS_VITA_ACTION_SETUP, "Get started", 64, 300, 500, 44 },
+			{ PLUS_VITA_ACTION_SETTINGS, "Settings and help", 64, 350, 500, 44 },
+			{ PLUS_VITA_ACTION_ABOUT, "About Plus Vita", 64, 400, 500, 44 },
+			{ PLUS_VITA_ACTION_EXIT, "Exit", 64, 450, 500, 44 }
 		},
-		.action_count = 3, .selected = app->welcome_selection
+		.action_count = 4, .selected = app->welcome_selection
 	};
 	if(app->connected)
 	{
@@ -63,14 +71,61 @@ static void welcome(PlusVitaApp *app)
 	}
 	if(app->connected || app->saved)
 	{
-		app->view.actions[0].y = 284;
-		app->view.actions[1] = (PlusVitaAppButton){ PLUS_VITA_ACTION_ACCOUNT, "Account", 64, 340, 500, 48 };
-		app->view.actions[2] = (PlusVitaAppButton){ PLUS_VITA_ACTION_ABOUT, "About Plus Vita", 64, 396, 500, 48 };
-		app->view.actions[3] = (PlusVitaAppButton){ PLUS_VITA_ACTION_EXIT, "Exit", 64, 452, 500, 48 };
-		app->view.actions[0].height = 48;
-		app->view.action_count = 4;
-		if(app->view.selected >= 4) app->view.selected = 0;
+		app->view.actions[0].y = 264;
+		app->view.actions[1] = (PlusVitaAppButton){ PLUS_VITA_ACTION_ACCOUNT, "Account", 64, 310, 500, 40 };
+		app->view.actions[2] = (PlusVitaAppButton){ PLUS_VITA_ACTION_SETTINGS, "Settings and help", 64, 356, 500, 40 };
+		app->view.actions[3] = (PlusVitaAppButton){ PLUS_VITA_ACTION_ABOUT, "About Plus Vita", 64, 402, 500, 40 };
+		app->view.actions[4] = (PlusVitaAppButton){ PLUS_VITA_ACTION_EXIT, "Exit", 64, 448, 500, 40 };
+		app->view.actions[0].height = 40;
+		app->view.action_count = 5;
+		if(app->view.selected >= 5) app->view.selected = 0;
 	}
+}
+
+static void settings_view(PlusVitaApp *app)
+{
+	snprintf(app->settings_status, sizeof(app->settings_status), "Development version %s.\nSession log: %s.\nYour sign-in files stay on this Vita.",
+		PLUS_VITA_APP_VERSION, app->log_available ? "available at ux0:data/plus-vita-allocation.log" : "unavailable");
+	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_SETTINGS,
+		.title = "Settings and help.", .subtitle = "PLUS VITA", .body = app->settings_status,
+		.hint = "Left stick  Move     X  Select     O  Back",
+		.actions = {
+			{ app->connected || app->saved ? PLUS_VITA_ACTION_ACCOUNT : PLUS_VITA_ACTION_SETUP,
+				app->connected || app->saved ? "Account and Remember" : "Account setup", 64, 300, 832, 44 },
+			{ PLUS_VITA_ACTION_CONTROLS, "Controls", 64, 350, 832, 44 },
+			{ PLUS_VITA_ACTION_REPORTING, "Report an issue", 64, 400, 832, 44 },
+			{ PLUS_VITA_ACTION_BACK, "Back", 64, 450, 832, 44 }
+		}, .action_count = 4 };
+}
+
+static void controls_view(PlusVitaApp *app)
+{
+	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_CONTROLS,
+		.title = "Controls.", .subtitle = "SETTINGS AND HELP",
+		.body = "Menus: left stick, Cross to select, Circle to go back, or touch.\n"
+			"D-pad does not move menu focus.\n"
+			"In a game: Vita buttons and sticks map to PlayStation controls.\n"
+			"Rear top corners: L2/R2; lower corners: L3/R3.\n"
+			"Front touch moves the touchpad; two touches press it.\n"
+			"Hold START + SELECT for 2 seconds to stop a stream.",
+		.hint = "X  Select     O  Back",
+		.actions = {{ PLUS_VITA_ACTION_BACK, "Back to settings", 64, 444, 832, 52 }}, .action_count = 1 };
+}
+
+static void reporting_view(PlusVitaApp *app)
+{
+	snprintf(app->reporting_status, sizeof(app->reporting_status), "Log: %s\n"
+		"Copy it with VitaShell before reopening the app.\n"
+		"Review it, then attach it yourself at:\n"
+		"github.com/Calligula87/plus-vita/issues/new\n"
+		"Include steps, expected/actual result and version %s.\n"
+		"Never share sign-in JSON, account files or private screenshots.",
+		app->log_available ? "ux0:data/plus-vita-allocation.log" : "unavailable; report without a log",
+		PLUS_VITA_APP_VERSION);
+	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_REPORTING,
+		.title = "Report an issue.", .subtitle = "SETTINGS AND HELP", .body = app->reporting_status,
+		.hint = "X  Select     O  Back",
+		.actions = {{ PLUS_VITA_ACTION_BACK, "Back to settings", 64, 444, 832, 52 }}, .action_count = 1 };
 }
 
 static void about_view(PlusVitaApp *app)
@@ -515,7 +570,16 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	{
 		if(app->started) return effect;
 		app->started = true;
+		app->log_available = event.log_available;
 		return operation(app, PLUS_VITA_EFFECT_LOAD_ACCOUNT, "Checking for a remembered account.", true);
+	}
+	if(event.kind == PLUS_VITA_EVENT_LOG_STATUS)
+	{
+		if(app->log_available == event.log_available) return effect;
+		app->log_available = event.log_available;
+		if(view->screen == PLUS_VITA_APP_SETTINGS) settings_view(app);
+		else if(view->screen == PLUS_VITA_APP_REPORTING) reporting_view(app);
+		return effect;
 	}
 	if(event.kind == PLUS_VITA_EVENT_PAD_RESET)
 	{
@@ -760,6 +824,10 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		if(app->waiting_for == PLUS_VITA_EFFECT_SAVE_ACCOUNT || app->waiting_for == PLUS_VITA_EFFECT_DELETE_ACCOUNT
 			|| app->waiting_for == PLUS_VITA_EFFECT_ENABLE_AUTO) return effect;
 		if(view->screen == PLUS_VITA_APP_FORGET_CONFIRM) { account_view(app); return effect; }
+		if(view->screen == PLUS_VITA_APP_CONTROLS || view->screen == PLUS_VITA_APP_REPORTING
+			|| (view->screen == PLUS_VITA_APP_ACCOUNT && app->account_from_settings)) {
+			settings_view(app); return effect;
+		}
 		if(view->screen==PLUS_VITA_APP_DETAILS || app->waiting_for==PLUS_VITA_EFFECT_EDIT_SEARCH || app->waiting_for==PLUS_VITA_EFFECT_PLAY) {
 			app->pending_operation=0; app->waiting_for=PLUS_VITA_EFFECT_NONE; catalogue_view(app); return effect;
 		}
@@ -827,7 +895,10 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		else if(action == PLUS_VITA_ACTION_RETRY)
 			return operation(app, app->retry_delete ? PLUS_VITA_EFFECT_DELETE_ACCOUNT : app->retry_save ? PLUS_VITA_EFFECT_SAVE_ACCOUNT : PLUS_VITA_EFFECT_AUTHORIZE,
 				app->retry_delete ? "Removing saved sign-in from this Vita." : app->retry_save ? "Saving your account on this Vita." : "Checking your sign-in and loading cloud games.", !app->retry_save && !app->retry_delete);
-		else if(action == PLUS_VITA_ACTION_ACCOUNT) account_view(app);
+		else if(action == PLUS_VITA_ACTION_ACCOUNT) { app->account_from_settings = view->screen == PLUS_VITA_APP_SETTINGS; account_view(app); }
+		else if(action == PLUS_VITA_ACTION_SETTINGS) { app->welcome_selection = view->selected; settings_view(app); }
+		else if(action == PLUS_VITA_ACTION_CONTROLS) controls_view(app);
+		else if(action == PLUS_VITA_ACTION_REPORTING) reporting_view(app);
 		else if(action == PLUS_VITA_ACTION_LABEL)
 			return operation(app, PLUS_VITA_EFFECT_EDIT_LABEL, "Opening the account-label keyboard.", true);
 		else if(action == PLUS_VITA_ACTION_FORGET)
@@ -863,6 +934,8 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		{
 			if(view->screen==PLUS_VITA_APP_FONT_COMPARISON) { about_view(app); return effect; }
 			if(view->screen==PLUS_VITA_APP_DETAILS) { catalogue_view(app); return effect; }
+			if(view->screen==PLUS_VITA_APP_CONTROLS || view->screen==PLUS_VITA_APP_REPORTING
+				|| (view->screen==PLUS_VITA_APP_ACCOUNT && app->account_from_settings)) { settings_view(app); return effect; }
 			app->pending_operation = 0;
 			app->waiting_for = PLUS_VITA_EFFECT_NONE;
 			if(!app->connected) plus_vita_credential_clear(&app->credential);
