@@ -76,6 +76,8 @@ static bool display_open(UiDisplay *display)
 		}
 		memset(display->pixels[i], 0, FRAME_BYTES);
 	}
+	/* Hardware-selected A: one PVF renderer for every normal app screen.
+	 * The optional B renderer remains confined to the comparison profile. */
 	display->font = plus_vita_font_create();
 	if(!display->font) { display_close(display); return false; }
 #if PLUS_VITA_FONT_COMPARISON

@@ -1,11 +1,12 @@
 # Font comparison and Sony cover candidate
 
-Work for #28 and #30. #29 remains blocked until the comparison has a recorded
-Vita result and selected approach. Normal app screens still use the current
-system-font renderer; FreeType is confined to the synthetic comparison screen.
-The accepted blue/gold design, JSON instructions and streaming fallback remain.
+Historical comparison for #28 and #30. On 2026-10-23 the maintainer confirmed
+that A was best on both setup and tile views and requested its use throughout
+the app. A is the existing system PVF renderer. The #29 rollout and current
+normal app candidate are described in [the selected A procedure](FONT_A_TEST.md).
+FreeType remains available only in an explicitly enabled comparison profile.
 
-## Current test package
+## Comparison test package
 
 Install only `plus-vita-font-cover-compare-1.vpk` for this test. The public log
 marker is `build=ui-font-cover-compare-1`. This is a graphical Release comparison
@@ -27,8 +28,11 @@ Candidate built from implementation commits `8af5bf8` and `e522e8b`:
 - Package inventory contains executable/metadata, CA trust, licensed font and
   notices only; no account JSON, logs, screenshots or game artwork is bundled.
 
-Hardware results are pending. #28 and #30 await this device test; #29 remains
-blocked until a renderer is selected from the comparison.
+The physical selection gate for #28 is now resolved: A was preferred for both
+views. This feedback selects a renderer; it does not independently establish
+the cause of earlier cut/chopped text, provide framebuffer captures, or confirm
+all production screens/keyboard paths. #29 records that follow-up. Cover
+acceptance for #30 remains pending a specific result.
 
 ## Font comparison
 
