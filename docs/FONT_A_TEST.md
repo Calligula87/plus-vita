@@ -17,7 +17,7 @@ a different typeface or claim a newly discovered raster fix.
 | Hint | 16 | Section label (26px), footer (28px), logo placeholder hint |
 | Compact | 18 | Account summary and wrapped tile titles (48px) |
 | Body | 20 | Instructions, progress, help, errors, details and confirmations |
-| Control | 22 | Buttons, search and page controls; at least 32px inner height |
+| Control | 22 | Buttons (32–36px inner height), compact search/page controls (26px) |
 | Brand | 24 | App name in a 38px box |
 | Heading | 36 | Existing accepted heading in a 54px box |
 
@@ -33,6 +33,18 @@ Use only `plus-vita-font-a-1.vpk` from this handoff. Public log marker:
 `build=ui-font-a-1`. The normal graphical Release profile has comparison OFF,
 independent input ON and deferred logging ON. About has no A/B comparison menu.
 The prior comparison and accepted stream VPKs remain available as rollback.
+
+Delivered 2026-10-23 to `ux0:data/plus-vita-font-a-1.vpk`; FTP download/readback
+matched SHA-256
+`E454842F66CB79971DEA06E88CA5F2105FD0D46E0C35080A85A815E082E56395`
+(1,182,125 bytes). Implementation: `b88f8bc`, diagnostic regression `54c2ce3`.
+Full host suite passed; normal, historical diagnostic and comparison Vita
+targets built. Independent Standards and Spec reviews found no actionable code
+issues; the control-height documentation was corrected to include compact
+catalogue controls. Package inventory and linked executable were checked:
+normal build marker present, comparison menu/font absent, no account data,
+logs, captures or artwork resources. The earlier accepted stream VPK checksum
+was rechecked unchanged. Production device acceptance for #29 remains pending.
 
 1. Check the actual welcome, About, setup instructions and import screens for
    complete small text, buttons and footer hints at normal viewing size.
