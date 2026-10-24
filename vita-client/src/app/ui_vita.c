@@ -341,9 +341,10 @@ int plus_vita_app_run(void)
 					plus_vita_diagnostic_event("stream_probe.complete",(int)stream_error);
 				}
 				plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
-					.operation=operation,.status=stream_error==CHIAKI_ERR_SUCCESS
+					.operation=operation,.status=stream_error==CHIAKI_ERR_SUCCESS && user_stopped
 						? PLUS_VITA_RESULT_OK : stream_error==CHIAKI_ERR_CANCELED
-						? PLUS_VITA_RESULT_CANCELLED : PLUS_VITA_RESULT_NETWORK_ERROR},0);
+						? PLUS_VITA_RESULT_CANCELLED : allocation_error!=CHIAKI_ERR_SUCCESS
+						? PLUS_VITA_RESULT_NETWORK_ERROR : PLUS_VITA_RESULT_STREAM_STOPPED},0);
 				SceCtrlData released={0};
 				sceCtrlPeekBufferPositive(0,&released,1);
 				plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PAD_RESET,

@@ -521,6 +521,17 @@ static void detail_view(PlusVitaApp *app, const char *notice)
 		.actions={{game->launch_id_valid ? PLUS_VITA_ACTION_PLAY : PLUS_VITA_ACTION_DISABLED,game->launch_id_valid ? "Play" : "Play unavailable",64,380,832,52},{PLUS_VITA_ACTION_BACK,"Back",64,444,832,52}},.action_count=2};
 }
 
+static void stream_stopped_view(PlusVitaApp *app)
+{
+	const PlusVitaCatalogEntry *game=&app->catalogue[app->matches[app->catalogue_selection]];
+	app->view=(PlusVitaAppView){.screen=PLUS_VITA_APP_STREAM_STOPPED,
+		.title="Cloud Play stopped.",.subtitle="SESSION INTERRUPTED",
+		.body="The session stopped unexpectedly before you chose to leave.\nThis could be a connection or app problem.\nCopy ux0:data/plus-vita-allocation.log before retrying; the next Play replaces it.",
+		.hint="X  Select     O  Back",.detail=game,
+		.actions={{PLUS_VITA_ACTION_PLAY,"Try Play again",64,380,832,52},
+			{PLUS_VITA_ACTION_BACK,"Back to catalogue",64,444,832,52}},.action_count=2};
+}
+
 #if PLUS_VITA_FONT_COMPARISON
 static void font_comparison(PlusVitaApp *app)
 {
@@ -761,6 +772,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		if(app->waiting_for!=PLUS_VITA_EFFECT_PLAY || !event.operation || event.operation!=app->pending_operation) return effect;
 		app->pending_operation=0; app->waiting_for=PLUS_VITA_EFFECT_NONE;
 		if(event.status==PLUS_VITA_RESULT_OK) catalogue_view(app);
+		else if(event.status==PLUS_VITA_RESULT_STREAM_STOPPED) stream_stopped_view(app);
 		else detail_view(app, event.status==PLUS_VITA_RESULT_CANCELLED
 			? "Play was cancelled. Select Play for a fresh attempt."
 			: event.status==PLUS_VITA_RESULT_BUSY
@@ -858,7 +870,8 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 			|| (view->screen == PLUS_VITA_APP_ACCOUNT && app->account_from_settings)) {
 			settings_view(app); return effect;
 		}
-		if(view->screen==PLUS_VITA_APP_DETAILS || app->waiting_for==PLUS_VITA_EFFECT_EDIT_SEARCH || app->waiting_for==PLUS_VITA_EFFECT_PLAY) {
+		if(view->screen==PLUS_VITA_APP_DETAILS || view->screen==PLUS_VITA_APP_STREAM_STOPPED
+			|| app->waiting_for==PLUS_VITA_EFFECT_EDIT_SEARCH || app->waiting_for==PLUS_VITA_EFFECT_PLAY) {
 			app->pending_operation=0; app->waiting_for=PLUS_VITA_EFFECT_NONE; catalogue_view(app); return effect;
 		}
 		app->pending_operation = 0;
@@ -893,7 +906,8 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		else if(action==PLUS_VITA_ACTION_SEARCH) return plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_SEARCH});
 		else if(action==PLUS_VITA_ACTION_CLEAR_SEARCH) { app->search[0]=0; filter_catalogue(app); app->search_focus=false; catalogue_view(app); }
 		else if(action==PLUS_VITA_ACTION_GAME && view->screen==PLUS_VITA_APP_CATALOGUE) detail_view(app,NULL);
-		else if(action==PLUS_VITA_ACTION_PLAY && view->screen==PLUS_VITA_APP_DETAILS) {
+		else if(action==PLUS_VITA_ACTION_PLAY && (view->screen==PLUS_VITA_APP_DETAILS
+			|| view->screen==PLUS_VITA_APP_STREAM_STOPPED)) {
 			PlusVitaCatalogEntry game=*view->detail;
 			effect=operation(app,PLUS_VITA_EFFECT_PLAY,"Preparing a cloud session. Circle cancels.",true); effect.game=game; return effect;
 		}
@@ -963,7 +977,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		else if(action == PLUS_VITA_ACTION_BACK)
 		{
 			if(view->screen==PLUS_VITA_APP_FONT_COMPARISON) { about_view(app); return effect; }
-			if(view->screen==PLUS_VITA_APP_DETAILS) { catalogue_view(app); return effect; }
+			if(view->screen==PLUS_VITA_APP_DETAILS || view->screen==PLUS_VITA_APP_STREAM_STOPPED) { catalogue_view(app); return effect; }
 			if(view->screen==PLUS_VITA_APP_CONTROLS || view->screen==PLUS_VITA_APP_REPORTING
 				|| (view->screen==PLUS_VITA_APP_ACCOUNT && app->account_from_settings)) { settings_view(app); return effect; }
 			app->pending_operation = 0;
