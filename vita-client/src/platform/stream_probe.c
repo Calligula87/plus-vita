@@ -40,7 +40,13 @@
 #define PROBE_VIDEO_HEADER_MAX 2048
 #define PROBE_VIDEO_UNITS_MAX 512
 #define PROBE_DECODE_ATTEMPTS_MAX 32
-#define PROBE_PREVIEW_MS 600000
+#if PLUS_VITA_DIAGNOSTIC_APP
+#define PROBE_PREVIEW_MS 600000u
+#else
+/* The graphical player is user-stopped; retain the old bounded diagnostic
+ * profile separately as a rollback and comparison artifact. */
+#define PROBE_PREVIEW_MS 0u
+#endif
 #define PROBE_STOP_HOLD_MS 2000
 #define PROBE_RECOVERY_FAULT_TEST 0
 #define PROBE_QUEUE_MAX 16
@@ -1762,12 +1768,14 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 			/* Draining can request recovery and advance its timestamps. */
 			now = sceKernelGetProcessTimeWide() / 1000u;
 		}
+#if PLUS_VITA_DIAGNOSTIC_APP
 		if(now - started >= PROBE_TIMEOUT_MS + PROBE_PREVIEW_MS)
 		{
 			CHIAKI_LOGE(probe->log, "Stream probe bounded preview deadline expired");
 			err = CHIAKI_ERR_TIMEOUT;
 			break;
 		}
+#endif
 		if(probe->awaiting_recovery_idr
 			&& now >= probe->recovery_started_ms
 			&& now - probe->recovery_started_ms >= 5000)
@@ -1776,6 +1784,7 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 			err = CHIAKI_ERR_TIMEOUT;
 			break;
 		}
+#if PLUS_VITA_DIAGNOSTIC_APP
 		if(first_display && now - first_display >= PROBE_PREVIEW_MS
 			&& !probe->awaiting_recovery_idr && !probe->recovery_output_pending)
 		{
@@ -1786,6 +1795,7 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 				err = CHIAKI_ERR_TIMEOUT;
 			break;
 		}
+#endif
 		/* Keep actual last_display truthful. A validated recovery IDR gets a
 		 * fresh output deadline, not the stale deadline from before the freeze. */
 		uint64_t output_deadline_base = last_display;

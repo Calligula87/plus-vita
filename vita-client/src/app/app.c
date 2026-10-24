@@ -33,6 +33,7 @@ struct plus_vita_app_t {
 	bool remember, saved, started, retry_account, retry_save, retry_delete, forgetting, expired;
 	PlusVitaAppScreen storage_return;
 	char label[129], online_id[129], account_status[512];
+	char store_country[8], store_language[8], language[8];
 	char settings_status[192], reporting_status[512];
 	uint32_t previous_buttons;
 	int previous_direction;
@@ -240,6 +241,9 @@ static PlusVitaAppEffect operation(PlusVitaApp *app, PlusVitaAppEffectKind kind,
 	if(kind==PLUS_VITA_EFFECT_EDIT_SEARCH) { app->view.title="Search your games."; app->view.subtitle="CATALOGUE SEARCH"; }
 	PlusVitaAppEffect effect = { .kind = kind, .operation = app->pending_operation, .credential = app->credential, .forget = app->forgetting };
 	memcpy(effect.label, app->label, sizeof(effect.label));
+	memcpy(effect.store_country, app->store_country, sizeof(effect.store_country));
+	memcpy(effect.store_language, app->store_language, sizeof(effect.store_language));
+	memcpy(effect.language, app->language, sizeof(effect.language));
 	return effect;
 }
 
@@ -414,6 +418,9 @@ static void clear_runtime(PlusVitaApp *app)
 	app->catalogue_count = app->catalogue_selection = 0;
 	memset(app->label, 0, sizeof(app->label));
 	memset(app->online_id, 0, sizeof(app->online_id));
+	memset(app->store_country, 0, sizeof(app->store_country));
+	memset(app->store_language, 0, sizeof(app->store_language));
+	memset(app->language, 0, sizeof(app->language));
 	memset(app->account_status, 0, sizeof(app->account_status));
 	memset(app->catalogue_status, 0, sizeof(app->catalogue_status));
 	memset(app->search, 0, sizeof(app->search));
@@ -700,6 +707,9 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 				account_error(app, "The catalogue could not be loaded. Please try again later.");
 			else
 			{
+				memcpy(app->store_country,event.store_country,sizeof(app->store_country));
+				memcpy(app->store_language,event.store_language,sizeof(app->store_language));
+				memcpy(app->language,event.language,sizeof(app->language));
 				const char *end = memchr(event.account_name, 0, sizeof(event.account_name));
 				memset(app->online_id, 0, sizeof(app->online_id));
 				if(end && plus_vita_utf8_label(event.account_name, (size_t)(end-event.account_name)))
@@ -750,7 +760,27 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	{
 		if(app->waiting_for!=PLUS_VITA_EFFECT_PLAY || !event.operation || event.operation!=app->pending_operation) return effect;
 		app->pending_operation=0; app->waiting_for=PLUS_VITA_EFFECT_NONE;
-		detail_view(app,"Streaming is not connected in this development build yet."); return effect;
+		if(event.status==PLUS_VITA_RESULT_OK) catalogue_view(app);
+		else detail_view(app, event.status==PLUS_VITA_RESULT_CANCELLED
+			? "Play was cancelled. Select Play for a fresh attempt."
+			: event.status==PLUS_VITA_RESULT_BUSY
+			? "The previous connection is still closing.\nTry Play again shortly."
+			: "The cloud session stopped or could not start.\nCheck Wi-Fi and select Play to retry.");
+		return effect;
+	}
+	if(event.kind==PLUS_VITA_EVENT_PLAY_PROGRESS)
+	{
+		if(app->waiting_for!=PLUS_VITA_EFFECT_PLAY || !event.operation || event.operation!=app->pending_operation) return effect;
+		static const char *const stages[] = {
+			"Preparing a cloud session. Circle cancels.",
+			"Checking your account. Circle cancels.",
+			"Checking this game's eligibility. Circle cancels.",
+			"Finding a cloud server. Circle cancels.",
+			"Allocating your cloud session. Circle cancels.",
+			"Connecting to cloud video. Hold START + SELECT to stop after play begins."
+		};
+		if(event.play_stage < sizeof(stages)/sizeof(stages[0])) view->body=stages[event.play_stage];
+		return effect;
 	}
 	if(event.kind==PLUS_VITA_EVENT_SEARCH && view->screen==PLUS_VITA_APP_CATALOGUE && app->catalogue_count) {
 		app->search_focus=true;
@@ -865,7 +895,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		else if(action==PLUS_VITA_ACTION_GAME && view->screen==PLUS_VITA_APP_CATALOGUE) detail_view(app,NULL);
 		else if(action==PLUS_VITA_ACTION_PLAY && view->screen==PLUS_VITA_APP_DETAILS) {
 			PlusVitaCatalogEntry game=*view->detail;
-			effect=operation(app,PLUS_VITA_EFFECT_PLAY,"Preparing to play.",true); effect.game=game; return effect;
+			effect=operation(app,PLUS_VITA_EFFECT_PLAY,"Preparing a cloud session. Circle cancels.",true); effect.game=game; return effect;
 		}
 		else if(action == PLUS_VITA_ACTION_CATALOGUE)
 		{

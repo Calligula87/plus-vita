@@ -26,7 +26,7 @@ if(PLUS_VITA_DIAGNOSTIC_APP)
   set(PLUS_VITA_ENTRY_SOURCE src/main.c src/app/utf8.c)
 else()
   set(VITA_APP_NAME "Plus Vita")
-  set(PLUS_VITA_ENTRY_SOURCE src/app/main.c src/app/app.c src/app/utf8.c src/app/text.c src/app/font_vita.c src/app/render.c src/app/ui_flow.c src/app/ui_vita.c src/app/account_vita.c src/app/covers.c src/platform/cover_image.c src/platform/cover_download.c src/platform/cover_resolve.c)
+  set(PLUS_VITA_ENTRY_SOURCE src/app/main.c src/app/app.c src/app/utf8.c src/app/text.c src/app/font_vita.c src/app/render.c src/app/ui_flow.c src/app/ui_vita.c src/app/account_vita.c src/app/play_vita.c src/app/covers.c src/platform/cover_image.c src/platform/cover_download.c src/platform/cover_resolve.c)
 endif()
 set(VITA_TITLEID "PLVT00001")
 set(VITA_VERSION "00.01")
@@ -40,12 +40,20 @@ set(PLUS_VITA_POST_ECHO_URL "" CACHE STRING
   "Optional controlled LAN URL for a physical POST echo test")
 option(PLUS_VITA_PUBLIC_APOLLO_TEST
   "Enable the explicitly authorized credential-free public Apollo GET test" OFF)
-option(PLUS_VITA_INPUT_WORKER "Evaluate independent 4ms input sampling" OFF)
-option(PLUS_VITA_DEFERRED_LOG "Evaluate deferred streaming diagnostics" OFF)
+if(PLUS_VITA_DIAGNOSTIC_APP)
+  set(PLUS_VITA_STREAM_DEFAULT OFF)
+else()
+  set(PLUS_VITA_STREAM_DEFAULT ON)
+endif()
+option(PLUS_VITA_INPUT_WORKER "Use accepted independent 4ms input sampling" ${PLUS_VITA_STREAM_DEFAULT})
+option(PLUS_VITA_DEFERRED_LOG "Use accepted deferred streaming diagnostics" ${PLUS_VITA_STREAM_DEFAULT})
+if(NOT PLUS_VITA_DIAGNOSTIC_APP AND (NOT PLUS_VITA_INPUT_WORKER OR NOT PLUS_VITA_DEFERRED_LOG))
+  message(FATAL_ERROR "The graphical player requires the accepted input-worker/deferred-log stream profile")
+endif()
 if(PLUS_VITA_INPUT_WORKER AND PLUS_VITA_DEFERRED_LOG)
-  # C and L have separate Vita evidence. Their combination is a new identified
-  # test profile; component acceptance does not imply combined acceptance.
-  message(STATUS "Experimental combined input-worker/deferred-log profile")
+  # The combined D profile was accepted on Vita. A graphical player still
+  # needs its own Play/stop and longer-session hardware validation.
+  message(STATUS "Accepted combined input-worker/deferred-log stream profile")
 endif()
 
 set(PYLUX_ROOT "${CMAKE_CURRENT_LIST_DIR}/../external/pylux")
@@ -661,10 +669,11 @@ if(PLUS_VITA_INPUT_WORKER)
 endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-  PLUS_VITA_APP_VERSION="${VITA_APP_VERSION}"
+  PLUS_VITA_APP_VERSION="${VITA_VERSION}"
   PLUS_VITA_FONT_COMPARISON=$<AND:$<BOOL:${PLUS_VITA_FONT_COMPARISON}>,$<NOT:$<BOOL:${PLUS_VITA_DIAGNOSTIC_APP}>>>
   PLUS_VITA_FONT_DEFAULT_FREETYPE=$<AND:$<BOOL:${PLUS_VITA_FONT_DEFAULT_FREETYPE}>,$<NOT:$<BOOL:${PLUS_VITA_DIAGNOSTIC_APP}>>>
   PLUS_VITA_INPUT_WORKER=$<BOOL:${PLUS_VITA_INPUT_WORKER}>
+  PLUS_VITA_DIAGNOSTIC_APP=$<BOOL:${PLUS_VITA_DIAGNOSTIC_APP}>
   PLUS_VITA_DEFERRED_LOG=$<OR:$<BOOL:${PLUS_VITA_DEFERRED_LOG}>,$<NOT:$<BOOL:${PLUS_VITA_DIAGNOSTIC_APP}>>>
   CHIAKI_LIB_ENABLE_MBEDTLS=1
   MBEDTLS_ALLOW_PRIVATE_ACCESS=1

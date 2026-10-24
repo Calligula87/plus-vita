@@ -62,7 +62,12 @@ static void authorize(PlusVitaAccount *account)
 	else account->result.status = PLUS_VITA_RESULT_OK;
 	account->result.entries = result->native_titles;
 	account->result.entry_count = result->native_titles_count;
-	if(account->result.status == PLUS_VITA_RESULT_OK) memcpy(account->result.account_name, result->online_id, sizeof(result->online_id));
+	if(account->result.status == PLUS_VITA_RESULT_OK) {
+		memcpy(account->result.account_name, result->online_id, sizeof(result->online_id));
+		memcpy(account->result.store_country, result->store_country, sizeof(result->store_country));
+		memcpy(account->result.store_language, result->store_language, sizeof(result->store_language));
+		memcpy(account->result.language, result->language, sizeof(result->language));
+	}
 }
 
 static void load_account(PlusVitaAccount *account)

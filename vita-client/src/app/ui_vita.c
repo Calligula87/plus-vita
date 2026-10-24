@@ -4,6 +4,7 @@
 #include "account_vita.h"
 #include "font_vita.h"
 #include "ui_flow.h"
+#include "play_vita.h"
 #if PLUS_VITA_FONT_COMPARISON
 #include "comparison_capture.h"
 #endif
@@ -15,6 +16,8 @@
 #include "../platform/diagnostic_log.h"
 #include "../platform/latency_clock.h"
 #include "../platform/network.h"
+#include "../platform/request_cancel.h"
+#include "../platform/stream_probe.h"
 #include <curl/curl.h>
 #include <psp2/sysmodule.h>
 #include <psp2/touch.h>
@@ -117,10 +120,14 @@ static bool draw(UiDisplay *display, PlusVitaUiFlow *flow)
 	return true;
 }
 
-static bool handle_input(PlusVitaUiFlow *flow, PlusVitaAccount *account, PlusVitaAppEvent event)
+static bool handle_input(PlusVitaUiFlow *flow, PlusVitaAccount *account,
+	PlusVitaPlay *play, PlusVitaAppEvent event)
 {
 	bool changed = plus_vita_ui_flow_event(flow, event, plus_vita_latency_now_us());
-	if(flow->cancel_account) plus_vita_account_cancel(account);
+	if(flow->cancel_account) {
+		plus_vita_account_cancel(account);
+		plus_vita_play_cancel(play);
+	}
 	return changed;
 }
 static bool storage_effect(PlusVitaAppEffectKind kind)
@@ -148,11 +155,12 @@ int plus_vita_app_run(void)
 	PlusVitaApp *app = plus_vita_app_create();
 	PlusVitaAccount *account = plus_vita_account_create();
 	PlusVitaAccount *storage = plus_vita_account_create();
+	PlusVitaPlay *play = plus_vita_play_create();
 	PlusVitaCovers *covers = NULL;
-	if(!display || !app || !account || !storage)
-	{ free(display); plus_vita_app_destroy(app); plus_vita_account_close(account); plus_vita_account_close(storage); plus_vita_covers_close(covers); plus_vita_diagnostic_ui_end(); return 1; }
+	if(!display || !app || !account || !storage || !play)
+	{ free(display); plus_vita_app_destroy(app); plus_vita_account_close(account); plus_vita_account_close(storage); plus_vita_play_close(play); plus_vita_covers_close(covers); plus_vita_diagnostic_ui_end(); return 1; }
 	if(!display_open(display))
-	{ free(display); plus_vita_app_destroy(app); plus_vita_account_close(account); plus_vita_account_close(storage); plus_vita_covers_close(covers); plus_vita_diagnostic_ui_end(); return 1; }
+	{ free(display); plus_vita_app_destroy(app); plus_vita_account_close(account); plus_vita_account_close(storage); plus_vita_play_close(play); plus_vita_covers_close(covers); plus_vita_diagnostic_ui_end(); return 1; }
 	/* Keep a process-lifetime reference while account HTTP and artwork overlap.
 	 * Individual account requests balance their own curl reference as before. */
 	bool network_owned = !plus_vita_network_is_initialized();
@@ -174,6 +182,7 @@ int plus_vita_app_run(void)
 #endif
 	PlusVitaUiFlow flow = { .app = app, .dirty = true, .covers = covers };
 	uint64_t artwork_epoch = UINT64_MAX;
+	unsigned reported_play_stage=0;
 	bool metadata_reported=false;
 	plus_vita_ui_flow_event(&flow, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START,
 		.log_available = log_available }, 0);
@@ -211,7 +220,7 @@ int plus_vita_app_run(void)
 		bool input_changed = false;
 		if(sceCtrlPeekBufferPositive(0, &pad, 1) > 0)
 		{
-			input_changed = handle_input(&flow, account, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_PAD,
+			input_changed = handle_input(&flow, account, play, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_PAD,
 				.pad = { .buttons = pad.buttons, .left_x = pad.lx, .left_y = pad.ly, .time_us = sceKernelGetProcessTimeWide() } });
 #if PLUS_VITA_FONT_COMPARISON
 			if(!input_changed && current.screen==PLUS_VITA_APP_FONT_COMPARISON
@@ -234,7 +243,7 @@ int plus_vita_app_run(void)
 		{
 			if(!input_changed && touch.reportNum && !touched)
 			{
-				input_changed = handle_input(&flow, account, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_TOUCH,
+				input_changed = handle_input(&flow, account, play, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_TOUCH,
 					.x = (touch.report[0].x - panel.minAaX) * (WIDTH - 1) / (panel.maxAaX - panel.minAaX),
 					.y = (touch.report[0].y - panel.minAaY) * (HEIGHT - 1) / (panel.maxAaY - panel.minAaY) });
 			}
@@ -268,7 +277,20 @@ int plus_vita_app_run(void)
 					previous_poll = flow.input_since = 0; /* Human keyboard time is not menu latency. */
 				}
 				else if(effect.kind==PLUS_VITA_EFFECT_PLAY)
-					plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,.operation=effect.operation},0);
+				{
+					if(plus_vita_play_busy(play))
+						plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
+							.operation=effect.operation,.status=PLUS_VITA_RESULT_BUSY},0);
+					else {
+						/* Keep the previous attempt until an explicit new Play. */
+						plus_vita_diagnostic_ui_flush();
+						log_available=plus_vita_diagnostic_begin();
+						reported_play_stage=0;
+						if(!network_ready || !curl_ready || !plus_vita_play_start(play,&effect))
+							plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
+								.operation=effect.operation,.status=PLUS_VITA_RESULT_NETWORK_ERROR},0);
+					}
+				}
 				else if(!plus_vita_account_start(storage_effect(effect.kind) ? storage : account, &effect))
 				{
 					plus_vita_ui_flow_event(&flow, (PlusVitaAppEvent){
@@ -288,6 +310,45 @@ int plus_vita_app_run(void)
 				flow.dirty = true;
 			}
 		}
+		if(plus_vita_play_ready(play)) {
+			ChiakiCloudProvisionResult provision={0};
+			ChiakiErrorCode allocation_error=CHIAKI_ERR_UNKNOWN;
+			uint64_t operation=0;
+			plus_vita_play_take(play,&provision,&allocation_error,&operation);
+			if(operation && operation==plus_vita_app_view(app).operation) {
+				bool user_stopped=false;
+				ChiakiErrorCode stream_error=allocation_error;
+				if(allocation_error==CHIAKI_ERR_SUCCESS) {
+					plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_PROGRESS,
+						.operation=operation,.play_stage=5},0);
+					if(!draw(display,&flow)) { result=1; plus_vita_play_result_clear(&provision); break; }
+					ChiakiLog stream_log;
+					chiaki_log_init(&stream_log,CHIAKI_LOG_INFO | CHIAKI_LOG_WARNING | CHIAKI_LOG_ERROR,
+						plus_vita_diagnostic_chiaki_log,NULL);
+					plus_vita_diagnostic_event("stream_probe.begin",0);
+					stream_error=plus_vita_stream_probe(&provision,&stream_log,&user_stopped);
+					plus_vita_diagnostic_event("stream_probe.complete",(int)stream_error);
+				}
+				plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
+					.operation=operation,.status=stream_error==CHIAKI_ERR_SUCCESS
+						? PLUS_VITA_RESULT_OK : PLUS_VITA_RESULT_NETWORK_ERROR},0);
+				SceCtrlData released={0};
+				sceCtrlPeekBufferPositive(0,&released,1);
+				plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PAD_RESET,
+					.pad={.buttons=released.buttons,.left_x=released.lx,.left_y=released.ly,
+						.time_us=sceKernelGetProcessTimeWide()}});
+				previous_poll=flow.input_since=0;
+				flow.dirty=true;
+			}
+			plus_vita_play_result_clear(&provision);
+		} else if(play && plus_vita_app_view(app).operation) {
+			unsigned stage=plus_vita_play_stage(play);
+			if(stage && stage!=reported_play_stage) {
+				reported_play_stage=stage;
+				plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_PROGRESS,
+					.operation=plus_vita_app_view(app).operation,.play_stage=stage},0);
+			}
+		}
 		uint64_t now = plus_vita_latency_now_us();
 		if(now >= last_report && now-last_report >= 1000000u) {
 			plus_vita_diagnostic_ui_flush(); last_report = now;
@@ -305,8 +366,9 @@ int plus_vita_app_run(void)
 	plus_vita_credential_clear(&flow.pending.credential);
 	bool account_closed = plus_vita_account_close(account);
 	bool storage_closed = plus_vita_account_close(storage);
+	bool play_closed = plus_vita_play_close(play);
 	bool covers_closed = plus_vita_covers_close(covers);
-	if(account_closed && storage_closed && covers_closed) {
+	if(account_closed && storage_closed && play_closed && covers_closed) {
 		if(curl_ready) curl_global_cleanup();
 		if(network_ready && network_owned) plus_vita_network_fini();
 	} /* A live cancelled worker retains its resources until process exit. */

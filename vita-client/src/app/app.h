@@ -62,7 +62,7 @@ typedef enum {
 	PLUS_VITA_EVENT_AUTHORIZED, PLUS_VITA_EVENT_START, PLUS_VITA_EVENT_ACCOUNT_LOADED,
 	PLUS_VITA_EVENT_ACCOUNT_SAVED, PLUS_VITA_EVENT_ACCOUNT_DELETED, PLUS_VITA_EVENT_LABEL_ENTERED,
 	PLUS_VITA_EVENT_PAD_RESET, PLUS_VITA_EVENT_AUTO_ENABLED, PLUS_VITA_EVENT_SEARCH_ENTERED, PLUS_VITA_EVENT_SEARCH, PLUS_VITA_EVENT_PLAY_ENDED,
-	PLUS_VITA_EVENT_FONT_CAPTURED, PLUS_VITA_EVENT_LOG_STATUS
+	PLUS_VITA_EVENT_FONT_CAPTURED, PLUS_VITA_EVENT_LOG_STATUS, PLUS_VITA_EVENT_PLAY_PROGRESS
 } PlusVitaAppEventKind;
 typedef enum {
 	PLUS_VITA_RESULT_OK, PLUS_VITA_RESULT_STORAGE_ERROR, PLUS_VITA_RESULT_MISSING,
@@ -90,6 +90,8 @@ typedef struct {
 	size_t entry_count;
 	bool restore_blocked, retained_json;
 	bool log_available;
+	unsigned play_stage;
+	char store_country[8], store_language[8], language[8];
 	char account_name[129];
 } PlusVitaAppEvent;
 typedef enum {
@@ -108,6 +110,7 @@ typedef struct {
 	char label[129];
 	bool forget;
 	PlusVitaCatalogEntry game;
+	char store_country[8], store_language[8], language[8];
 } PlusVitaAppEffect;
 
 PlusVitaApp *plus_vita_app_create(void);
