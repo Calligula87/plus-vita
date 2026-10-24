@@ -49,6 +49,9 @@ terminal records and loss summaries. Once the body quota is exhausted, a
 64-record memory reserve keeps the newest known terminal/error records for
 shutdown. Final typed stream metrics and counters use the critical reserve.
 Sink summaries account for queue, quota, truncation and drain losses.
+`persisted` counts numbered records actually written, including the retained
+tail; `tail_retained` identifies that reserve, `tail_evicted` counts its replaced
+records, and `budget_dropped` counts actual quota losses (including evictions).
 
 Completed, failed and cancelled Play attempts drain/close after their allocation
 worker has finished, so terminal records are on disk while the user browses.

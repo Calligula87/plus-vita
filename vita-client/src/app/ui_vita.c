@@ -211,6 +211,8 @@ int plus_vita_app_run(void)
 			reported_screen=current.screen;
 		}
 		PlusVitaRecovery interruption=plus_vita_recovery_poll();
+		if(interruption==PLUS_VITA_RECOVERY_SLEEP && !current.operation)
+			plus_vita_recovery_acknowledge();
 		if(interruption!=PLUS_VITA_RECOVERY_NONE && current.operation) {
 			plus_vita_diagnostic_event(interruption==PLUS_VITA_RECOVERY_SLEEP ? "recovery.sleep" : "recovery.wifi",0);
 			handle_input(&flow,account,play,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_INTERRUPTED,

@@ -96,12 +96,17 @@ static void bounded_file(void)
 	assert(!fseek(f,0,SEEK_END)); long length=ftell(f);
 	assert(length>0 && length<=PLUS_VITA_DIAGNOSTIC_MAX_BYTES);
 	rewind(f); char line[2048]; bool final=false,metric=false,limited=false;
+	unsigned long records=0,reported_persisted=0;
 	while(fgets(line,sizeof(line),f)) {
+		unsigned long sequence;
+		if(sscanf(line,"%lu",&sequence)==1) records++;
+		char *persisted_field=strstr(line," persisted=");
+		if(persisted_field) assert(sscanf(persisted_field," persisted=%lu",&reported_persisted)==1);
 		if(strstr(line,"stream_probe.complete")) final=true;
 		if(strstr(line,"metric=decode count=3 total_us=321 max_us=123")) metric=true;
 		if(strstr(line,"budget_dropped=") && !strstr(line,"budget_dropped=0")) limited=true;
 	}
-	fclose(f); assert(final && metric && limited);
+	fclose(f); assert(final && metric && limited && records==reported_persisted);
 }
 int main(void)
 {

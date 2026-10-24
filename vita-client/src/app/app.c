@@ -602,6 +602,10 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	}
 	if(event.kind == PLUS_VITA_EVENT_INTERRUPTED)
 	{
+		/* Wi-Fi does not own local guides, keyboards or file operations. */
+		if(event.status==PLUS_VITA_RESULT_NETWORK_ERROR
+			&& app->waiting_for!=PLUS_VITA_EFFECT_AUTHORIZE
+			&& app->waiting_for!=PLUS_VITA_EFFECT_PLAY) return effect;
 		/* Storage mutations finish atomically. Network/UI work is retired now;
 		 * its operation number can no longer deliver a usable late result. */
 		if(app->waiting_for == PLUS_VITA_EFFECT_SAVE_ACCOUNT

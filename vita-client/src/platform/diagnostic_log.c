@@ -35,7 +35,7 @@ static uint64_t diagnostic_started_us;
 static char diagnostic_tail[TAIL_CAPACITY][RECORD_SIZE];
 static unsigned tail_head, tail_count;
 static size_t file_bytes;
-static unsigned long budget_dropped;
+static unsigned long budget_dropped, tail_evicted;
 
 /* Writer-owned, or called under the write mutex in the synchronous profile.
  * Keep the newest terminal/error records after the body quota is exhausted. */
@@ -43,12 +43,13 @@ static bool persist_record(const char *line, bool critical)
 {
 	size_t length = strlen(line);
 	if(file_bytes + length > BODY_LIMIT) {
-		budget_dropped++;
 		if(critical) {
-			if(tail_count == TAIL_CAPACITY) { tail_head=(tail_head+1)%TAIL_CAPACITY; tail_count--; }
+			if(tail_count == TAIL_CAPACITY) {
+				tail_head=(tail_head+1)%TAIL_CAPACITY; tail_count--; tail_evicted++; budget_dropped++;
+			}
 			memcpy(diagnostic_tail[(tail_head+tail_count)%TAIL_CAPACITY],line,length+1);
 			tail_count++;
-		}
+		} else budget_dropped++;
 		return true;
 	}
 	file_bytes += length;
@@ -145,13 +146,16 @@ static void *diagnostic_writer(void *unused)
 		q->head = (q->head + 1) % q->capacity; q->count--;
 		pthread_mutex_unlock(&diagnostic_write_mutex);
 		uint64_t started = plus_vita_latency_now_us();
+		size_t previous_bytes=file_bytes;
 		bool ok = storage_ok && persist_record(record.line, record.critical);
 		storage_ok=storage_ok && ok;
 		uint64_t done = plus_vita_latency_now_us();
 		pthread_mutex_lock(&diagnostic_write_mutex);
 		diagnostic_io_ok = diagnostic_io_ok && ok;
-		if(ok) persisted++;
-		plus_vita_latency_span(&persistence_call, started, done);
+		if(file_bytes!=previous_bytes) {
+			if(ok) persisted++;
+			plus_vita_latency_span(&persistence_call, started, done);
+		}
 		pthread_mutex_unlock(&diagnostic_write_mutex);
 	}
 	diagnostic_finish_file();
@@ -189,6 +193,7 @@ static void write_line(const char *kind, const char *message, int code)
 	uint64_t start_us = plus_vita_latency_now_us();
 	pthread_mutex_lock(&diagnostic_write_mutex);
 	uint64_t locked_us = plus_vita_latency_now_us();
+	uint64_t elapsed_ms=start_us>=diagnostic_started_us ? (start_us-diagnostic_started_us)/1000u : 0;
 #if PLUS_VITA_DEFERRED_LOG
 	if(!diagnostic_accepting) { pthread_mutex_unlock(&diagnostic_write_mutex); return; }
 	diagnostic_sequence++;
@@ -207,7 +212,7 @@ static void write_line(const char *kind, const char *message, int code)
 	record->sequence = diagnostic_sequence;
 	record->critical = q == &critical_queue;
 	int length = snprintf(record->line, sizeof(record->line), "%06lu elapsed_ms=%llu %-8s code=%d %s\n",
-		diagnostic_sequence, (unsigned long long)((start_us-diagnostic_started_us)/1000u), kind, code, message);
+		diagnostic_sequence, (unsigned long long)elapsed_ms, kind, code, message);
 	if(length < 0 || (size_t)length >= sizeof(record->line)) {
 		truncated++;
 		/* Keep every persisted record on a separate line. */
@@ -226,7 +231,7 @@ static void write_line(const char *kind, const char *message, int code)
 	diagnostic_sequence++;
 	char line[RECORD_SIZE];
 	snprintf(line,sizeof(line),"%06lu elapsed_ms=%llu %-8s code=%d %s\n",diagnostic_sequence,
-		(unsigned long long)((start_us-diagnostic_started_us)/1000u),kind,code,message);
+		(unsigned long long)elapsed_ms,kind,code,message);
 	if(!persist_record(line,strcmp(kind,"EVENT")==0 || strstr(message,"final")!=NULL)) diagnostic_io_ok=false;
 	if(diagnostic_stream_timing)
 	{
@@ -248,9 +253,19 @@ static void diagnostic_finish_file(void)
 		 * writer (or failed-init cleanup with no writer) exclusively owns I/O. */
 		pthread_mutex_unlock(&diagnostic_write_mutex);
 #endif
-		for(unsigned i=0;i<tail_count;i++)
-			if(fputs(diagnostic_tail[(tail_head+i)%TAIL_CAPACITY],diagnostic_file)<0) io_ok=false;
-		if(fprintf(diagnostic_file,"sink budget_dropped=%lu limit_bytes=%u\n",budget_dropped,PLUS_VITA_DIAGNOSTIC_MAX_BYTES)<0) io_ok=false;
+		for(unsigned i=0;i<tail_count;i++) {
+#if PLUS_VITA_DEFERRED_LOG
+			uint64_t started=plus_vita_latency_now_us();
+#endif
+			bool written=fputs(diagnostic_tail[(tail_head+i)%TAIL_CAPACITY],diagnostic_file)>=0 && fflush(diagnostic_file)==0;
+			if(!written) io_ok=false;
+#if PLUS_VITA_DEFERRED_LOG
+			if(written) persisted++;
+			plus_vita_latency_span(&persistence_call,started,plus_vita_latency_now_us());
+#endif
+		}
+		if(fprintf(diagnostic_file,"sink budget_dropped=%lu tail_retained=%u tail_evicted=%lu limit_bytes=%u\n",
+			budget_dropped,tail_count,tail_evicted,PLUS_VITA_DIAGNOSTIC_MAX_BYTES)<0) io_ok=false;
 #if PLUS_VITA_DEFERRED_LOG
 		if(fprintf(diagnostic_file, "sink deferred regular_dropped=%lu critical_dropped=%lu truncated=%lu drain_dropped=%lu persisted=%lu io_ok=%d enqueue_count=%llu enqueue_total_us=%llu enqueue_max_us=%llu persistence_count=%llu persistence_total_us=%llu persistence_max_us=%llu\n",
 			regular_dropped, critical_dropped, truncated, drain_dropped, persisted, io_ok,
@@ -322,7 +337,7 @@ bool plus_vita_diagnostic_begin(void)
 #endif
 	diagnostic_sequence = 0;
 	diagnostic_started_us = plus_vita_latency_now_us();
-	file_bytes=256; tail_head=tail_count=0; budget_dropped=0;
+	file_bytes=256; tail_head=tail_count=0; budget_dropped=tail_evicted=0;
 	diagnostic_stream_timing = false;
 #if PLUS_VITA_DEFERRED_LOG
 	regular_queue = (DiagnosticQueue){ .records = regular_records, .capacity = REGULAR_CAPACITY };

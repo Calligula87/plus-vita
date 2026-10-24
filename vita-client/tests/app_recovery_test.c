@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "play_vita.h"
+#include "ui_flow.h"
 #include "recovery_vita.h"
 #include "request_cancel.h"
 #include "diagnostic_log.h"
@@ -84,6 +85,18 @@ static void wait_ready(PlusVitaPlay *play)
 }
 int main(void)
 {
+	/* Match the real adapter order: input, recovery poll, pending local effect,
+	 * then its completion. Offline state must not prevent opening setup. */
+	PlusVitaApp *offline=plus_vita_app_create();assert(offline);
+	PlusVitaUiFlow flow={.app=offline};
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_ACTIVATE},0);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_INTERRUPTED,
+		.status=PLUS_VITA_RESULT_NETWORK_ERROR},0);
+	PlusVitaAppEffect setup=plus_vita_ui_flow_take(&flow);
+	assert(setup.kind==PLUS_VITA_EFFECT_PREPARE_SETUP);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_SETUP_READY,.operation=setup.operation},0);
+	assert(plus_vita_app_view(offline).screen==PLUS_VITA_APP_SETUP_GUIDE);
+	plus_vita_app_destroy(offline);
 	assert(plus_vita_recovery_init());
 	assert(plus_vita_recovery_poll()==PLUS_VITA_RECOVERY_NONE);
 	flags=SCE_POWER_CB_SYSTEM_RESUME;
