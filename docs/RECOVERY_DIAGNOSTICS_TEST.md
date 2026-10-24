@@ -15,6 +15,9 @@ beta and has not passed #22 or #23.
 2. Cancel startup authorization/catalogue loading and allocation with Circle.
    Keep browsing while the worker closes; no late completion may start Play.
    Explicitly try again after cleanup. Each actual Play starts a fresh allocation.
+   With Wi-Fi already disconnected, the local setup guide must remain usable.
+   Explicit Play or account Retry must replace the old log even when the new
+   attempt fails immediately offline; busy predecessor cleanup retains ownership.
 3. Compare normal play, picture, sound, mappings/releases and response with the
    stable VPK. Stop with the two-second START+SELECT chord; verify a restored
    catalogue and another successful Play. Numerical input response is unmeasured.

@@ -5,6 +5,7 @@
 #include "font_vita.h"
 #include "ui_flow.h"
 #include "play_vita.h"
+#include "attempt_log.h"
 #if PLUS_VITA_FONT_COMPARISON
 #include "comparison_capture.h"
 #endif
@@ -205,6 +206,11 @@ int plus_vita_app_run(void)
 	uint64_t previous_poll = 0, last_report = plus_vita_latency_now_us();
 	while(plus_vita_app_view(app).screen != PLUS_VITA_APP_CLOSED)
 	{
+		bool workers_idle=plus_vita_account_idle(account) && !plus_vita_play_busy(play);
+		if(plus_vita_attempt_log_prepare(&flow,workers_idle)) {
+			log_available=plus_vita_diagnostic_persistence_ok();
+			reported_screen=PLUS_VITA_APP_CLOSED;
+		}
 		PlusVitaAppView current=plus_vita_app_view(app);
 		if(current.screen!=reported_screen) {
 			plus_vita_diagnostic_event("ui.stage",(int)current.screen);
@@ -217,6 +223,7 @@ int plus_vita_app_run(void)
 			plus_vita_diagnostic_event(interruption==PLUS_VITA_RECOVERY_SLEEP ? "recovery.sleep" : "recovery.wifi",0);
 			handle_input(&flow,account,play,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_INTERRUPTED,
 				.status=interruption==PLUS_VITA_RECOVERY_SLEEP ? PLUS_VITA_RESULT_SLEEP : PLUS_VITA_RESULT_NETWORK_ERROR});
+			if(flow.cancel_account && workers_idle) plus_vita_diagnostic_ui_end();
 			plus_vita_recovery_acknowledge();
 			current=plus_vita_app_view(app);
 		}
@@ -312,12 +319,6 @@ int plus_vita_app_run(void)
 							.operation=effect.operation,.status=PLUS_VITA_RESULT_BUSY},0);
 					else {
 						plus_vita_recovery_acknowledge();
-						/* Keep the previous attempt until an explicit new Play. */
-						plus_vita_diagnostic_ui_flush();
-						plus_vita_diagnostic_ui_begin();
-						log_available=plus_vita_diagnostic_persistence_ok();
-						plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_LOG_STATUS,.log_available=log_available},0);
-						reported_screen=PLUS_VITA_APP_CLOSED;
 						reported_play_stage=0;
 						if(!network_ready || !curl_ready || !recovery_ready || !plus_vita_play_start(play,&effect)) {
 							plus_vita_diagnostic_event("allocation.complete",(int)CHIAKI_ERR_NETWORK);
@@ -326,16 +327,6 @@ int plus_vita_app_run(void)
 							plus_vita_diagnostic_ui_end();
 						}
 					}
-				}
-				else if(effect.fresh_attempt && plus_vita_account_idle(account) && !plus_vita_play_busy(play)) {
-					plus_vita_recovery_acknowledge();
-					plus_vita_diagnostic_ui_begin();
-					log_available=plus_vita_diagnostic_persistence_ok();
-					plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_LOG_STATUS,.log_available=log_available},0);
-					reported_screen=PLUS_VITA_APP_CLOSED;
-					if(!plus_vita_account_start(account,&effect))
-						plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_AUTHORIZED,
-							.operation=effect.operation,.status=PLUS_VITA_RESULT_BUSY},0);
 				}
 				else if((!storage_effect(effect.kind) && plus_vita_play_busy(play))
 					|| !plus_vita_account_start(storage_effect(effect.kind) ? storage : account, &effect))

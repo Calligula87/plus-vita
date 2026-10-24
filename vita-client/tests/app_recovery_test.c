@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "play_vita.h"
 #include "ui_flow.h"
+#include "attempt_log.h"
 #include "recovery_vita.h"
 #include "request_cancel.h"
 #include "diagnostic_log.h"
@@ -31,9 +32,6 @@ int scePowerRegisterCallback(int id) { (void)id;return 0; }
 int scePowerUnregisterCallback(int id) { (void)id;return 0; }
 bool scePowerIsSuspendRequired(void) { return false; }
 int sceNetCtlInetGetState(int *state) { *state=net_state;return 0; }
-void plus_vita_diagnostic_event(const char *event,int code) { (void)event;(void)code; }
-void plus_vita_diagnostic_chiaki_log(ChiakiLogLevel level,const char *message,void *user)
-{ (void)level;(void)message;(void)user; }
 ChiakiErrorCode chiaki_holepunch_generate_client_device_uid(char *buf,size_t *size)
 { assert(*size>=10);strcpy(buf,"synthetic");*size=9;return CHIAKI_ERR_SUCCESS; }
 ChiakiErrorCode cc_http_make_cookie_header(char **out,const char *name,const char *value)
@@ -83,8 +81,45 @@ static void wait_ready(PlusVitaPlay *play)
 	}
 	assert(plus_vita_play_ready(play));
 }
+
+static void offline_attempt_log(bool retry)
+{
+	assert(plus_vita_diagnostic_ui_begin());
+	plus_vita_diagnostic_event("recovery.sleep",0);
+	plus_vita_diagnostic_ui_end();
+	PlusVitaApp *app;
+	if(!retry) app=connected_app();
+	else {
+		app=plus_vita_app_create();assert(app);
+		PlusVitaAppEffect load=plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_START});
+		const char json[]="{\"npsso\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}";
+		PlusVitaAppEffect auth=plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_ACCOUNT_LOADED,
+			.operation=load.operation,.data=json,.data_size=sizeof(json)-1});
+		plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_AUTHORIZED,
+			.operation=auth.operation,.status=PLUS_VITA_RESULT_NETWORK_ERROR});
+	}
+	PlusVitaUiFlow flow={.app=app};
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_ACTIVATE},0);
+	assert(!plus_vita_attempt_log_prepare(&flow,false)); /* Earlier worker still owns output. */
+	assert(plus_vita_attempt_log_prepare(&flow,true));
+	assert(!plus_vita_attempt_log_prepare(&flow,true)); /* Exactly once for this action. */
+	plus_vita_diagnostic_event("recovery.wifi",0);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_INTERRUPTED,.status=PLUS_VITA_RESULT_NETWORK_ERROR},0);
+	assert(plus_vita_ui_flow_take(&flow).kind==PLUS_VITA_EFFECT_NONE);
+	plus_vita_diagnostic_ui_end();
+	FILE *file=fopen("plus-vita-allocation.log","rb");assert(file);
+	char line[2048];bool first=false,failed=false;
+	while(fgets(line,sizeof(line),file)) {
+		assert(!strstr(line,"recovery.sleep"));
+		if(strstr(line,"000001 elapsed_ms=") && strstr(line,"BUILD")) first=true;
+		if(strstr(line,"recovery.wifi")) failed=true;
+	}
+	fclose(file);assert(first && failed);plus_vita_app_destroy(app);
+}
 int main(void)
 {
+	offline_attempt_log(false);
+	offline_attempt_log(true);
 	/* Match the real adapter order: input, recovery poll, pending local effect,
 	 * then its completion. Offline state must not prevent opening setup. */
 	PlusVitaApp *offline=plus_vita_app_create();assert(offline);
