@@ -1,5 +1,9 @@
 # Playable milestone before release
 
+The later [stable graphical Vita test baseline](STABLE_GRAPHICAL_BASELINE.md)
+records the accepted UI and Play VPK. This document preserves the earlier
+stream-only rollback baseline.
+
 2026-10-16. The maintainer accepts the latest tested combined VPK as playable
 and closes the first input/logging improvement phase. This package is the
 working baseline for release preparation. It has not been published as a
