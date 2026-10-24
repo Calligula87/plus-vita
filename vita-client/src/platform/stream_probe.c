@@ -2190,8 +2190,8 @@ done:
 	return err;
 }
 
-ChiakiErrorCode plus_vita_stream_probe(const ChiakiCloudProvisionResult *provision,
-	ChiakiLog *log, bool *user_stopped)
+ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResult *provision,
+	ChiakiLog *log, bool *user_stopped, bool (*connect_pump)(void *), void *pump_user)
 {
 	if(user_stopped) *user_stopped = false;
 	if(PLUS_VITA_STREAM_PROBE_REPLAY) return probe_replay(log);
@@ -2265,12 +2265,24 @@ ChiakiErrorCode plus_vita_stream_probe(const ChiakiCloudProvisionResult *provisi
 	if(err != CHIAKI_ERR_SUCCESS)
 		goto done_ecdh;
 	chiaki_mutex_lock(&probe.mutex);
+	uint64_t connect_started = sceKernelGetProcessTimeWide();
 	while(probe.state == PROBE_CONNECTING)
 	{
-		err = chiaki_cond_timedwait(&probe.cond, &probe.mutex,
-			PROBE_TIMEOUT_MS);
-		if(err != CHIAKI_ERR_SUCCESS)
-			break;
+		if(connect_pump)
+		{
+			chiaki_mutex_unlock(&probe.mutex);
+			bool keep_connecting = connect_pump(pump_user);
+			chiaki_mutex_lock(&probe.mutex);
+			if(!keep_connecting) { err = CHIAKI_ERR_CANCELED; break; }
+		}
+		uint64_t elapsed_ms = (sceKernelGetProcessTimeWide() - connect_started) / 1000u;
+		if(elapsed_ms >= PROBE_TIMEOUT_MS) { err = CHIAKI_ERR_TIMEOUT; break; }
+		uint64_t remaining_ms = PROBE_TIMEOUT_MS - elapsed_ms;
+		uint64_t wait_ms = connect_pump && remaining_ms > 100u ? 100u : remaining_ms;
+		err = chiaki_cond_timedwait(&probe.cond, &probe.mutex, wait_ms);
+		if(err != CHIAKI_ERR_SUCCESS && err != CHIAKI_ERR_TIMEOUT) break;
+		if(err == CHIAKI_ERR_TIMEOUT && connect_pump) err = CHIAKI_ERR_SUCCESS;
+		else if(err == CHIAKI_ERR_TIMEOUT) break;
 	}
 	if(err == CHIAKI_ERR_SUCCESS && probe.state == PROBE_EXPECT_BANG)
 	{
@@ -2338,4 +2350,10 @@ done_mutex:
 done_key:
 	memset(probe.handshake_key, 0, sizeof(probe.handshake_key));
 	return err;
+}
+
+ChiakiErrorCode plus_vita_stream_probe(const ChiakiCloudProvisionResult *provision,
+	ChiakiLog *log, bool *user_stopped)
+{
+	return plus_vita_stream_probe_with_pump(provision, log, user_stopped, NULL, NULL);
 }

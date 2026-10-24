@@ -23,5 +23,9 @@
 
 ChiakiErrorCode plus_vita_stream_probe(const ChiakiCloudProvisionResult *provision,
 	ChiakiLog *log, bool *user_stopped);
+/* The optional UI pump runs on the caller's thread while Takion connects.
+ * Return false to cancel before video presentation takes over the display. */
+ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResult *provision,
+	ChiakiLog *log, bool *user_stopped, bool (*connect_pump)(void *), void *pump_user);
 
 #endif

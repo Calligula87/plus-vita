@@ -148,6 +148,16 @@ static PlusVitaAppEventKind completion(PlusVitaAppEffectKind kind)
 	}
 }
 
+/* Keep Circle responsive while the cloud transport is connecting. The stream
+ * takes over the display and input only after this stage has completed. */
+static bool play_connect_pump(void *user)
+{
+	(void)user;
+	SceCtrlData pad={0};
+	return sceCtrlPeekBufferPositive(0,&pad,1) <= 0
+		|| !(pad.buttons & SCE_CTRL_CIRCLE);
+}
+
 int plus_vita_app_run(void)
 {
 	bool log_available = plus_vita_diagnostic_ui_begin();
@@ -326,12 +336,14 @@ int plus_vita_app_run(void)
 					chiaki_log_init(&stream_log,CHIAKI_LOG_INFO | CHIAKI_LOG_WARNING | CHIAKI_LOG_ERROR,
 						plus_vita_diagnostic_chiaki_log,NULL);
 					plus_vita_diagnostic_event("stream_probe.begin",0);
-					stream_error=plus_vita_stream_probe(&provision,&stream_log,&user_stopped);
+					stream_error=plus_vita_stream_probe_with_pump(&provision,&stream_log,
+						&user_stopped,play_connect_pump,NULL);
 					plus_vita_diagnostic_event("stream_probe.complete",(int)stream_error);
 				}
 				plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
 					.operation=operation,.status=stream_error==CHIAKI_ERR_SUCCESS
-						? PLUS_VITA_RESULT_OK : PLUS_VITA_RESULT_NETWORK_ERROR},0);
+						? PLUS_VITA_RESULT_OK : stream_error==CHIAKI_ERR_CANCELED
+						? PLUS_VITA_RESULT_CANCELLED : PLUS_VITA_RESULT_NETWORK_ERROR},0);
 				SceCtrlData released={0};
 				sceCtrlPeekBufferPositive(0,&released,1);
 				plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PAD_RESET,
