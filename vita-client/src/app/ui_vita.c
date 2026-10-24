@@ -17,6 +17,7 @@
 #include "../platform/latency_clock.h"
 #include "../platform/network.h"
 #include "../platform/request_cancel.h"
+#include "../platform/recovery_vita.h"
 #include "../platform/stream_probe.h"
 #include <curl/curl.h>
 #include <psp2/sysmodule.h>
@@ -154,13 +155,15 @@ static bool play_connect_pump(void *user)
 {
 	(void)user;
 	SceCtrlData pad={0};
+	if(plus_vita_recovery_poll()!=PLUS_VITA_RECOVERY_NONE) return false;
 	return sceCtrlPeekBufferPositive(0,&pad,1) <= 0
 		|| !(pad.buttons & SCE_CTRL_CIRCLE);
 }
 
 int plus_vita_app_run(void)
 {
-	bool log_available = plus_vita_diagnostic_ui_begin();
+	plus_vita_diagnostic_ui_begin();
+	bool log_available = plus_vita_diagnostic_persistence_ok();
 	UiDisplay *display = calloc(1, sizeof(*display));
 	PlusVitaApp *app = plus_vita_app_create();
 	PlusVitaAccount *account = plus_vita_account_create();
@@ -176,6 +179,7 @@ int plus_vita_app_run(void)
 	bool network_owned = !plus_vita_network_is_initialized();
 	bool network_ready = plus_vita_network_init() == CHIAKI_ERR_SUCCESS;
 	bool curl_ready = network_ready && curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK;
+	bool recovery_ready = plus_vita_recovery_init();
 	if(curl_ready) covers = plus_vita_covers_create();
 	SceCtrlPadInputMode previous_mode = SCE_CTRL_MODE_DIGITAL;
 	bool restore_mode = sceCtrlGetSamplingMode(&previous_mode) == 0;
@@ -194,6 +198,7 @@ int plus_vita_app_run(void)
 	uint64_t artwork_epoch = UINT64_MAX;
 	unsigned reported_play_stage=0;
 	bool metadata_reported=false;
+	PlusVitaAppScreen reported_screen=PLUS_VITA_APP_CLOSED;
 	plus_vita_ui_flow_event(&flow, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START,
 		.log_available = log_available }, 0);
 	int result = 0;
@@ -201,6 +206,18 @@ int plus_vita_app_run(void)
 	while(plus_vita_app_view(app).screen != PLUS_VITA_APP_CLOSED)
 	{
 		PlusVitaAppView current=plus_vita_app_view(app);
+		if(current.screen!=reported_screen) {
+			plus_vita_diagnostic_event("ui.stage",(int)current.screen);
+			reported_screen=current.screen;
+		}
+		PlusVitaRecovery interruption=plus_vita_recovery_poll();
+		if(interruption!=PLUS_VITA_RECOVERY_NONE && current.operation) {
+			plus_vita_diagnostic_event(interruption==PLUS_VITA_RECOVERY_SLEEP ? "recovery.sleep" : "recovery.wifi",0);
+			handle_input(&flow,account,play,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_INTERRUPTED,
+				.status=interruption==PLUS_VITA_RECOVERY_SLEEP ? PLUS_VITA_RESULT_SLEEP : PLUS_VITA_RESULT_NETWORK_ERROR});
+			plus_vita_recovery_acknowledge();
+			current=plus_vita_app_view(app);
+		}
 		if(current.account_epoch!=artwork_epoch) {
 			plus_vita_covers_reset(covers); artwork_epoch=current.account_epoch; metadata_reported=false;
 			plus_vita_diagnostic_artwork_metadata(current.artwork_metadata);
@@ -288,20 +305,38 @@ int plus_vita_app_run(void)
 				}
 				else if(effect.kind==PLUS_VITA_EFFECT_PLAY)
 				{
-					if(plus_vita_play_busy(play))
+					if(plus_vita_play_busy(play) || !plus_vita_account_idle(account))
 						plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
 							.operation=effect.operation,.status=PLUS_VITA_RESULT_BUSY},0);
 					else {
+						plus_vita_recovery_acknowledge();
 						/* Keep the previous attempt until an explicit new Play. */
 						plus_vita_diagnostic_ui_flush();
-						log_available=plus_vita_diagnostic_begin();
+						plus_vita_diagnostic_ui_begin();
+						log_available=plus_vita_diagnostic_persistence_ok();
+						plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_LOG_STATUS,.log_available=log_available},0);
+						reported_screen=PLUS_VITA_APP_CLOSED;
 						reported_play_stage=0;
-						if(!network_ready || !curl_ready || !plus_vita_play_start(play,&effect))
+						if(!network_ready || !curl_ready || !recovery_ready || !plus_vita_play_start(play,&effect)) {
+							plus_vita_diagnostic_event("allocation.complete",(int)CHIAKI_ERR_NETWORK);
 							plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
-								.operation=effect.operation,.status=PLUS_VITA_RESULT_NETWORK_ERROR},0);
+								.operation=effect.operation,.status=!recovery_ready ? PLUS_VITA_RESULT_SERVICE_ERROR : PLUS_VITA_RESULT_NETWORK_ERROR},0);
+							plus_vita_diagnostic_ui_end();
+						}
 					}
 				}
-				else if(!plus_vita_account_start(storage_effect(effect.kind) ? storage : account, &effect))
+				else if(effect.fresh_attempt && plus_vita_account_idle(account) && !plus_vita_play_busy(play)) {
+					plus_vita_recovery_acknowledge();
+					plus_vita_diagnostic_ui_begin();
+					log_available=plus_vita_diagnostic_persistence_ok();
+					plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_LOG_STATUS,.log_available=log_available},0);
+					reported_screen=PLUS_VITA_APP_CLOSED;
+					if(!plus_vita_account_start(account,&effect))
+						plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_AUTHORIZED,
+							.operation=effect.operation,.status=PLUS_VITA_RESULT_BUSY},0);
+				}
+				else if((!storage_effect(effect.kind) && plus_vita_play_busy(play))
+					|| !plus_vita_account_start(storage_effect(effect.kind) ? storage : account, &effect))
 				{
 					plus_vita_ui_flow_event(&flow, (PlusVitaAppEvent){
 						.kind = completion(effect.kind), .operation = effect.operation,
@@ -315,6 +350,7 @@ int plus_vita_app_run(void)
 		for(unsigned i = 0; i < 2; i++) {
 			PlusVitaAppEvent service_result;
 			if(plus_vita_account_poll(workers[i], &service_result)) {
+				plus_vita_diagnostic_event("account.complete",(int)service_result.status);
 				plus_vita_ui_flow_event(&flow, service_result, 0);
 				plus_vita_account_release_result(workers[i]);
 				flow.dirty = true;
@@ -340,11 +376,17 @@ int plus_vita_app_run(void)
 						&user_stopped,play_connect_pump,NULL);
 					plus_vita_diagnostic_event("stream_probe.complete",(int)stream_error);
 				}
-				plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
+				PlusVitaRecovery stopped=plus_vita_recovery_poll();
+				if(stopped!=PLUS_VITA_RECOVERY_NONE) {
+					plus_vita_diagnostic_event(stopped==PLUS_VITA_RECOVERY_SLEEP ? "recovery.sleep" : "recovery.wifi",0);
+					plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_INTERRUPTED,
+						.status=stopped==PLUS_VITA_RECOVERY_SLEEP ? PLUS_VITA_RESULT_SLEEP : PLUS_VITA_RESULT_NETWORK_ERROR},0);
+					plus_vita_recovery_acknowledge();
+				} else plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
 					.operation=operation,.status=stream_error==CHIAKI_ERR_SUCCESS && user_stopped
 						? PLUS_VITA_RESULT_OK : stream_error==CHIAKI_ERR_CANCELED
 						? PLUS_VITA_RESULT_CANCELLED : allocation_error!=CHIAKI_ERR_SUCCESS
-						? PLUS_VITA_RESULT_NETWORK_ERROR : PLUS_VITA_RESULT_STREAM_STOPPED},0);
+						? plus_vita_play_failure(allocation_error,&provision) : PLUS_VITA_RESULT_STREAM_STOPPED},0);
 				SceCtrlData released={0};
 				sceCtrlPeekBufferPositive(0,&released,1);
 				plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PAD_RESET,
@@ -353,6 +395,9 @@ int plus_vita_app_run(void)
 				previous_poll=flow.input_since=0;
 				flow.dirty=true;
 			}
+			/* Complete/cancelled attempts stay readable on disk while browsing.
+			 * No old allocation worker remains to produce into the next log. */
+			plus_vita_diagnostic_ui_end();
 			plus_vita_play_result_clear(&provision);
 		} else if(play && plus_vita_app_view(app).operation) {
 			unsigned stage=plus_vita_play_stage(play);
@@ -365,7 +410,7 @@ int plus_vita_app_run(void)
 		uint64_t now = plus_vita_latency_now_us();
 		if(now >= last_report && now-last_report >= 1000000u) {
 			plus_vita_diagnostic_ui_flush(); last_report = now;
-			bool current_log = log_available && plus_vita_diagnostic_persistence_ok();
+			bool current_log = plus_vita_diagnostic_persistence_ok();
 			if(current_log != log_available) {
 				log_available = current_log;
 				plus_vita_ui_flow_event(&flow, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_LOG_STATUS,
@@ -386,6 +431,7 @@ int plus_vita_app_run(void)
 		if(network_ready && network_owned) plus_vita_network_fini();
 	} /* A live cancelled worker retains its resources until process exit. */
 	plus_vita_app_destroy(app);
+	if(recovery_ready) plus_vita_recovery_fini();
 	if(display_close(display)) free(display);
 	plus_vita_diagnostic_ui_end();
 	/* On failed scanout restoration leave its buffers alive until process exit. */

@@ -19,3 +19,7 @@ no file or network writes.
 Diagnostic persistence is deliberately absent. Any future export feature must
 apply the same runtime allowlist and require an explicit user action.
 
+The native Vita app has a separate bounded persisted-log contract in
+[NATIVE_DIAGNOSTICS.md](NATIVE_DIAGNOSTICS.md). It does not change this desktop
+reference recorder's memory-only policy.
+

@@ -39,7 +39,7 @@ int main(void)
 	while(fgets(line, sizeof(line), file))
 	{
 		assert(!strstr(line, "fake-test-only"));
-		if(strstr(line, "sensitive diagnostic entry omitted")) redacted = true;
+		if(strstr(line, "library.info")) redacted = true;
 	}
 	fclose(file);
 	assert(redacted);

@@ -13,6 +13,8 @@ on:
       - "tools/test-app-text.sh"
       - "tools/test-app-font.sh"
       - "tools/test-app-catalogue.sh"
+      - "tools/test-app-recovery.sh"
+      - "tools/test-deferred-log.sh"
       - "tools/test-app-covers.sh"
       - "tools/test-app-freetype.sh"
   pull_request:
@@ -27,6 +29,8 @@ on:
       - "tools/test-app-text.sh"
       - "tools/test-app-font.sh"
       - "tools/test-app-catalogue.sh"
+      - "tools/test-app-recovery.sh"
+      - "tools/test-deferred-log.sh"
       - "tools/test-app-covers.sh"
       - "tools/test-app-freetype.sh"
   workflow_dispatch:
@@ -48,6 +52,10 @@ jobs:
         run: sh tools/test-app-account-integration.sh
       - name: Test catalogue search and details
         run: sh tools/test-app-catalogue.sh
+      - name: Test allocation cancellation and recovery
+        run: sh tools/test-app-recovery.sh
+      - name: Test privacy schema and bounded deferred persistence
+        run: sh tools/test-deferred-log.sh
       - name: Test bounded asynchronous artwork and HTTP policy
         run: sh tools/test-app-covers.sh
       - name: Test real FreeType output and synthetic comparison journey

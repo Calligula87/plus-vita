@@ -84,6 +84,42 @@ int main(void) {
  plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_SEARCH_ENTERED,.operation=search.operation,.data=unicode,.data_size=sizeof(unicode)-1});
  choose(app,PLUS_VITA_ACTION_GAME); view=plus_vita_app_view(app);
  assert(view.screen==PLUS_VITA_APP_DETAILS && view.actions[0].id==PLUS_VITA_ACTION_DISABLED);
+ plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK});
+ search=choose(app,PLUS_VITA_ACTION_SEARCH);
+ plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_SEARCH_ENTERED,
+  .operation=search.operation,.data="GOD",.data_size=3});
+ /* A confirmed rejection during Play retires the active account and prevents
+  * a delayed successful callback from starting another session. */
+ choose(app,PLUS_VITA_ACTION_GAME);
+ const PlusVitaAppResult interrupted[]={PLUS_VITA_RESULT_SLEEP,PLUS_VITA_RESULT_NETWORK_ERROR};
+ for(unsigned i=0;i<2;i++) {
+  play=choose(app,PLUS_VITA_ACTION_PLAY);
+  PlusVitaAppEffect stopped=plus_vita_app_dispatch(app,(PlusVitaAppEvent){
+   .kind=PLUS_VITA_EVENT_INTERRUPTED,.status=interrupted[i]});
+  assert(stopped.kind==PLUS_VITA_EFFECT_NONE);
+  view=plus_vita_app_view(app);
+  assert(view.screen==PLUS_VITA_APP_STREAM_STOPPED && !view.operation && view.account_connected);
+  assert(strstr(view.body,i ? "Wi-Fi" : "sleep"));
+  plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
+   .operation=play.operation,.status=PLUS_VITA_RESULT_OK});
+  assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_STREAM_STOPPED);
+  PlusVitaAppEffect retry=choose(app,PLUS_VITA_ACTION_PLAY);
+  assert(retry.kind==PLUS_VITA_EFFECT_PLAY && retry.operation!=play.operation);
+  plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
+   .operation=retry.operation,.status=PLUS_VITA_RESULT_SERVICE_ERROR});
+  assert(strstr(plus_vita_app_view(app).body,"service"));
+ }
+ play=choose(app,PLUS_VITA_ACTION_PLAY);
+ PlusVitaAppEffect cleanup=plus_vita_app_dispatch(app,(PlusVitaAppEvent){
+  .kind=PLUS_VITA_EVENT_PLAY_ENDED,.operation=play.operation,.status=PLUS_VITA_RESULT_REJECTED});
+ assert(cleanup.kind==PLUS_VITA_EFFECT_DELETE_ACCOUNT);
+ assert(!plus_vita_app_view(app).account_connected);
+ plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
+  .operation=play.operation,.status=PLUS_VITA_RESULT_OK});
+ assert(plus_vita_app_view(app).operation==cleanup.operation);
+ plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_ACCOUNT_DELETED,
+  .operation=cleanup.operation,.status=PLUS_VITA_RESULT_OK,.restore_blocked=true});
+ assert(strstr(plus_vita_app_view(app).body,"sign-in"));
  plus_vita_app_destroy(app);
  puts("catalogue: search, details, graphical Play progress/return/cancel and missing metadata passed");
 }

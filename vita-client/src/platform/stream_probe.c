@@ -10,6 +10,7 @@
 #include "diagnostic_log.h"
 #include "feedback_latency.h"
 #include "input_vita.h"
+#include "recovery_vita.h"
 #include <psp2/ctrl.h>
 #include <psp2/touch.h>
 #include <psp2/kernel/processmgr.h>
@@ -196,6 +197,7 @@ typedef struct plus_vita_stream_probe_t
 static void probe_latency_log(ChiakiLog *log, const char *name,
 	const PlusVitaLatencyStats *stats)
 {
+	plus_vita_diagnostic_metric(name,stats);
 	CHIAKI_LOGI(log,
 		"Stream probe latency metric=%s count=%llu mean_us=%llu p50_upper_us=%llu p95_upper_us=%llu p99_upper_us=%llu max_us=%llu invalid=%llu",
 		name, (unsigned long long)stats->count,
@@ -211,6 +213,12 @@ static void probe_latency_log(ChiakiLog *log, const char *name,
 static void probe_latency_dump(PlusVitaStreamProbe *probe)
 {
 	ProbeLatency *p = &probe->latency;
+	plus_vita_diagnostic_counter("input_poll_failures",p->input_poll_failures);
+	plus_vita_diagnostic_counter("feedback_published",p->feedback.published);
+	plus_vita_diagnostic_counter("feedback_consumed",p->feedback.consumed);
+	plus_vita_diagnostic_counter("feedback_coalesced",p->feedback.coalesced);
+	plus_vita_diagnostic_counter("feedback_send_failures",p->feedback.send_failures);
+	plus_vita_diagnostic_counter("feedback_logs_suppressed",p->feedback.suppressed_sender_logs);
 	CHIAKI_LOGI(probe->log,
 		"Stream probe latency summary: version=1 mode=" PLUS_VITA_STREAM_PROBE_MODE " poll_failures=%llu published=%llu consumed=%llu coalesced=%llu send_failures=%llu units=us percentiles=bucket-upper local-only=1",
 		(unsigned long long)p->input_poll_failures,
@@ -1583,6 +1591,10 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 	plus_vita_diagnostic_stream_timing_begin();
 	while(err == CHIAKI_ERR_SUCCESS)
 	{
+		if(plus_vita_recovery_poll() != PLUS_VITA_RECOVERY_NONE) {
+			err = CHIAKI_ERR_CANCELED;
+			break;
+		}
 		uint64_t now = sceKernelGetProcessTimeWide() / 1000u;
 		if(probe->state == PROBE_EXPECT_MEDIA)
 		{
@@ -1941,7 +1953,18 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 	}
 	plus_vita_diagnostic_stream_timing_end(&probe->latency.log_write_call,
 		&probe->latency.log_mutex_wait);
+	plus_vita_diagnostic_counter("displayed",displayed);
+	plus_vita_diagnostic_counter("submitted",probe->video_decode_attempts);
+	plus_vita_diagnostic_counter("audio_frames",probe->audio_frames);
+	plus_vita_diagnostic_counter("fec_repaired",probe->fec_repaired_frames);
+	plus_vita_diagnostic_counter("fec_failed",probe->fec_failed);
+	plus_vita_diagnostic_counter("reorder_late",probe->reorder_late_packets);
+	plus_vita_diagnostic_counter("reorder_missing",probe->reorder_missing_frames);
+	plus_vita_diagnostic_counter("recovery_episodes",probe->recovery_count);
 #if PLUS_VITA_INPUT_WORKER
+	plus_vita_diagnostic_counter("input_updates",input_stats.updates);
+	plus_vita_diagnostic_counter("input_neutral_consumed",input_stats.neutral_consumed ? 1 : 0);
+	plus_vita_diagnostic_counter("input_neutral_failed",input_stats.neutral_result!=CHIAKI_ERR_SUCCESS ? 1 : 0);
 	CHIAKI_LOGI(probe->log,
 		"Stream probe independent input summary: period_us=%u updates=%llu poll_failures=%llu missed_deadlines=%llu native_changes=%llu native_repeats=%llu neutral_result=%d neutral_consumed=%d",
 		PLUS_VITA_INPUT_PERIOD_US, (unsigned long long)input_stats.updates,
@@ -2268,6 +2291,9 @@ ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResul
 	uint64_t connect_started = sceKernelGetProcessTimeWide();
 	while(probe.state == PROBE_CONNECTING)
 	{
+		if(plus_vita_recovery_poll() != PLUS_VITA_RECOVERY_NONE) {
+			err = CHIAKI_ERR_CANCELED; break;
+		}
 		if(connect_pump)
 		{
 			chiaki_mutex_unlock(&probe.mutex);

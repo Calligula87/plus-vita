@@ -1,5 +1,6 @@
 #include "diagnostic_log.h"
 #include "latency_clock.h"
+#include "build_identity.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -27,6 +28,32 @@ static pthread_mutex_t diagnostic_lifecycle_mutex = PTHREAD_MUTEX_INITIALIZER;
 static bool diagnostic_stream_timing;
 static PlusVitaLatencyStats diagnostic_write_call, diagnostic_mutex_wait;
 static bool diagnostic_io_ok;
+static uint64_t diagnostic_started_us;
+#define RECORD_SIZE 1024u
+#define TAIL_CAPACITY 64u
+#define BODY_LIMIT (PLUS_VITA_DIAGNOSTIC_MAX_BYTES - (TAIL_CAPACITY + 2u) * RECORD_SIZE)
+static char diagnostic_tail[TAIL_CAPACITY][RECORD_SIZE];
+static unsigned tail_head, tail_count;
+static size_t file_bytes;
+static unsigned long budget_dropped;
+
+/* Writer-owned, or called under the write mutex in the synchronous profile.
+ * Keep the newest terminal/error records after the body quota is exhausted. */
+static bool persist_record(const char *line, bool critical)
+{
+	size_t length = strlen(line);
+	if(file_bytes + length > BODY_LIMIT) {
+		budget_dropped++;
+		if(critical) {
+			if(tail_count == TAIL_CAPACITY) { tail_head=(tail_head+1)%TAIL_CAPACITY; tail_count--; }
+			memcpy(diagnostic_tail[(tail_head+tail_count)%TAIL_CAPACITY],line,length+1);
+			tail_count++;
+		}
+		return true;
+	}
+	file_bytes += length;
+	return fputs(line,diagnostic_file)>=0 && fflush(diagnostic_file)==0;
+}
 #if PLUS_VITA_INPUT_WORKER
 static pthread_mutex_t feedback_log_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t feedback_log_thread;
@@ -63,10 +90,9 @@ static bool feedback_diagnostic_suppressed(void)
 
 #if PLUS_VITA_DEFERRED_LOG
 #define REGULAR_CAPACITY 128u
-#define CRITICAL_CAPACITY 32u
-#define RECORD_SIZE 1024u
+#define CRITICAL_CAPACITY 64u
 #define DRAIN_BUDGET_US 2000000u
-typedef struct { unsigned long sequence; char line[RECORD_SIZE]; } DiagnosticRecord;
+typedef struct { unsigned long sequence; bool critical; char line[RECORD_SIZE]; } DiagnosticRecord;
 typedef struct {
 	DiagnosticRecord *records;
 	unsigned head, count, capacity;
@@ -76,6 +102,7 @@ static DiagnosticQueue regular_queue, critical_queue;
 static pthread_cond_t diagnostic_pending = PTHREAD_COND_INITIALIZER;
 static pthread_t diagnostic_thread;
 static bool diagnostic_accepting, diagnostic_stopping, diagnostic_thread_started, diagnostic_thread_finished;
+static bool diagnostic_timed_out;
 static uint64_t diagnostic_drain_deadline;
 static unsigned long regular_dropped, critical_dropped, truncated, drain_dropped, persisted;
 static PlusVitaLatencyStats enqueue_call, persistence_call;
@@ -84,14 +111,22 @@ static void diagnostic_finish_file(void);
 static bool critical_record(const char *kind, const char *message, int code)
 {
 	return strcmp(kind, "EVENT") == 0 || strcmp(kind, "STAGE") == 0
+		|| strcmp(kind,"METRIC")==0 || strcmp(kind,"COUNTER")==0 || strcmp(kind,"BUILD")==0
 		|| (strcmp(kind, "LIB") == 0 && (code & (CHIAKI_LOG_ERROR | CHIAKI_LOG_WARNING)))
-		|| strstr(message, "summary") || strstr(message, " final")
-		|| strstr(message, "latency ") || strstr(message, "sensitive diagnostic");
+		|| strncmp(message,"final",5)==0;
 }
 
 static void *diagnostic_writer(void *unused)
 {
 	(void)unused;
+	/* Storage can stall even during open/header writes. The UI publishes only
+	 * this bounded worker; all device I/O belongs to it. */
+	FILE *opened=fopen(PLUS_VITA_DIAGNOSTIC_PATH,"w");
+	bool storage_ok=opened && fputs("plus-vita structured diagnostic v2\n",opened)>=0 && fflush(opened)==0;
+	pthread_mutex_lock(&diagnostic_write_mutex);
+	diagnostic_file=opened;
+	diagnostic_io_ok=storage_ok && !diagnostic_timed_out;
+	pthread_mutex_unlock(&diagnostic_write_mutex);
 	for(;;) {
 		pthread_mutex_lock(&diagnostic_write_mutex);
 		while(!diagnostic_stopping && !regular_queue.count && !critical_queue.count)
@@ -110,8 +145,8 @@ static void *diagnostic_writer(void *unused)
 		q->head = (q->head + 1) % q->capacity; q->count--;
 		pthread_mutex_unlock(&diagnostic_write_mutex);
 		uint64_t started = plus_vita_latency_now_us();
-		bool ok = fputs(record.line, diagnostic_file) >= 0;
-		if(fflush(diagnostic_file) != 0) ok = false;
+		bool ok = storage_ok && persist_record(record.line, record.critical);
+		storage_ok=storage_ok && ok;
 		uint64_t done = plus_vita_latency_now_us();
 		pthread_mutex_lock(&diagnostic_write_mutex);
 		diagnostic_io_ok = diagnostic_io_ok && ok;
@@ -147,65 +182,10 @@ void plus_vita_diagnostic_stream_timing_end(PlusVitaLatencyStats *write_call,
 	pthread_mutex_unlock(&diagnostic_write_mutex);
 }
 
-static bool contains_case_insensitive(const char *text, const char *needle)
-{
-	if(!text || !needle || !*needle)
-		return false;
-	for(const char *start = text; *start; start++)
-	{
-		const char *a = start;
-		const char *b = needle;
-		while(*a && *b)
-		{
-			char ca = *a;
-			char cb = *b;
-			if(ca >= 'A' && ca <= 'Z') ca = (char)(ca - 'A' + 'a');
-			if(cb >= 'A' && cb <= 'Z') cb = (char)(cb - 'A' + 'a');
-			if(ca != cb) break;
-			a++;
-			b++;
-		}
-		if(!*b) return true;
-	}
-	return false;
-}
-
-static bool message_is_sensitive(const char *message)
-{
-	static const char *const forbidden[] = {
-		"npsso", "access_token", "refresh_token", "authorization",
-		"bearer", "session key", "session_key", "cookie", "jsessionid",
-		"launch_spec", "handshake_key"
-	};
-	for(size_t i = 0; i < sizeof(forbidden) / sizeof(forbidden[0]); i++)
-		if(contains_case_insensitive(message, forbidden[i]))
-			return true;
-	return false;
-}
-
-static bool message_is_diagnostic(const char *message)
-{
-	if(!message) return false;
-	return strncmp(message, "Takion ", 7) == 0
-		|| strncmp(message, "Senkusha ", 9) == 0
-		|| strncmp(message, "Stream probe ", 13) == 0
-		|| strncmp(message, "Vita AVC ", 9) == 0
-		|| strncmp(message, "GKCrypt ", 8) == 0
-		|| strncmp(message, "[PING] ", 7) == 0
-		|| strncmp(message, "[CLOUDSESSION] ", 15) == 0
-		|| strncmp(message, "[GAIKAI] ping ", 14) == 0
-		|| strncmp(message, "[GAIKAI] allocate HTTP status=", 30) == 0
-		|| strncmp(message, "[GAIKAI] all datacenter", 25) == 0
-		|| strncmp(message, "[GAIKAI] best datacenter", 25) == 0
-		|| contains_case_insensitive(message, "network error")
-		|| contains_case_insensitive(message, "failed to create")
-		|| contains_case_insensitive(message, "failed to resolve");
-}
-
 static void write_line(const char *kind, const char *message, int code)
 {
 	if(!message) message = "";
-	if(message_is_sensitive(message)) message = "[sensitive diagnostic entry omitted]";
+
 	uint64_t start_us = plus_vita_latency_now_us();
 	pthread_mutex_lock(&diagnostic_write_mutex);
 	uint64_t locked_us = plus_vita_latency_now_us();
@@ -225,8 +205,9 @@ static void write_line(const char *kind, const char *message, int code)
 	}
 	DiagnosticRecord *record = &q->records[(q->head + q->count) % q->capacity];
 	record->sequence = diagnostic_sequence;
-	int length = snprintf(record->line, sizeof(record->line), "%06lu %-8s code=%d %s\n",
-		diagnostic_sequence, kind, code, message);
+	record->critical = q == &critical_queue;
+	int length = snprintf(record->line, sizeof(record->line), "%06lu elapsed_ms=%llu %-8s code=%d %s\n",
+		diagnostic_sequence, (unsigned long long)((start_us-diagnostic_started_us)/1000u), kind, code, message);
 	if(length < 0 || (size_t)length >= sizeof(record->line)) {
 		truncated++;
 		/* Keep every persisted record on a separate line. */
@@ -243,9 +224,10 @@ static void write_line(const char *kind, const char *message, int code)
 		return;
 	}
 	diagnostic_sequence++;
-	if(fprintf(diagnostic_file, "%06lu %-8s code=%d %s\n",
-		diagnostic_sequence, kind, code, message) < 0) diagnostic_io_ok = false;
-	if(fflush(diagnostic_file) != 0) diagnostic_io_ok = false;
+	char line[RECORD_SIZE];
+	snprintf(line,sizeof(line),"%06lu elapsed_ms=%llu %-8s code=%d %s\n",diagnostic_sequence,
+		(unsigned long long)((start_us-diagnostic_started_us)/1000u),kind,code,message);
+	if(!persist_record(line,strcmp(kind,"EVENT")==0 || strstr(message,"final")!=NULL)) diagnostic_io_ok=false;
 	if(diagnostic_stream_timing)
 	{
 		plus_vita_latency_span(&diagnostic_mutex_wait, start_us, locked_us);
@@ -265,6 +247,11 @@ static void diagnostic_finish_file(void)
 		/* Rejected late producers must not wait for shutdown persistence. This
 		 * writer (or failed-init cleanup with no writer) exclusively owns I/O. */
 		pthread_mutex_unlock(&diagnostic_write_mutex);
+#endif
+		for(unsigned i=0;i<tail_count;i++)
+			if(fputs(diagnostic_tail[(tail_head+i)%TAIL_CAPACITY],diagnostic_file)<0) io_ok=false;
+		if(fprintf(diagnostic_file,"sink budget_dropped=%lu limit_bytes=%u\n",budget_dropped,PLUS_VITA_DIAGNOSTIC_MAX_BYTES)<0) io_ok=false;
+#if PLUS_VITA_DEFERRED_LOG
 		if(fprintf(diagnostic_file, "sink deferred regular_dropped=%lu critical_dropped=%lu truncated=%lu drain_dropped=%lu persisted=%lu io_ok=%d enqueue_count=%llu enqueue_total_us=%llu enqueue_max_us=%llu persistence_count=%llu persistence_total_us=%llu persistence_max_us=%llu\n",
 			regular_dropped, critical_dropped, truncated, drain_dropped, persisted, io_ok,
 			(unsigned long long)enqueue_call.count, (unsigned long long)enqueue_call.total_us,
@@ -299,7 +286,7 @@ static bool diagnostic_close(void)
 	while(diagnostic_thread_started && !diagnostic_thread_finished && !wait_error)
 		wait_error = pthread_cond_timedwait(&diagnostic_pending, &diagnostic_write_mutex, &deadline);
 	bool finished = !diagnostic_thread_started || diagnostic_thread_finished;
-	if(!finished) diagnostic_io_ok = false;
+	if(!finished) { diagnostic_io_ok = false; diagnostic_timed_out=true; }
 	pthread_mutex_unlock(&diagnostic_write_mutex);
 	if(!finished) return false;
 	if(diagnostic_thread_started) {
@@ -318,16 +305,25 @@ bool plus_vita_diagnostic_begin(void)
 	if(!diagnostic_close()) {
 		pthread_mutex_unlock(&diagnostic_lifecycle_mutex); return false;
 	}
-	/* Opening/header persistence precedes publication of this session. */
+	/* The deferred writer owns opening as well as subsequent persistence. */
+#if !PLUS_VITA_DEFERRED_LOG
 	FILE *opened = fopen(PLUS_VITA_DIAGNOSTIC_PATH, "w");
 	bool opened_ok = opened != NULL;
 	if(opened && (fputs("plus-vita allocation diagnostic v1\nSecrets and HTTP payloads are intentionally excluded.\n", opened) < 0
 		|| fflush(opened) != 0)) opened_ok = false;
+#endif
 	pthread_mutex_lock(&diagnostic_write_mutex);
+#if PLUS_VITA_DEFERRED_LOG
+	diagnostic_file = NULL;
+	diagnostic_io_ok = false;
+#else
 	diagnostic_file = opened;
-	diagnostic_sequence = 0;
-	diagnostic_stream_timing = false;
 	diagnostic_io_ok = opened_ok;
+#endif
+	diagnostic_sequence = 0;
+	diagnostic_started_us = plus_vita_latency_now_us();
+	file_bytes=256; tail_head=tail_count=0; budget_dropped=0;
+	diagnostic_stream_timing = false;
 #if PLUS_VITA_DEFERRED_LOG
 	regular_queue = (DiagnosticQueue){ .records = regular_records, .capacity = REGULAR_CAPACITY };
 	critical_queue = (DiagnosticQueue){ .records = critical_records, .capacity = CRITICAL_CAPACITY };
@@ -335,33 +331,89 @@ bool plus_vita_diagnostic_begin(void)
 	memset(&enqueue_call, 0, sizeof(enqueue_call));
 	memset(&persistence_call, 0, sizeof(persistence_call));
 	diagnostic_stopping = false;
+	diagnostic_timed_out = false;
 	diagnostic_thread_finished = false;
-	if(diagnostic_io_ok) {
+	{
 		pthread_attr_t attr;
 		bool attr_ready = pthread_attr_init(&attr) == 0;
 		int r = attr_ready ? pthread_attr_setstacksize(&attr, 128 * 1024) : -1;
 		if(!r) r = pthread_create(&diagnostic_thread, &attr, diagnostic_writer, NULL);
 		if(attr_ready) pthread_attr_destroy(&attr);
 		diagnostic_thread_started = r == 0;
-		diagnostic_io_ok = r == 0;
 	}
-	diagnostic_accepting = diagnostic_io_ok;
-#endif
+	diagnostic_accepting = diagnostic_thread_started;
+	bool ready = diagnostic_thread_started;
+#else
 	bool ready = diagnostic_io_ok;
+#endif
 	pthread_mutex_unlock(&diagnostic_write_mutex);
 	if(!ready) diagnostic_close();
 	pthread_mutex_unlock(&diagnostic_lifecycle_mutex);
+	if(ready) write_line("BUILD", "build=" PLUS_VITA_APP_BUILD " profile=" PLUS_VITA_DIAGNOSTIC_PROFILE, 0);
 	return ready;
 }
 
 void plus_vita_diagnostic_event(const char *event, int code)
 {
-	write_line("EVENT", event, code);
+	static const char *const names[]={"allocation.begin","allocation.complete","allocation.stage",
+		"allocation.network.init","allocation.network.release","stream_probe.begin","stream_probe.complete",
+		"replay.begin","replay.complete","recovery.wifi","recovery.sleep","app.start","app.stop",
+		"ui.stage","account.complete"};
+	if(!event) return;
+	for(unsigned i=0;i<sizeof(names)/sizeof(names[0]);i++)
+		if(strncmp(event,names[i],strlen(names[i])+1)==0) {
+			if(!strcmp(names[i],"ui.stage")) code=code>=0 && code<=17 ? code : 0;
+			else if(!strcmp(names[i],"allocation.stage")) code=code>=0 && code<=5 ? code : 0;
+			else code=code>=-1 && code<=21 ? code : -1;
+			write_line("EVENT",names[i],code); return;
+		}
 }
 
 void plus_vita_diagnostic_progress(const char *stage)
 {
-	write_line("STAGE", stage ? stage : "Working", 0);
+	(void)stage;
+	write_line("STAGE", "working", 0);
+}
+
+static const char *known_name(const char *name, const char *const *names, unsigned count)
+{
+	if(!name) return NULL;
+	for(unsigned i=0;i<count;i++)
+		if(strncmp(name,names[i],strlen(names[i])+1)==0) return names[i];
+	return NULL;
+}
+
+void plus_vita_diagnostic_metric(const char *name, const PlusVitaLatencyStats *stats)
+{
+	static const char *const names[]={"input_poll_gap","input_publish_call","main_mutex_wait",
+		"callback_mutex_wait","callback_work","frame_assembly","ready_to_enqueue","queue_wait",
+		"decode_prepare","decode","display_wait","submitted_first_packet_to_present",
+		"submitted_ready_to_present","log_write_call","log_mutex_wait","feedback.sample_to_publish",
+		"feedback.publish_to_wake","feedback.sample_to_state_send","feedback.sample_to_history_send",
+		"feedback.state_send_call","feedback.history_send_call"};
+	const char *fixed=known_name(name,names,sizeof(names)/sizeof(names[0]));
+	if(!fixed || !stats) return;
+	char record[512];
+	snprintf(record,sizeof(record),"final metric=%s count=%llu total_us=%llu max_us=%llu invalid=%llu p50_us=%llu p95_us=%llu p99_us=%llu",
+		fixed,(unsigned long long)stats->count,(unsigned long long)stats->total_us,
+		(unsigned long long)stats->max_us,(unsigned long long)stats->invalid,
+		(unsigned long long)plus_vita_latency_percentile_upper(stats,50),
+		(unsigned long long)plus_vita_latency_percentile_upper(stats,95),
+		(unsigned long long)plus_vita_latency_percentile_upper(stats,99));
+	write_line("METRIC",record,0);
+}
+
+void plus_vita_diagnostic_counter(const char *name, uint64_t count)
+{
+	static const char *const names[]={"displayed","submitted","audio_frames","fec_repaired",
+		"fec_failed","reorder_late","reorder_missing","input_updates","input_poll_failures",
+		"feedback_published","feedback_consumed","feedback_coalesced","feedback_send_failures",
+		"feedback_logs_suppressed","input_neutral_consumed","input_neutral_failed","recovery_episodes"};
+	const char *fixed=known_name(name,names,sizeof(names)/sizeof(names[0]));
+	if(!fixed) return;
+	char record[128];
+	snprintf(record,sizeof(record),"final counter=%s count=%llu",fixed,(unsigned long long)count);
+	write_line("COUNTER",record,0);
 }
 
 void plus_vita_diagnostic_chiaki_log(ChiakiLogLevel level,
@@ -371,13 +423,11 @@ void plus_vita_diagnostic_chiaki_log(ChiakiLogLevel level,
 #if PLUS_VITA_INPUT_WORKER
 	if(feedback_diagnostic_suppressed()) return;
 #endif
-	if(!message_is_diagnostic(message)) return;
-	if(message_is_sensitive(message))
-	{
-		write_line("LIB", "[sensitive diagnostic entry omitted]", (int)level);
-		return;
-	}
-	write_line("LIB", message, (int)level);
+	(void)message;
+	/* Text is untrusted, including library-owned prefixes and disconnect reasons. */
+	if(level==CHIAKI_LOG_ERROR) write_line("LIB","library.error",CHIAKI_LOG_ERROR);
+	else if(level==CHIAKI_LOG_WARNING) write_line("LIB","library.warning",CHIAKI_LOG_WARNING);
+	else if(level==CHIAKI_LOG_INFO) write_line("LIB","library.info",CHIAKI_LOG_INFO);
 }
 
 void plus_vita_diagnostic_end(void)
@@ -419,11 +469,7 @@ bool plus_vita_diagnostic_ui_begin(void)
 	memset(artwork_metadata,0,sizeof(artwork_metadata)); memset(artwork_results,0,sizeof(artwork_results));
 	if(!plus_vita_diagnostic_begin()) return false;
 	ui_active = true;
-#if PLUS_VITA_FONT_COMPARISON
-	write_line("UI", "build=ui-font-cover-compare-1 graphical=1 glyph_budget_bytes=524288", 0);
-#else
-	write_line("UI", "build=ui-font-b-1 graphical=1 glyph_budget_bytes=524288", 0);
-#endif
+	write_line("UI", "app.start graphical=1 glyph_budget_bytes=524288", 0);
 	return true;
 }
 

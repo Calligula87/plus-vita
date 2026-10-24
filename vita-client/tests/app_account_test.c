@@ -158,6 +158,10 @@ int main(void)
 			view = plus_vita_app_view(app);
 		}
 		assert(view.screen == PLUS_VITA_APP_ERROR && strstr(view.body, private_value) == NULL);
+		if(failures[i]==PLUS_VITA_RESULT_NETWORK_ERROR) {
+			effect=plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_ACTIVATE});
+			assert(effect.kind==PLUS_VITA_EFFECT_AUTHORIZE && effect.fresh_attempt);
+		}
 		plus_vita_app_destroy(app);
 	}
 	app = plus_vita_app_create();

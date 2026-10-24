@@ -522,8 +522,11 @@ string(REPLACE "if(header_list)\n\t\tcurl_slist_free_all(header_list);"
   PLUS_VITA_CURL_HTTP_TEXT "${PLUS_VITA_CURL_HTTP_TEXT}")
 file(WRITE "${PLUS_VITA_CURL_HTTP_SOURCE}" "${PLUS_VITA_CURL_HTTP_TEXT}")
 
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/cloudsession_source.cmake")
+
 add_executable(${PROJECT_NAME}
   ${PLUS_VITA_ENTRY_SOURCE}
+  src/platform/recovery_vita.c
   generated/takion.pb.c
   "${PYLUX_ROOT}/lib/src/audio.c"
   "${PYLUX_ROOT}/lib/src/base64.c"
@@ -540,7 +543,7 @@ add_executable(${PROJECT_NAME}
   "${PYLUX_ROOT}/lib/src/cloudcatalog_merge.c"
   "${PYLUX_ROOT}/lib/src/cloudcatalog_util.c"
   "${PYLUX_ROOT}/lib/src/cloudcatalog_unified.c"
-  "${PYLUX_ROOT}/lib/src/cloudsession.c"
+  "${PLUS_VITA_CLOUD_SESSION_SOURCE}"
   "${PLUS_VITA_GAIKAI_SOURCE}"
   "${PYLUX_ROOT}/lib/src/cloudsession_kamaji.c"
   "${PYLUX_ROOT}/lib/src/cloudsession_ping.c"
@@ -605,7 +608,7 @@ set_source_files_properties("${PYLUX_ROOT}/lib/src/cloudcatalog_fetch.c" PROPERT
     "cc_fetch_psnow_native=plus_vita_disabled_psnow_native_impl;cc_fetch_imagic=plus_vita_disabled_imagic_impl;cc_imagic_result_fini=plus_vita_disabled_imagic_fini_impl;cc_fetch_owned=plus_vita_disabled_owned_impl"
   COMPILE_OPTIONS "-Wno-error=unused-but-set-variable"
 )
-set_source_files_properties("${PYLUX_ROOT}/lib/src/cloudsession.c" PROPERTIES
+set_source_files_properties("${PLUS_VITA_CLOUD_SESSION_SOURCE}" PROPERTIES
   COMPILE_OPTIONS "-include;arpa/inet.h"
 )
 set_source_files_properties("${PLUS_VITA_GAIKAI_SOURCE}" PROPERTIES
@@ -769,6 +772,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   SceSysmem_stub
   SceNet_stub
   SceNetCtl_stub
+  ScePower_stub
   SceHttp_stub
   SceSsl_stub
   SceSysmodule_stub

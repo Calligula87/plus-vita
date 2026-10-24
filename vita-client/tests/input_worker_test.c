@@ -54,7 +54,7 @@ int __wrap_fflush(FILE *file)
 	return __real_fflush(file);
 }
 static void *blocked_disk(void *unused)
-{ (void)unused; plus_vita_diagnostic_event("synthetic blocked writer", 0); return NULL; }
+{ (void)unused; plus_vita_diagnostic_event("allocation.begin", 0); return NULL; }
 
 int __real_pthread_create(pthread_t *, const pthread_attr_t *, void *(*)(void *), void *);
 int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attr,

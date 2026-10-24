@@ -18,5 +18,7 @@ bool plus_vita_play_take(PlusVitaPlay *play, ChiakiCloudProvisionResult *result,
 	ChiakiErrorCode *error, uint64_t *operation);
 void plus_vita_play_result_clear(ChiakiCloudProvisionResult *result);
 bool plus_vita_play_close(PlusVitaPlay *play);
+/* Interpret only fixed upstream categories; never display the remote detail. */
+PlusVitaAppResult plus_vita_play_failure(ChiakiErrorCode error, const ChiakiCloudProvisionResult *result);
 
 #endif

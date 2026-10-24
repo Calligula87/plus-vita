@@ -24,6 +24,21 @@ static void wipe(void *memory, size_t size)
 	while(size--) *p++=0;
 }
 
+PlusVitaAppResult plus_vita_play_failure(ChiakiErrorCode error, const ChiakiCloudProvisionResult *result)
+{
+	if(error==CHIAKI_ERR_CANCELED) return PLUS_VITA_RESULT_CANCELLED;
+	/* The Vita-generated preflight reserves HTTP_NONOK for confirmed 401. */
+	if(error==CHIAKI_ERR_HTTP_NONOK) return PLUS_VITA_RESULT_REJECTED;
+	if(error==CHIAKI_ERR_NETWORK || error==CHIAKI_ERR_TIMEOUT
+		|| error==CHIAKI_ERR_CONNECTION_REFUSED || error==CHIAKI_ERR_HOST_DOWN
+		|| error==CHIAKI_ERR_HOST_UNREACH) return PLUS_VITA_RESULT_NETWORK_ERROR;
+	const char *detail=result ? result->error_message : NULL;
+	if(detail && (!strcmp(detail,"PS_PLUS_SUBSCRIPTION_REQUIRED")
+		|| !strncmp(detail,"GAME_NOT_FREE:",14) || !strncmp(detail,"Game not found:",15)))
+		return PLUS_VITA_RESULT_UNSUPPORTED;
+	return PLUS_VITA_RESULT_SERVICE_ERROR;
+}
+
 void plus_vita_play_result_clear(ChiakiCloudProvisionResult *result)
 {
 	if(!result) return;

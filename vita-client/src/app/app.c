@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "app.h"
 #include "utf8.h"
+#include "../platform/build_identity.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -85,8 +86,8 @@ static void welcome(PlusVitaApp *app)
 
 static void settings_view(PlusVitaApp *app)
 {
-	snprintf(app->settings_status, sizeof(app->settings_status), "Development version %s.\nSession log: %s.\nYour sign-in files stay on this Vita.",
-		PLUS_VITA_APP_VERSION, app->log_available ? "available at ux0:data/plus-vita-allocation.log" : "unavailable");
+	snprintf(app->settings_status, sizeof(app->settings_status), "Development version %s (%s).\nSession log: %s.\nYour sign-in files stay on this Vita.",
+		PLUS_VITA_APP_VERSION, PLUS_VITA_APP_BUILD, app->log_available ? "available at ux0:data/plus-vita-allocation.log" : "unavailable");
 	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_SETTINGS,
 		.title = "Settings and help.", .subtitle = "PLUS VITA", .body = app->settings_status,
 		.hint = "Left stick  Move     X  Select     O  Back",
@@ -116,7 +117,7 @@ static void controls_view(PlusVitaApp *app)
 static void reporting_view(PlusVitaApp *app)
 {
 	snprintf(app->reporting_status, sizeof(app->reporting_status), "Log: %s\n"
-		"Copy it with VitaShell before reopening the app.\n"
+		"Copy with VitaShell before Play, Retry or app restart.\n"
 		"Review it, then attach it yourself at:\n"
 		"github.com/Calligula87/plus-vita/issues/new\n"
 		"Include steps, expected/actual result and version %s.\n"
@@ -599,6 +600,35 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		else if(view->screen == PLUS_VITA_APP_REPORTING) reporting_view(app);
 		return effect;
 	}
+	if(event.kind == PLUS_VITA_EVENT_INTERRUPTED)
+	{
+		/* Storage mutations finish atomically. Network/UI work is retired now;
+		 * its operation number can no longer deliver a usable late result. */
+		if(app->waiting_for == PLUS_VITA_EFFECT_SAVE_ACCOUNT
+			|| app->waiting_for == PLUS_VITA_EFFECT_DELETE_ACCOUNT
+			|| app->waiting_for == PLUS_VITA_EFFECT_ENABLE_AUTO) return effect;
+		bool playing = app->waiting_for == PLUS_VITA_EFFECT_PLAY;
+		bool pending = app->pending_operation != 0;
+		app->pending_operation = 0;
+		app->waiting_for = PLUS_VITA_EFFECT_NONE;
+		if(playing) {
+			stream_stopped_view(app);
+			view->body = event.status == PLUS_VITA_RESULT_SLEEP
+				? "Play ended for sleep. The old session cannot resume.\nSelect Play for a fresh cloud session when ready.\nCopy the log before retrying."
+				: "Wi-Fi was lost. The old session cannot resume.\nReconnect Wi-Fi and select Play for a fresh session.\nCopy the log before retrying.";
+		} else if(pending) {
+			if(app->connected) {
+				catalogue_view(app);
+				view->body="Work was cancelled. Your account stays connected.\nContinue browsing when ready.";
+			} else {
+				app->retry_account = app->credential.length != 0;
+				account_error(app, event.status == PLUS_VITA_RESULT_SLEEP
+					? "Connection cancelled for sleep. Retry when ready."
+					: "Wi-Fi was lost. Reconnect and retry when ready.");
+			}
+		}
+		return effect;
+	}
 	if(event.kind == PLUS_VITA_EVENT_PAD_RESET)
 	{
 		app->previous_buttons = event.pad.buttons;
@@ -771,8 +801,13 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	{
 		if(app->waiting_for!=PLUS_VITA_EFFECT_PLAY || !event.operation || event.operation!=app->pending_operation) return effect;
 		app->pending_operation=0; app->waiting_for=PLUS_VITA_EFFECT_NONE;
+		if(event.status==PLUS_VITA_RESULT_REJECTED) return remove_saved(app, false, true);
 		if(event.status==PLUS_VITA_RESULT_OK) catalogue_view(app);
 		else if(event.status==PLUS_VITA_RESULT_STREAM_STOPPED) stream_stopped_view(app);
+		else if(event.status==PLUS_VITA_RESULT_SERVICE_ERROR)
+			detail_view(app,"The cloud service could not start this session.\nTry Play again later for a fresh attempt.");
+		else if(event.status==PLUS_VITA_RESULT_UNSUPPORTED)
+			detail_view(app,"This title is not supported for cloud Play on this client.\nChoose another game.");
 		else detail_view(app, event.status==PLUS_VITA_RESULT_CANCELLED
 			? "Play was cancelled. Select Play for a fresh attempt."
 			: event.status==PLUS_VITA_RESULT_BUSY
@@ -936,9 +971,12 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		}
 		else if(action == PLUS_VITA_ACTION_RESTORE)
 			return operation(app, PLUS_VITA_EFFECT_LOAD_ACCOUNT, "Loading your remembered account.", true);
-		else if(action == PLUS_VITA_ACTION_RETRY)
-			return operation(app, app->retry_delete ? PLUS_VITA_EFFECT_DELETE_ACCOUNT : app->retry_save ? PLUS_VITA_EFFECT_SAVE_ACCOUNT : PLUS_VITA_EFFECT_AUTHORIZE,
+		else if(action == PLUS_VITA_ACTION_RETRY) {
+			effect=operation(app, app->retry_delete ? PLUS_VITA_EFFECT_DELETE_ACCOUNT : app->retry_save ? PLUS_VITA_EFFECT_SAVE_ACCOUNT : PLUS_VITA_EFFECT_AUTHORIZE,
 				app->retry_delete ? "Removing saved sign-in from this Vita." : app->retry_save ? "Saving your account on this Vita." : "Checking your sign-in and loading cloud games.", !app->retry_save && !app->retry_delete);
+			effect.fresh_attempt=effect.kind==PLUS_VITA_EFFECT_AUTHORIZE;
+			return effect;
+		}
 		else if(action == PLUS_VITA_ACTION_ACCOUNT) { app->account_from_settings = view->screen == PLUS_VITA_APP_SETTINGS; account_view(app); }
 		else if(action == PLUS_VITA_ACTION_SETTINGS) { app->welcome_selection = view->selected; settings_view(app); }
 		else if(action == PLUS_VITA_ACTION_CONTROLS) controls_view(app);
