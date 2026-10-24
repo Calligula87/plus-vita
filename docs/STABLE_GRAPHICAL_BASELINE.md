@@ -12,7 +12,7 @@ v0.1.0 beta release or completion of the final release gate.
 | Size | 2,417,984 bytes |
 | SHA-256 | `2240D73D887BCE2AD1E5277510D1722289E5D50480794D1688DBFAC98229F51A` |
 | Source commit | `fa4e406421c2e4d04361198b4f4ec481854e49a0` |
-| Local Git tag | `vita-graphical-stable-2026-10-24` (not published) |
+| Git tag | `vita-graphical-stable-2026-10-24` (no VPK release attached) |
 | Stream profile | Accepted 720p independent input and deferred logging profile |
 
 The graphical Play flow, retained sign-in JSON, font, covers, controls and
