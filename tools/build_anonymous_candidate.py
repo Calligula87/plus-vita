@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import os
+import posixpath
 from pathlib import Path, PurePosixPath
 import subprocess
 import tarfile
@@ -22,9 +23,11 @@ def export(repo, revision, destination):
     archive = git(repo, 'archive', '--format=tar', revision)
     destination.mkdir(parents=True, exist_ok=True)
     with tarfile.open(fileobj=io.BytesIO(archive)) as members:
-        for member in members:
-            name = PurePosixPath(member.name)
-            if name.is_absolute() or '..' in name.parts or member.issym() or member.islnk():
+        entries = {member.name.rstrip('/'): member for member in members}
+
+        def write_entry(member, output_name, ancestors=()):
+            name = PurePosixPath(output_name)
+            if name.is_absolute() or '..' in name.parts or member.islnk():
                 raise ValueError('Unsafe source export entry')
             target = destination.joinpath(*name.parts)
             if not target.resolve().is_relative_to(destination.resolve()):
@@ -35,6 +38,24 @@ def export(repo, revision, destination):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(members.extractfile(member).read())
                 target.chmod(member.mode & 0o777)
+            elif member.issym():
+                # Materialize only committed archive content, never a host link.
+                linked = posixpath.normpath(posixpath.join(posixpath.dirname(member.name), member.linkname))
+                if PurePosixPath(linked).is_absolute() or '..' in PurePosixPath(linked).parts:
+                    raise ValueError('Source link escaped its archive')
+                if linked in ancestors or linked not in entries:
+                    raise ValueError('Unsupported source archive link')
+                resolved = entries[linked]
+                write_entry(resolved, output_name, ancestors+(linked,))
+                if resolved.isdir():
+                    for child_name, child in entries.items():
+                        if child_name.startswith(linked+'/'):
+                            write_entry(child, output_name+child_name[len(linked):], ancestors+(linked,))
+            else:
+                raise ValueError('Unsupported source export entry')
+
+        for name, member in entries.items():
+            write_entry(member, name)
 
 
 def main():
