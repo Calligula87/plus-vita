@@ -1,0 +1,6 @@
+{
+  "legacy_workspace_path_blobs": [
+    "29cb2ddffe8ec23ca62087136cad4cce049ea923"
+  ],
+  "review": "A historical local TLS helper stored a developer workspace location without account or access material. The current helper uses its relative script directory. No history was rewritten. This exception applies only to the listed historical path findings; credential and canary findings always block."
+}

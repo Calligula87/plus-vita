@@ -35,7 +35,7 @@ struct plus_vita_app_t {
 	PlusVitaAppScreen storage_return;
 	char label[129], online_id[129], account_status[512];
 	char store_country[8], store_language[8], language[8];
-	char settings_status[192], reporting_status[512];
+	char settings_status[256], reporting_status[512];
 	uint32_t previous_buttons;
 	int previous_direction;
 	uint64_t repeat_at;
@@ -86,7 +86,7 @@ static void welcome(PlusVitaApp *app)
 
 static void settings_view(PlusVitaApp *app)
 {
-	snprintf(app->settings_status, sizeof(app->settings_status), "Development version %s (%s).\nSession log: %s.\nYour sign-in files stay on this Vita.",
+	snprintf(app->settings_status, sizeof(app->settings_status), "Version %s (%s).\nSession log: %s.\nYour sign-in files stay on this Vita.",
 		PLUS_VITA_APP_VERSION, PLUS_VITA_APP_BUILD, app->log_available ? "available at ux0:data/plus-vita-allocation.log" : "unavailable");
 	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_SETTINGS,
 		.title = "Settings and help.", .subtitle = "PLUS VITA", .body = app->settings_status,
@@ -134,7 +134,7 @@ static void about_view(PlusVitaApp *app)
 {
 	app->view=(PlusVitaAppView){.screen=PLUS_VITA_APP_ABOUT,
 		.title="Made for your handheld.",.subtitle="ABOUT PLUS VITA",
-		.body="An independent cloud gaming client for PlayStation Vita.\nUse your own Sony account and eligible subscription.\n\nDevelopment build. Not a public release.",
+		.body="An independent cloud gaming client for PlayStation Vita.\nUse your own Sony account and eligible subscription.\n\n" PLUS_VITA_ABOUT_STATUS,
 		.hint="X  Select     O  Back",.actions={{PLUS_VITA_ACTION_BACK,"Back",64,444,500,52}},.action_count=1};
 #if PLUS_VITA_FONT_COMPARISON
 	app->view.actions[0]=(PlusVitaAppButton){PLUS_VITA_ACTION_FONT_COMPARISON,"Compare text rendering",64,380,832,52};

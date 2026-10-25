@@ -14,7 +14,7 @@ cc -D_POSIX_C_SOURCE=200809L -DPLUS_VITA_DEFERRED_LOG=1 -std=c11 -g -O1 -Wall -W
  -fsanitize=address,undefined -fno-omit-frame-pointer -ffunction-sections -fdata-sections -pthread \
  -Ivita-client/src/app -Ivita-client/src/platform -Ivita-client/tests/recovery_stubs \
  -Iexternal/pylux/lib/include -Iexternal/pylux/lib/src -Iexternal/pylux/third-party/curl/include \
- -Iexternal/json-c -I"$dir" vita-client/src/app/app.c vita-client/src/app/utf8.c \
+ -Iexternal/json-c -I"$dir" vita-client/src/app/app.c vita-client/src/app/branding.c vita-client/src/app/utf8.c \
  vita-client/src/app/play_vita.c vita-client/src/app/ui_flow.c vita-client/src/platform/credential.c \
  vita-client/src/app/attempt_log.c vita-client/src/platform/diagnostic_log.c vita-client/src/platform/latency_stats.c \
  vita-client/src/platform/recovery_vita.c vita-client/src/platform/request_cancel.c \

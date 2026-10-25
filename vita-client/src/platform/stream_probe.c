@@ -2076,6 +2076,7 @@ static ChiakiErrorCode probe_capture_wait(PlusVitaStreamProbe *probe)
 	return valid ? CHIAKI_ERR_SUCCESS : CHIAKI_ERR_INVALID_DATA;
 }
 
+#if !PLUS_VITA_RELEASE_CANDIDATE
 static uint32_t replay_u32(const uint8_t *p)
 {
 	return (uint32_t)p[0] | ((uint32_t)p[1] << 8)
@@ -2213,13 +2214,17 @@ done:
 	return err;
 }
 
+#endif
+
 ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResult *provision,
 	ChiakiLog *log, bool *user_stopped, bool (*connect_pump)(void *), void *pump_user)
 {
 	if(user_stopped) *user_stopped = false;
+#if !PLUS_VITA_RELEASE_CANDIDATE
 	if(PLUS_VITA_STREAM_PROBE_REPLAY) return probe_replay(log);
 	ChiakiErrorCode guard_test = probe_replay(log);
 	if(guard_test != CHIAKI_ERR_SUCCESS) return guard_test;
+#endif
 	if(!plus_vita_video_fec_selftest())
 	{
 		CHIAKI_LOGE(log, "Stream probe FEC self-test failed");

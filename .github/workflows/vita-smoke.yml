@@ -14,6 +14,7 @@ on:
       - "tools/test-app-font.sh"
       - "tools/test-app-catalogue.sh"
       - "tools/test-app-recovery.sh"
+      - "tools/test-app-branding.sh"
       - "tools/test-deferred-log.sh"
       - "tools/test-app-covers.sh"
       - "tools/test-app-freetype.sh"
@@ -30,6 +31,7 @@ on:
       - "tools/test-app-font.sh"
       - "tools/test-app-catalogue.sh"
       - "tools/test-app-recovery.sh"
+      - "tools/test-app-branding.sh"
       - "tools/test-deferred-log.sh"
       - "tools/test-app-covers.sh"
       - "tools/test-app-freetype.sh"
@@ -54,6 +56,8 @@ jobs:
         run: sh tools/test-app-catalogue.sh
       - name: Test allocation cancellation and recovery
         run: sh tools/test-app-recovery.sh
+      - name: Test startup splash and welcome branding
+        run: sh tools/test-app-branding.sh
       - name: Test privacy schema and bounded deferred persistence
         run: sh tools/test-deferred-log.sh
       - name: Test bounded asynchronous artwork and HTTP policy
@@ -69,15 +73,19 @@ jobs:
         include:
           - diagnostic: "OFF"
             comparison: "OFF"
+            release: "ON"
           - diagnostic: "ON"
             comparison: "OFF"
+            release: "OFF"
           - diagnostic: "OFF"
             comparison: "ON"
+            release: "OFF"
     steps:
       - name: Check out sources
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
 
       - name: Configure
         run: >-
@@ -85,10 +93,16 @@ jobs:
           -DPLUS_VITA_DIAGNOSTIC_APP=${{ matrix.diagnostic }}
           -DPLUS_VITA_FONT_COMPARISON=${{ matrix.comparison }}
           -DPLUS_VITA_FONT_DEFAULT_FREETYPE=ON
+          -DPLUS_VITA_RELEASE_CANDIDATE=${{ matrix.release }}
 
       - name: Build VPK
         run: cmake --build build/vita --parallel
 
       - name: Verify package
         run: test -s build/vita/plus_vita_smoke.vpk
+      - name: Verify anonymous package and synthetic leak rejection
+        if: matrix.release == 'ON'
+        run: |
+          python3 tools/publication_gate.py --vpk build/vita/plus_vita_smoke.vpk
+          python3 tools/test-publication-gate.py build/vita/plus_vita_smoke.vpk
       # Publishing a downloadable VPK remains gated by the privacy audit in #22.

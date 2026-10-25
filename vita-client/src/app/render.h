@@ -4,6 +4,8 @@
 #include "app.h"
 #include "font_vita.h"
 #include "covers.h"
+#include "branding.h"
+void plus_vita_app_paint_with_resources(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view,const PlusVitaCovers *covers,const PlusVitaBranding *branding);
 /* Paint one native 960x544 view into the caller's back buffer. */
 void plus_vita_app_paint(PlusVitaFont *font, uint32_t *pixels, int pitch, const PlusVitaAppView *view);
 void plus_vita_app_paint_with_covers(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view,const PlusVitaCovers *covers);

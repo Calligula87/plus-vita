@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "render.h"
+#include <string.h>
+#include "../platform/build_identity.h"
 #define WIDTH 960
 #define HEIGHT 544
 #define RGB(r,g,b) (0xff000000u | ((uint32_t)(b)<<16) | ((uint32_t)(g)<<8) | (r))
@@ -45,14 +47,14 @@ static void cover(Canvas *display,const PlusVitaCovers *covers,const PlusVitaCat
 	} else text(display,!game || (!game->cover_url[0] && game->cover_metadata==PLUS_VITA_ARTWORK_MISSING) ? "No cover" : !game->cover_url[0] || !covers ? "Cover unavailable" : !image || image->state==PLUS_VITA_COVER_LOADING ? "Loading cover" : "Cover unavailable",x+6,y+48,TEXT_MICRO,116,58,true,RGB(195,211,239));
 }
 
-void plus_vita_app_paint_with_covers(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view,const PlusVitaCovers *covers)
+void plus_vita_app_paint_with_resources(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view,const PlusVitaCovers *covers,const PlusVitaBranding *branding)
 {
 	Canvas canvas = {pixels, pitch, font}; Canvas *display = &canvas;
 	for(int y = 0; y < HEIGHT; y++)
 		rectangle(display, 0, y, WIDTH, 1, RGB(0, 25 + y / 20, 70 + y / 6));
 	rectangle(display, 0, 0, WIDTH, 4, RGB(246, 198, 91));
 	text(display, "plus vita", 64, 25, TEXT_BRAND, 400, 38, false, RGB(236, 244, 250));
-	text(display, "DEVELOPMENT BUILD", 712, 32, TEXT_MICRO, 220, 24, false, RGB(195, 211, 239));
+	text(display, PLUS_VITA_BUILD_LABEL, 712, 32, TEXT_MICRO, 220, 24, false, RGB(195, 211, 239));
 	text(display, view->subtitle, 64, 94, TEXT_HINT, 832, 26, false, RGB(246, 198, 91));
 	text(display, view->title, 64, 128, TEXT_HEADING, 832, 54, false, RGB(243, 247, 252));
 	int body_bottom = view->action_count ? view->actions[0].y - 12 : 480;
@@ -80,9 +82,13 @@ void plus_vita_app_paint_with_covers(PlusVitaFont *font,uint32_t *pixels,int pit
 	}
 	if(view->screen == PLUS_VITA_APP_WELCOME)
 	{
-		rounded(display, 674, 238, 192, 192, RGB(18, 53, 113));
-		text(display, "APP LOGO", 712, 301, TEXT_COMPACT, 150, 30, false, RGB(210, 224, 247));
-		text(display, "Coming later", 709, 335, TEXT_HINT, 150, 28, false, RGB(195, 211, 239));
+		const uint32_t *logo=plus_vita_branding_logo(branding);
+		if(logo) for(int y=0;y<192;y++)
+			memcpy(pixels+(238+y)*pitch+674,logo+y*192,192*sizeof(*pixels));
+		else {
+			rounded(display,674,238,192,192,RGB(18,53,113));
+			text(display,"PLUS VITA",694,310,TEXT_COMPACT,160,32,false,RGB(246,198,91));
+		}
 	}
 	for(size_t i = 0; i < view->action_count; i++)
 	{
@@ -107,3 +113,6 @@ void plus_vita_app_paint_with_covers(PlusVitaFont *font,uint32_t *pixels,int pit
 
 void plus_vita_app_paint(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view)
 { plus_vita_app_paint_with_covers(font,pixels,pitch,view,NULL); }
+
+void plus_vita_app_paint_with_covers(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view,const PlusVitaCovers *covers)
+{ plus_vita_app_paint_with_resources(font,pixels,pitch,view,covers,NULL); }

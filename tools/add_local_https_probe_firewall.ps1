@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$logPath = 'C:\Users\tutto\Documents\PsVitaPorts\plus-vita\local-artifacts\https-probe\firewall-admin.log'
+$logPath = Join-Path $PSScriptRoot '../local-artifacts/https-probe/firewall-admin.log'
 try {
     $name = 'plus-vita local TLS probe'
     $existing = @(Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue)

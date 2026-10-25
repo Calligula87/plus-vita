@@ -10,7 +10,12 @@ typedef struct {
 	uint64_t input_since;
 	uint64_t diagnostic_operation;
 	const PlusVitaCovers *covers;
+	PlusVitaBranding *branding;
+	bool startup_started, splash_active, splash_release;
+	uint64_t splash_started_us;
 } PlusVitaUiFlow;
+void plus_vita_ui_flow_start(PlusVitaUiFlow *flow,PlusVitaBranding *branding,uint64_t now_us,bool log_available);
+bool plus_vita_ui_flow_tick(PlusVitaUiFlow *flow,uint64_t now_us);
 bool plus_vita_ui_flow_event(PlusVitaUiFlow *flow, PlusVitaAppEvent event, uint64_t sampled_us);
 PlusVitaAppEffect plus_vita_ui_flow_take(PlusVitaUiFlow *flow);
 bool plus_vita_ui_flow_paint(PlusVitaUiFlow *flow, PlusVitaFont *font, uint32_t *pixels, int pitch);

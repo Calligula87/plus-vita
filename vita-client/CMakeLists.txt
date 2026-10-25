@@ -9,6 +9,16 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 
 project(plus_vita_smoke C)
+option(PLUS_VITA_RELEASE_CANDIDATE "Build the anonymous v0.1.0 beta candidate" OFF)
+if(PLUS_VITA_RELEASE_CANDIDATE)
+  get_filename_component(PLUS_VITA_SOURCE_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+  file(TO_CMAKE_PATH "$ENV{VITASDK}" PLUS_VITA_PUBLIC_SDK_ROOT)
+  add_compile_options(
+    "-ffile-prefix-map=${PLUS_VITA_SOURCE_ROOT}=/source"
+    "-fmacro-prefix-map=${PLUS_VITA_SOURCE_ROOT}=/source"
+    "-ffile-prefix-map=${PLUS_VITA_PUBLIC_SDK_ROOT}=/vitasdk"
+    "-fmacro-prefix-map=${PLUS_VITA_PUBLIC_SDK_ROOT}=/vitasdk")
+endif()
 
 set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
 set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
@@ -26,10 +36,16 @@ if(PLUS_VITA_DIAGNOSTIC_APP)
   set(PLUS_VITA_ENTRY_SOURCE src/main.c src/app/utf8.c)
 else()
   set(VITA_APP_NAME "Plus Vita")
-  set(PLUS_VITA_ENTRY_SOURCE src/app/main.c src/app/app.c src/app/utf8.c src/app/text.c src/app/font_vita.c src/app/render.c src/app/ui_flow.c src/app/attempt_log.c src/app/ui_vita.c src/app/account_vita.c src/app/play_vita.c src/app/covers.c src/platform/cover_image.c src/platform/cover_download.c src/platform/cover_resolve.c)
+  set(PLUS_VITA_ENTRY_SOURCE src/app/main.c src/app/app.c src/app/utf8.c src/app/text.c src/app/font_vita.c src/app/render.c src/app/branding.c src/app/ui_flow.c src/app/attempt_log.c src/app/ui_vita.c src/app/account_vita.c src/app/play_vita.c src/app/covers.c src/platform/cover_image.c src/platform/cover_download.c src/platform/cover_resolve.c)
 endif()
 set(VITA_TITLEID "PLVT00001")
 set(VITA_VERSION "00.01")
+set(PLUS_VITA_PUBLIC_VERSION "00.01")
+if(PLUS_VITA_RELEASE_CANDIDATE)
+  set(VITA_APP_NAME "Plus Vita beta")
+  set(VITA_VERSION "00.10")
+  set(PLUS_VITA_PUBLIC_VERSION "0.1.0 beta candidate")
+endif()
 set(PLUS_VITA_TLS_PROBE_URL "" CACHE STRING
   "Optional controlled HTTPS URL for the physical certificate-rejection test")
 set(PLUS_VITA_TLS_TRUSTED_CA_FILE "" CACHE FILEPATH
@@ -47,6 +63,7 @@ else()
 endif()
 option(PLUS_VITA_INPUT_WORKER "Use accepted independent 4ms input sampling" ${PLUS_VITA_STREAM_DEFAULT})
 option(PLUS_VITA_DEFERRED_LOG "Use accepted deferred streaming diagnostics" ${PLUS_VITA_STREAM_DEFAULT})
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/release_profile.cmake")
 if(NOT PLUS_VITA_DIAGNOSTIC_APP AND (NOT PLUS_VITA_INPUT_WORKER OR NOT PLUS_VITA_DEFERRED_LOG))
   message(FATAL_ERROR "The graphical player requires the accepted input-worker/deferred-log stream profile")
 endif()
@@ -672,7 +689,8 @@ if(PLUS_VITA_INPUT_WORKER)
 endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-  PLUS_VITA_APP_VERSION="${VITA_VERSION}"
+  PLUS_VITA_APP_VERSION="${PLUS_VITA_PUBLIC_VERSION}"
+  PLUS_VITA_RELEASE_CANDIDATE=$<BOOL:${PLUS_VITA_RELEASE_CANDIDATE}>
   PLUS_VITA_FONT_COMPARISON=$<AND:$<BOOL:${PLUS_VITA_FONT_COMPARISON}>,$<NOT:$<BOOL:${PLUS_VITA_DIAGNOSTIC_APP}>>>
   PLUS_VITA_FONT_DEFAULT_FREETYPE=$<AND:$<BOOL:${PLUS_VITA_FONT_DEFAULT_FREETYPE}>,$<NOT:$<BOOL:${PLUS_VITA_DIAGNOSTIC_APP}>>>
   PLUS_VITA_INPUT_WORKER=$<BOOL:${PLUS_VITA_INPUT_WORKER}>
@@ -698,6 +716,9 @@ list(APPEND PLUS_VITA_VPK_FILES FILE
 list(APPEND PLUS_VITA_VPK_FILES FILE
   "${PLUS_VITA_JERASURE_ROOT}/License.txt" "licenses/jerasure.txt")
 if(NOT PLUS_VITA_DIAGNOSTIC_APP)
+  list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/assets/branding/icon0.png" "sce_sys/icon0.png")
+  list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/assets/branding/logo.pvi" "branding/logo.pvi")
+  list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/assets/branding/splash.pvi" "branding/splash.pvi")
   list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/third_party/stb-image-license.txt" "licenses/stb-image.txt")
 endif()
 if((PLUS_VITA_FONT_COMPARISON OR PLUS_VITA_FONT_DEFAULT_FREETYPE) AND NOT PLUS_VITA_DIAGNOSTIC_APP)

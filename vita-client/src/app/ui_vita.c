@@ -45,6 +45,7 @@ typedef struct {
 	bool displayed;
 	PlusVitaFont *font;
 	PlusVitaFont *alternative;
+	PlusVitaBranding *branding;
 } UiDisplay;
 
 /* Never release a buffer until scanout has moved away from it. */
@@ -61,6 +62,7 @@ static bool display_close(UiDisplay *display)
 	/* The base font owns PGF; close its alternative's PVF fallback first. */
 	plus_vita_font_free(display->alternative);
 	plus_vita_font_free(display->font);
+	plus_vita_branding_free(display->branding);
 	return true;
 }
 
@@ -89,6 +91,7 @@ static bool display_open(UiDisplay *display)
 	display->font = plus_vita_font_create();
 #endif
 	if(!display->font) { display_close(display); return false; }
+	display->branding=plus_vita_branding_load("app0:/branding");
 #if PLUS_VITA_FONT_COMPARISON
 	display->alternative=plus_vita_font_create_alternative("app0:/fonts/NotoSans-Regular.ttf");
 #endif
@@ -195,17 +198,17 @@ int plus_vita_app_run(void)
 #if PLUS_VITA_FONT_COMPARISON
 	uint32_t capture_buttons=0;
 #endif
-	PlusVitaUiFlow flow = { .app = app, .dirty = true, .covers = covers };
+	PlusVitaUiFlow flow = { .app = app, .dirty = true, .covers = covers, .branding=display->branding };
 	uint64_t artwork_epoch = UINT64_MAX;
 	unsigned reported_play_stage=0;
 	bool metadata_reported=false;
 	PlusVitaAppScreen reported_screen=PLUS_VITA_APP_CLOSED;
-	plus_vita_ui_flow_event(&flow, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_START,
-		.log_available = log_available }, 0);
+	plus_vita_ui_flow_start(&flow,display->branding,plus_vita_latency_now_us(),log_available);
 	int result = 0;
 	uint64_t previous_poll = 0, last_report = plus_vita_latency_now_us();
 	while(plus_vita_app_view(app).screen != PLUS_VITA_APP_CLOSED)
 	{
+		plus_vita_ui_flow_tick(&flow,plus_vita_latency_now_us());
 		bool workers_idle=plus_vita_account_idle(account) && !plus_vita_play_busy(play);
 		if(plus_vita_attempt_log_prepare(&flow,workers_idle)) {
 			log_available=plus_vita_diagnostic_persistence_ok();
@@ -287,7 +290,7 @@ int plus_vita_app_run(void)
 		}
 		flow.dirty = flow.dirty || input_changed;
 		if(input_changed && !flow.input_since) flow.input_since = polled;
-		if(!input_changed && flow.pending.kind != PLUS_VITA_EFFECT_NONE
+		if(!input_changed && !flow.splash_active && flow.pending.kind != PLUS_VITA_EFFECT_NONE
 			&& (!storage_effect(flow.pending.kind) || plus_vita_account_idle(storage)))
 		{
 			PlusVitaAppEffect effect = plus_vita_ui_flow_take(&flow);

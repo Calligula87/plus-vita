@@ -81,6 +81,16 @@ int main(void)
  plus_vita_app_dispatch(normal,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH,.x=80,.y=360});
  normal_view=plus_vita_app_view(normal); assert(normal_view.screen==PLUS_VITA_APP_SETTINGS);
  plus_vita_app_paint(b,pixels,960,&normal_view); assert_button_labels(&normal_view);
+ PlusVitaBranding *branding=plus_vita_branding_load("vita-client/assets/branding"); assert(branding);
+ PlusVitaApp *preview=plus_vita_app_create(); assert(preview);
+ PlusVitaAppView preview_view=plus_vita_app_view(preview);
+ plus_vita_app_paint_with_resources(b,pixels,960,&preview_view,NULL,branding);
+ assert(plus_vita_comparison_capture(pixels,960,"build/debug/app-freetype-host/branded-welcome.ppm"));
+ const uint32_t *splash=plus_vita_branding_splash(branding); assert(splash);
+ assert(plus_vita_comparison_capture(splash,960,"build/debug/app-freetype-host/branded-splash.ppm"));
+ plus_vita_branding_free(branding);
+ plus_vita_app_destroy(preview);
+ plus_vita_app_paint(b,pixels,960,&normal_view);
  memcpy(previous,pixels,sizeof(pixels)); api_calls=0;
  plus_vita_app_paint(b,pixels,960,&normal_view);
  assert(!memcmp(previous,pixels,sizeof(pixels)) && api_calls==0);
