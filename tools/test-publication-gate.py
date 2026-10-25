@@ -89,6 +89,14 @@ with tempfile.TemporaryDirectory(prefix='plus-vita-publication-') as directory:
     assert export.returncode==0 and canary not in export.stdout+export.stderr
     assert not (repo/'build/export/source/untracked-account.json').exists()
     assert (repo/'build/export/source/fixture.txt').read_text()=='clean current content'
+    # An inherited Windows checkout policy must not alter anonymous inputs.
+    git('config','core.autocrlf','true')
+    (repo/'newline.txt').write_bytes(b'public line\n')
+    git('add','newline.txt'); git('commit','-m','public newline fixture')
+    export = subprocess.run([sys.executable,str(root/'tools/build_anonymous_candidate.py'),
+                            '--repo',str(repo),'--output',str(repo/'build/export-lf'),'--export-only'],capture_output=True)
+    assert export.returncode==0 and canary not in export.stdout+export.stderr
+    assert (repo/'build/export-lf/source/newline.txt').read_bytes()==b'public line\n'
     # Messages are public history too, even when every committed file is clean.
     messages = work/'messages'; messages.mkdir()
     repo = messages

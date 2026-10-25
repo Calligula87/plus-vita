@@ -114,7 +114,7 @@ def package_findings(vpk, root):
             for category in findings(data, artifact=True):
                 errors['package.'+category] += 1
             if member.filename in RESOURCES:
-                expected = (root / RESOURCES[member.filename]).read_bytes()
+                expected = committed_resource(root, RESOURCES[member.filename])
                 if hashlib.sha256(data).digest() != hashlib.sha256(expected).digest():
                     errors['package.resource_identity'] += 1
             if member.filename == 'sce_sys/icon0.png':
@@ -155,6 +155,21 @@ def package_findings(vpk, root):
 
 def git(root, *args, data=None):
     return subprocess.check_output(['git', '-C', str(root), *args], input=data, stderr=subprocess.DEVNULL)
+
+
+def committed_resource(root, name, revision='HEAD', depth=0):
+    """Read exact pinned bytes, independent of checkout newline conversion."""
+    if depth > 8:
+        raise ValueError('Unsupported dependency nesting')
+    for entry in git(root, 'ls-tree', '-r', '-z', revision).split(b'\0'):
+        if not entry:
+            continue
+        metadata, path = entry.split(b'\t', 1)
+        mode, kind, oid = metadata.split()
+        prefix = path.decode('utf-8')
+        if mode == b'160000' and name.startswith(prefix+'/'):
+            return committed_resource(root/prefix, name[len(prefix)+1:], oid.decode(), depth+1)
+    return git(root, 'show', revision+':'+name)
 
 
 def repository_findings(root, reviewed):

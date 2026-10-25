@@ -19,7 +19,9 @@ Private untracked files and
 working-directory configuration are not copied. The build removes inherited
 compiler flags, specifies every release switch explicitly, maps compiler source
 paths to public prefixes and normalizes VPK timestamps/attributes. A source and
-dependency identity manifest accompanies the artifact.
+dependency identity manifest accompanies the artifact. Export explicitly disables
+Git checkout newline conversion. Resource hashes use committed bytes, following
+the root and nested dependency pins, rather than platform-specific checkouts.
 
 ```sh
 python tools/build_anonymous_candidate.py --output build/anonymous-beta-22 \

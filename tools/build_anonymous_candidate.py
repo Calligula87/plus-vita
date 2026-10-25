@@ -21,7 +21,8 @@ def git(repo, *args):
 
 
 def export(repo, revision, destination, exclusions=()):
-    archive = git(repo, 'archive', '--format=tar', revision, '--', '.',
+    archive = git(repo, '-c', 'core.autocrlf=false', '-c', 'core.eol=lf',
+                  'archive', '--format=tar', revision, '--', '.',
                   *(':(exclude)'+path for path in exclusions))
     destination.mkdir(parents=True, exist_ok=True)
     with tarfile.open(fileobj=io.BytesIO(archive)) as members:
