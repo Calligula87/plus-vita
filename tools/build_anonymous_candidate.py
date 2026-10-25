@@ -5,6 +5,7 @@ import io
 import json
 import os
 import posixpath
+import shutil
 from pathlib import Path, PurePosixPath
 import subprocess
 import tarfile
@@ -68,6 +69,12 @@ def main():
     parser.add_argument('--ninja', default='ninja')
     parser.add_argument('--export-only', action='store_true')
     args = parser.parse_args()
+    if not args.export_only:
+        for name in ('cmake', 'ninja'):
+            executable = shutil.which(getattr(args, name))
+            if not executable:
+                raise ValueError('Required build tool unavailable')
+            setattr(args, name, executable)
     root = args.repo.resolve(); output = args.output.resolve()
     if output.exists() or not output.is_relative_to(root / 'build'):
         raise ValueError('Use a new output directory inside this repository build directory')

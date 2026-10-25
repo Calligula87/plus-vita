@@ -96,7 +96,7 @@ with tempfile.TemporaryDirectory(prefix='plus-vita-publication-') as directory:
     git('commit','--allow-empty','-m',canary.decode())
     code, report = run(repo=repo)
     assert code != 0 and 'history.private_canary' in report['findings']
-    git('commit','--amend','-m','clean public message')
+    git('commit','--amend','--allow-empty','-m','clean public message')
     code, report = run(repo=repo)
     assert code == 0
     git('tag','-a','synthetic-tag','-m',canary.decode())
