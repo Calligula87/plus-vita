@@ -7,6 +7,22 @@ The candidate uses `recovery-diagnostics-1` diagnostics and the unchanged accept
 720p input/media profile. It has no app-imposed play cutoff. It is not a public
 beta and has not passed #22 or #23.
 
+## Candidate identity
+
+| Field | Value |
+| --- | --- |
+| Local VPK (ignored by Git) | `local-artifacts/plus-vita-recovery-diagnostics-1.vpk` |
+| Runtime source commit | `f441b41fc046153f53b089182e73624a35d117da` |
+| Size | 2,421,664 bytes |
+| SHA-256 | `DB6DBA0EC5A42D859B6D22B59152C2A069D3828B3D9D359963DCF76288143CC1` |
+| App identity | `PLVT00001`, development version `00.01` |
+| Build/profile | `recovery-diagnostics-1`, 720p independent input and deferred logging |
+
+Installing this VPK replaces the installed app with the same title ID. The
+accepted graphical VPK and earlier stream fallback remain separate local files.
+Software checks and remaining limits are recorded in
+[RECOVERY_DIAGNOSTICS_RESULT.md](RECOVERY_DIAGNOSTICS_RESULT.md).
+
 ## Vita checks still required
 
 1. Launch and inspect Settings: log availability must become available after
