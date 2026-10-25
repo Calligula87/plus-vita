@@ -4,8 +4,9 @@ Compare this experimental candidate with the accepted
 `plus-vita-play-18-interruption-1.vpk` identified in
 [STABLE_GRAPHICAL_BASELINE.md](STABLE_GRAPHICAL_BASELINE.md). Keep both VPKs.
 The candidate uses `recovery-diagnostics-1` diagnostics and the unchanged accepted
-720p input/media profile. It has no app-imposed play cutoff. It is not a public
-beta and has not passed #22 or #23.
+720p input/media profile. It has no app-imposed play cutoff. The maintainer
+accepted the six-step recovery/diagnostic Vita handoff on 2026-10-25 and approved
+closing #19/#20. It is not a public beta and has not passed #22 or #23.
 
 ## Candidate identity
 
@@ -23,7 +24,13 @@ accepted graphical VPK and earlier stream fallback remain separate local files.
 Software checks and remaining limits are recorded in
 [RECOVERY_DIAGNOSTICS_RESULT.md](RECOVERY_DIAGNOSTICS_RESULT.md).
 
-## Vita checks still required
+## Vita test procedure
+
+The six-step handoff passed as recorded in
+[RECOVERY_DIAGNOSTICS_RESULT.md](RECOVERY_DIAGNOSTICS_RESULT.md). The expanded
+procedure below remains useful for regression and final release validation;
+the scoped pass does not imply that every broader edge case or the final
+45-minute session was exercised.
 
 1. Launch and inspect Settings: log availability must become available after
    storage initializes. Follow the accepted retained-JSON setup normally. Never

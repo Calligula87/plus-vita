@@ -25,10 +25,24 @@ The cause of an earlier exit is unknown because the next Play replaced its log.
 
 Keep this exact VPK and the older accepted stream artifact available for
 comparison. Do not publish either as the final beta yet. Remaining release work
-is tracked in #16 (account edge cases), #17 (catalogue edge cases), #19
-(connection/Wi-Fi/sleep recovery), #20 (bounded privacy-safe diagnostics),
+is tracked in #16 (account edge cases), #17 (catalogue edge cases),
 #22 (anonymous package and publication gate) and #23 (final 45-minute Vita
 validation). #24, direct Sony sign-in research, is a separate later task.
+
+## Accepted recovery and diagnostics follow-up
+
+On 2026-10-25 the maintainer reported all six requested Vita recovery/diagnostic
+checks passed and approved closing #19/#20. The tested follow-up is
+`plus-vita-recovery-diagnostics-1.vpk`, 2,421,664 bytes, runtime source
+`f441b41fc046153f53b089182e73624a35d117da`, SHA-256
+`DB6DBA0EC5A42D859B6D22B59152C2A069D3828B3D9D359963DCF76288143CC1`.
+Its local copy remains under `local-artifacts/` and its Vita staging path is
+`ux0:data/plus-vita-recovery-diagnostics-1.vpk`. See
+[the acceptance record](RECOVERY_DIAGNOSTICS_RESULT.md) for scope and limits.
+
+Keep the original tagged graphical VPK above and the older streaming fallbacks
+unchanged for comparison. The follow-up acceptance does not pass #22/#23 or
+establish a public beta; #22 is the next agent task.
 
 The user's sign-in JSON and diagnostic logs stay private and are never part of
 this baseline artifact or Git history. Copy the log before another Play or app

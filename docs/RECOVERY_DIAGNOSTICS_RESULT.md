@@ -1,9 +1,10 @@
 # Recovery and diagnostic software result (#19, #20)
 
-2026-10-25. Software implementation is ready for the separate Vita comparison.
-The [identified candidate and hardware procedure](RECOVERY_DIAGNOSTICS_TEST.md)
-are experimental. Neither ticket's hardware acceptance, the #22 publication
-privacy gate nor the #23 final release validation is claimed complete.
+2026-10-25. The maintainer reports all six requested Vita checks passed and
+explicitly approves closing #19 and #20 for the
+[identified candidate](RECOVERY_DIAGNOSTICS_TEST.md). This accepts the scoped
+recovery/diagnostic work. The #22 publication privacy gate and #23 final release
+validation remain open; this is not public beta acceptance.
 
 Runtime changes are in `7831a0a`, `6e04dde` and `f441b41`, based on stable commit
 `a2fce19`. The original graphical and stream baseline artifacts are unchanged.
@@ -34,6 +35,15 @@ The native schema and ownership contract are in
 memory-only. Sign-in JSON, credentials and actual device logs were not published.
 
 ## Validation
+
+After FTP upload and checksum-verified readback, the maintainer reported
+"All passed" for the six-step handoff: automatic sign-in and Settings/log
+availability; normal play, controls, the two-second stop chord and relaunch;
+connection cancellation without late Play; Wi-Fi loss and explicit fresh retry;
+sleep/wake with usable UI and explicit fresh Play; and usable offline setup/help
+with clean Play/Retry failure. This is maintainer-reported behavioral evidence.
+The broader account/catalogue edge cases, final 45-minute run and publication
+privacy audit remain separate release checks.
 
 The complete native host suite passed, including account/storage and UI workflow,
 catalogue/artwork, font/raster/layout, recovery, bounded deferred logging, timing,
@@ -86,9 +96,11 @@ Accepted control/media policy and baseline preservation were retained.
 Independent final review: no remaining specification findings. Review identified
 offline setup interruption, inaccurate persistence accounting and offline
 Play/Retry resetting too late. Production fixes and behavioral regressions
-addressed all three. Hardware recovery/playback and publication checks remain
+addressed all three. The subsequent maintainer Vita pass above completes the
+scoped recovery/playback comparison. Final release and publication checks remain
 explicitly pending.
 
-Final totals: Standards 0; Spec 0. The next required evidence is the Vita test
-result for this exact candidate. #22 is still the publication gate; this build
-must not be described as the public beta or hardware accepted.
+Final totals: Standards 0; Spec 0. The next agent task is #22, preparing an
+anonymous candidate and applying the publication privacy gate. The final exact
+beta candidate still requires #23; the accepted recovery build is not the public
+beta.
