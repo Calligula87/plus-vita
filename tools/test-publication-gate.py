@@ -89,4 +89,17 @@ with tempfile.TemporaryDirectory(prefix='plus-vita-publication-') as directory:
     assert export.returncode==0 and canary not in export.stdout+export.stderr
     assert not (repo/'build/export/source/untracked-account.json').exists()
     assert (repo/'build/export/source/fixture.txt').read_text()=='clean current content'
+    # Messages are public history too, even when every committed file is clean.
+    messages = work/'messages'; messages.mkdir()
+    repo = messages
+    git('init'); git('config','user.name','Synthetic Fixture'); git('config','user.email','test@example.invalid')
+    git('commit','--allow-empty','-m',canary.decode())
+    code, report = run(repo=repo)
+    assert code != 0 and 'history.private_canary' in report['findings']
+    git('commit','--amend','-m','clean public message')
+    code, report = run(repo=repo)
+    assert code == 0
+    git('tag','-a','synthetic-tag','-m',canary.decode())
+    code, report = run(repo=repo)
+    assert code != 0 and 'history.private_canary' in report['findings']
 print('publication gate: clean actual VPK, forbidden resources, raw/compressed executable canaries, metadata, paths, credentials and historical leak fixtures passed')

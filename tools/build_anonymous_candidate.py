@@ -19,8 +19,9 @@ def git(repo, *args):
     return subprocess.check_output(['git', '-C', str(repo), *args], stderr=subprocess.DEVNULL)
 
 
-def export(repo, revision, destination):
-    archive = git(repo, 'archive', '--format=tar', revision)
+def export(repo, revision, destination, exclusions=()):
+    archive = git(repo, 'archive', '--format=tar', revision, '--', '.',
+                  *(':(exclude)'+path for path in exclusions))
     destination.mkdir(parents=True, exist_ok=True)
     with tarfile.open(fileobj=io.BytesIO(archive)) as members:
         entries = {member.name.rstrip('/'): member for member in members}
@@ -88,15 +89,27 @@ def main():
             if args.export_only:
                 continue
             raise
-        export(root / dependency, pin, source / dependency)
+        # Switch-only links target an unneeded, uninitialized platform submodule.
+        export(root / dependency, pin, source / dependency, ('switch',) if dependency=='external/pylux' else ())
         pins[dependency] = pin
-    identity = {'source_commit': revision, 'dependency_commits': pins, 'source_export': 'committed_files_only'}
+    identity = {'source_commit': revision, 'dependency_commits': pins, 'source_export': 'committed_files_only',
+                'excluded_platform_sources': ['external/pylux/switch']}
     (output / 'source-identity.json').write_text(json.dumps(identity, indent=2)+'\n')
     if args.export_only:
         print('Exported committed source and pinned dependency inputs')
         return
     if not args.sdk:
         raise ValueError('Specify the pinned VitaSDK location')
+    compiler = args.sdk.resolve()/'bin/arm-vita-eabi-gcc.exe'
+    if not compiler.exists():
+        compiler = compiler.with_suffix('')
+    identity['toolchain'] = {
+        'sdk_version_manifest_sha256': hashlib.sha256((args.sdk.resolve()/'version_info.txt').read_bytes()).hexdigest().upper(),
+        'compiler_version': subprocess.check_output([str(compiler),'-dumpfullversion'],stderr=subprocess.DEVNULL).decode().strip(),
+        'compiler_sha256': hashlib.sha256(compiler.read_bytes()).hexdigest().upper(),
+        'cmake_version': subprocess.check_output([args.cmake,'--version'],stderr=subprocess.DEVNULL).decode().splitlines()[0],
+        'ninja_version': subprocess.check_output([args.ninja,'--version'],stderr=subprocess.DEVNULL).decode().strip(),
+    }
     environment = dict(os.environ)
     for name in ('CFLAGS','CXXFLAGS','CPPFLAGS','LDFLAGS','CMAKE_TOOLCHAIN_FILE'):
         environment.pop(name, None)

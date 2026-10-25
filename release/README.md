@@ -13,7 +13,9 @@ media, input, font, account and recovery policies remain in place.
 ## Build from anonymous committed inputs
 
 Commit the intended implementation first. Export only that commit and the pinned
-dependencies into a new directory under `build/`; private untracked files and
+dependencies into a new directory under `build/`; the unused Pylux Switch tree
+is excluded, and archive links resolve only to committed archive content.
+Private untracked files and
 working-directory configuration are not copied. The build removes inherited
 compiler flags, specifies every release switch explicitly, maps compiler source
 paths to public prefixes and normalizes VPK timestamps/attributes. A source and

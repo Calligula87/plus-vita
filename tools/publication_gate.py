@@ -179,11 +179,15 @@ def repository_findings(root, reviewed):
         end = records.index(b'\n', position)
         header = records[position:end].split()
         size = int(header[2]); blob = records[end+1:end+1+size]; position = end+size+2
-        if header[1] != b'blob':
+        kind = header[1]
+        if kind not in (b'blob', b'commit', b'tag'):
             continue
-        stats['history_blobs'] += 1
+        if kind != b'blob':
+            # Public Git author metadata is not release payload. Messages are.
+            blob = blob.partition(b'\n\n')[2]
+        stats['history_'+{b'blob':'blobs',b'commit':'commit_messages',b'tag':'tag_messages'}[kind]] += 1
         for category in findings(blob):
-            if category == 'private_build_path' and oid.decode() in reviewed:
+            if kind == b'blob' and category == 'private_build_path' and oid.decode() in reviewed:
                 stats['reviewed_legacy_workspace_paths'] += 1
             else:
                 errors['history.'+category] += 1
