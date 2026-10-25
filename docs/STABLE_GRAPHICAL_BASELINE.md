@@ -42,7 +42,9 @@ Its local copy remains under `local-artifacts/` and its Vita staging path is
 
 Keep the original tagged graphical VPK above and the older streaming fallbacks
 unchanged for comparison. The follow-up acceptance does not pass #22/#23 or
-establish a public beta; #22 is the next agent task.
+establish a public beta. The separately prepared #22 anonymous branded candidate
+and its pending #23 hardware checks are recorded in
+[the candidate handoff](BETA_CANDIDATE_1.md).
 
 The user's sign-in JSON and diagnostic logs stay private and are never part of
 this baseline artifact or Git history. Copy the log before another Play or app
