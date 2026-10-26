@@ -1,5 +1,21 @@
 # Candidate 2: LiveArea and menu background follow-up
 
+## Hardware correction: LiveArea remains unresolved
+
+The maintainer's subsequent Vita photo still shows the system multicolor
+LiveArea background and default gate. #35 is reopened for this portion; the
+earlier package pass and FTP readback did not establish display correctness.
+
+A read-only device inspection confirms that all three files installed under
+this app's `sce_sys/livearea/contents` match candidate 2 exactly. The separate
+`ux0:appmeta/PLVT00001` copy is PFS-protected: ordinary FTP returns encrypted,
+allocation-padded data. These bytes cannot establish whether the cached template
+is stale or invalid. Decrypted cache inspection and a fresh device display check
+are still required. No cache files, account data, system database or device
+photos have been changed or published. No fix is claimed from these checks.
+
+---
+
 Implements the maintainer's #35 request under #23. The earlier candidate's
 general positive visual feedback is recorded without inferring specific recovery
 or 45-minute acceptance. The supplied device photos remain private.
