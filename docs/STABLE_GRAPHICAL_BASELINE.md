@@ -45,6 +45,8 @@ unchanged for comparison. The follow-up acceptance does not pass #22/#23 or
 establish a public beta. The separately prepared #22 anonymous branded candidate
 and its pending #23 hardware checks are recorded in
 [the candidate handoff](BETA_CANDIDATE_1.md).
+The later #35 LiveArea/menu-background follow-up is recorded in
+[candidate 2](BETA_CANDIDATE_2.md); exact-candidate hardware acceptance remains open.
 
 The user's sign-in JSON and diagnostic logs stay private and are never part of
 this baseline artifact or Git history. Copy the log before another Play or app

@@ -1,5 +1,8 @@
 # Anonymous beta candidate 1 — Vita handoff
 
+The maintainer's later #35 graphics follow-up is implemented in
+[candidate 2](BETA_CANDIDATE_2.md). This candidate 1 record and VPK are preserved.
+
 Prepared for #22 with graphics spec #31 and implementation tasks #32–#34.
 This is a test candidate. Publication remains blocked by #23; host tests and
 privacy checks do not establish Vita acceptance.

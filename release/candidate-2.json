@@ -1,0 +1,29 @@
+{
+  "source_commit": "44ccbef3d834066ef7392df2429c6b29aa593e61",
+  "dependency_commits": {
+    "external/pylux": "ca87a49a12bab071948f565ca53ffdad790775d3",
+    "external/json-c": "b4c371fa0cbc4dcbaccc359ce9e957a22988fb34",
+    "external/freetype": "0a0221a1347e2f1e07c395263540026e9a0aa7c7",
+    "external/pylux/third-party/nanopb": "cad3c18ef15a663e30e3e43e3a752b66378adec1",
+    "external/pylux/third-party/curl": "b1ef0e1a01c0bb6ee5367bd9c186a603bde3615a",
+    "external/pylux/third-party/gf-complete": "fa54a4670a5705c84abf6c24b92b0cd479625478",
+    "external/pylux/third-party/jerasure": "505ccb4bc69eee8d7ea40a6089a056b99671134f"
+  },
+  "source_export": "committed_files_only",
+  "excluded_platform_sources": [
+    "external/pylux/switch"
+  ],
+  "toolchain": {
+    "sdk_version_manifest_sha256": "88995A9821CED92035B4F9F1875E5CC5BB2A0EEF512E666F61A21F542951081B",
+    "compiler_version": "15.2.0",
+    "compiler_sha256": "7096666822B9F3252F8D4044AF169BC2EFDF3F60FF3B9101D3E110745B4575EE",
+    "cmake_version": "cmake version 4.4.2",
+    "ninja_version": "1.13.2"
+  },
+  "artifact": "plus-vita-v0.1.0-beta-candidate-2.vpk",
+  "sha256": "EEA909AE81B219BBB2B1E3563CD0F1A3C13CC74EA131A334C4202E1E8118A984",
+  "size_bytes": 4021412,
+  "profile": "720p-input-worker-deferred-log",
+  "public_version": "0.1.0 beta candidate",
+  "hardware_gate": "pending_23"
+}
