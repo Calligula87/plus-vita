@@ -12,6 +12,14 @@ def clean_image(path):
         return Image.frombytes('RGB', rgb.size, rgb.tobytes())
 
 
+def fit_image(source, size):
+    fitted = source.copy()
+    fitted.thumbnail(size, Image.Resampling.LANCZOS)
+    canvas = Image.new('RGB', size, (0, 12, 36))
+    canvas.paste(fitted, ((size[0]-fitted.width)//2, (size[1]-fitted.height)//2))
+    return canvas
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--logo', type=Path, required=True)
@@ -27,19 +35,12 @@ def main():
     if args.splash:
         splash = clean_image(args.splash)
         splash.save(args.output / 'splash-source.png', optimize=False, compress_level=9)
-        fitted = splash.copy()
-        fitted.thumbnail((960, 544), Image.Resampling.LANCZOS)
-        canvas = Image.new('RGB', (960, 544), (0, 12, 36))
-        canvas.paste(fitted, ((960 - fitted.width)//2, (544 - fitted.height)//2))
+        canvas = fit_image(splash, (960, 544))
         (args.output / 'splash.pvi').write_bytes(b'PVIMAGE1' + struct.pack('<II', 960, 544) + canvas.convert('RGBA').tobytes())
         livearea = args.output / 'livearea'
         livearea.mkdir(exist_ok=True)
         for name, size in (('bg.png', (840, 500)), ('startup.png', (280, 158))):
-            fitted = splash.copy()
-            fitted.thumbnail(size, Image.Resampling.LANCZOS)
-            canvas = Image.new('RGB', size, (0, 12, 36))
-            canvas.paste(fitted, ((size[0]-fitted.width)//2, (size[1]-fitted.height)//2))
-            canvas.quantize(colors=128).save(livearea/name, optimize=False, compress_level=9)
+            fit_image(splash, size).quantize(colors=128).save(livearea/name, optimize=False, compress_level=9)
     if args.menu:
         menu = clean_image(args.menu)
         menu.save(args.output/'menu-source.png', optimize=False, compress_level=9)

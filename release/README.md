@@ -2,6 +2,9 @@
 
 Issue #22 prepares a candidate; it does not authorize public publication.
 Graphics spec #31 and implementation slices #32–#34 are part of this candidate.
+The #35 follow-up uses the original wide artwork for LiveArea and a logo/text-free
+plate for menu backgrounds, replacing the earlier welcome logo. The latest
+builder emits candidate 2; candidate 1 remains available at its recorded commit.
 The accepted graphical/recovery and streaming VPKs remain unchanged outside Git.
 
 The release profile identifies itself as **0.1.0 beta candidate**, requires the
@@ -35,11 +38,11 @@ status/artifact identity. It performs no network acquisition or publication.
 ## Verify the actual artifact
 
 ```sh
-python tools/publication_gate.py --vpk build/anonymous-beta-22/plus-vita-v0.1.0-beta-candidate-1.vpk \
+python tools/publication_gate.py --vpk build/anonymous-beta-22/plus-vita-v0.1.0-beta-candidate-2.vpk \
   --report build/anonymous-beta-22/privacy-report.json \
   --materials README.md docs/ACCOUNT_SETUP.md docs/REPORTING_ISSUES.md release/README.md
-python tools/test-branding.py build/anonymous-beta-22/plus-vita-v0.1.0-beta-candidate-1.vpk
-python tools/test-publication-gate.py build/anonymous-beta-22/plus-vita-v0.1.0-beta-candidate-1.vpk
+python tools/test-branding.py build/anonymous-beta-22/plus-vita-v0.1.0-beta-candidate-2.vpk
+python tools/test-publication-gate.py build/anonymous-beta-22/plus-vita-v0.1.0-beta-candidate-2.vpk
 ```
 
 The first gate examines tracked source, complete relevant Git history, selected
