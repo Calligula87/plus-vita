@@ -1,0 +1,2 @@
+# LiveArea XML is a byte-sensitive Vita resource, not a host text file.
+vita-client/assets/branding/livearea/template.xml -text

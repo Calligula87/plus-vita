@@ -10,9 +10,22 @@ A read-only device inspection confirms that all three files installed under
 this app's `sce_sys/livearea/contents` match candidate 2 exactly. The separate
 `ux0:appmeta/PLVT00001` copy is PFS-protected: ordinary FTP returns encrypted,
 allocation-padded data. These bytes cannot establish whether the cached template
-is stale or invalid. Decrypted cache inspection and a fresh device display check
-are still required. No cache files, account data, system database or device
-photos have been changed or published. No fix is claimed from these checks.
+is stale or invalid. After the maintainer opened the metadata folder decrypted,
+the cached XML, background and startup image were also verified byte-for-byte
+against candidate 2. An old on-disk resource copy is therefore ruled out; the
+display failure remains unresolved.
+
+The template does not follow the VitaSDK sample's documented CRLF convention.
+A template-only format variant is now prepared in expanded CRLF XML, with the
+same parsed layout, references, artwork and executable. The package format test
+fails on candidate 2 and passes on the variant. This is a compatibility trial,
+not proof that serialization caused the native display failure. Source:
+[VitaSDK XML notes](https://github.com/vitasdk/samples#notes-on-xml).
+
+Direct mutation of installed/protected metadata was rejected by automatic
+approval review as outside the earlier inspection-only authorization. No device
+files were changed. The alternative is a separately named VPK installed normally
+through VitaShell; the issue stays open for the next actual display result.
 
 ---
 

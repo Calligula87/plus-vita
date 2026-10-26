@@ -14,7 +14,9 @@ with zipfile.ZipFile(args.vpk) as package:
     assert image.size == (128, 128) and image.mode == 'P', 'Icon must match VitaSDK native icon format'
     assert not image.info, 'Packaged icon must contain pixel data only'
     base='sce_sys/livearea/contents/'
-    template=ET.fromstring(package.read(base+'template.xml'))
+    template_bytes=package.read(base+'template.xml')
+    assert b'\r\n' in template_bytes and b'\n' not in template_bytes.replace(b'\r\n',b''), 'LiveArea XML must retain VitaSDK CRLF line endings'
+    template=ET.fromstring(template_bytes)
     assert template.tag=='livearea' and template.attrib['content-rev']=='2'
     for name,size in ((template.findtext('livearea-background/image'),(840,500)),
                       (template.findtext('gate/startup-image'),(280,158))):

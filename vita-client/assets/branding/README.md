@@ -20,6 +20,10 @@ decoding, resizing or network loading during input/rendering:
   `template.xml` installs these for the Vita LiveArea Start/Continue page.
   Layout and image constraints follow the
   [VitaSDK samples](https://github.com/vitasdk/samples).
+  The template is UTF-8 expanded XML with CRLF line endings as documented by
+  VitaSDK. Its Git attribute disables newline conversion so anonymous exports
+  preserve those exact resource bytes. This format requirement alone does not
+  establish that SceShell displayed the artwork; the Vita check remains required.
 
 Each PVI has the eight-byte ASCII magic `PVIMAGE1`, little-endian 32-bit width
 and height, then exactly width×height RGBA bytes. The loader accepts only the
