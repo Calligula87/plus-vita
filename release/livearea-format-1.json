@@ -1,0 +1,14 @@
+{
+  "artifact": "plus-vita-v0.1.0-beta-candidate-2-livearea-format-1.vpk",
+  "size_bytes": 4021415,
+  "sha256": "E643DD43B64FB887C47B9851A9331339668D6077779E5F13F6ADCB9C3B6D1A98",
+  "base_candidate_sha256": "EEA909AE81B219BBB2B1E3563CD0F1A3C13CC74EA131A334C4202E1E8118A984",
+  "changed_resources": [
+    "sce_sys/livearea/contents/template.xml"
+  ],
+  "runtime_source_commit": "44ccbef3d834066ef7392df2429c6b29aa593e61",
+  "hardware_verified": false,
+  "template_source_commit": "055f1f7a2d063fe64a58d1cdab4e439c353534a1",
+  "parsed_xml_unchanged": true,
+  "ftp_readback_verified": true
+}
