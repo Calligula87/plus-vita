@@ -2,7 +2,7 @@
 #ifndef PLUS_VITA_BUILD_IDENTITY_H
 #define PLUS_VITA_BUILD_IDENTITY_H
 #if PLUS_VITA_RELEASE_CANDIDATE
-#define PLUS_VITA_APP_BUILD "v0.1.0-beta-candidate-1"
+#define PLUS_VITA_APP_BUILD "v0.1.0-beta-candidate-2"
 #define PLUS_VITA_BUILD_LABEL "BETA CANDIDATE"
 #define PLUS_VITA_ABOUT_STATUS "v0.1.0 beta candidate.\nFinal Vita release validation is still required."
 #else

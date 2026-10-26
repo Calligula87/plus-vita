@@ -64,7 +64,7 @@ static void splash_dismissal(PlusVitaFont *font)
 		plus_vita_branding_free(branding);plus_vita_app_destroy(app);assert(remove("splash.pvi")==0);
 	}
 	/* Bad/truncated package artwork must still permit normal startup. */
-	image_fixture("logo.pvi",1,1,0xff000000);
+	image_fixture("menu.pvi",1,1,0xff000000);
 	image_fixture("splash.pvi",1,1,0xff000000);
 	PlusVitaBranding *branding=plus_vita_branding_load(".");
 	PlusVitaApp *app=plus_vita_app_create();PlusVitaUiFlow flow={.app=app};
@@ -72,26 +72,33 @@ static void splash_dismissal(PlusVitaFont *font)
 	assert(plus_vita_ui_flow_take(&flow).kind==PLUS_VITA_EFFECT_LOAD_ACCOUNT);
 	assert(plus_vita_ui_flow_paint(&flow,font,pixels,1024));
 	plus_vita_branding_free(branding);plus_vita_app_destroy(app);
-	assert(remove("logo.pvi")==0 && remove("splash.pvi")==0);
+	assert(remove("menu.pvi")==0 && remove("splash.pvi")==0);
 }
 int main(void)
 {
 	memset(bitmap,255,sizeof(bitmap));
-	image_fixture("logo.pvi",192,192,0xff443322);
+	image_fixture("menu.pvi",960,544,0xff443322);
+	/* An obsolete logo resource must never appear in the new menu painter. */
+	image_fixture("logo.pvi",192,192,0xffccbb99);
 	PlusVitaBranding *branding=plus_vita_branding_load("."); assert(branding);
 	PlusVitaApp *app=plus_vita_app_create(); assert(app);
 	PlusVitaFont *font=plus_vita_font_create(); assert(font);
 	PlusVitaAppView view=plus_vita_app_view(app);
 	plus_vita_app_paint_with_resources(font,pixels,1024,&view,NULL,branding);
 	assert(pixels[238*1024+674]==0xff443322 && pixels[429*1024+865]==0xff443322);
-	assert(remove("logo.pvi")==0);
+	assert(pixels[500*1024+959]==0xff443322);
+	assert(remove("menu.pvi")==0 && remove("logo.pvi")==0);
 	plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_DOWN});
 	view=plus_vita_app_view(app);
 	plus_vita_app_paint_with_resources(font,pixels,1024,&view,NULL,branding);
 	assert(pixels[300*1024+700]==0xff443322);
 	assert(pixels[(view.actions[view.selected].y+20)*1024+70]==0xff5bc6f6);
+	plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_ACTIVATE});
+	view=plus_vita_app_view(app);assert(view.screen==PLUS_VITA_APP_SETTINGS);
+	plus_vita_app_paint_with_resources(font,pixels,1024,&view,NULL,branding);
+	assert(pixels[500*1024+959]==0xff443322);
 	splash_journey(font);
 	splash_dismissal(font);
 	plus_vita_branding_free(branding);plus_vita_app_destroy(app);plus_vita_font_free(font);
-	puts("branding journey: supplied logo replaces placeholder and preserves painted focus without reloading");
+	puts("branding journey: full-screen menu background, no logo, focus, cached resources and splash passed");
 }

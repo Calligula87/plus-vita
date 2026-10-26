@@ -13,7 +13,10 @@ import zlib
 MAX_MEMBER = 32 * 1024 * 1024
 RESOURCES = {
     'sce_sys/icon0.png': 'vita-client/assets/branding/icon0.png',
-    'branding/logo.pvi': 'vita-client/assets/branding/logo.pvi',
+    'branding/menu.pvi': 'vita-client/assets/branding/menu.pvi',
+    'sce_sys/livearea/contents/bg.png': 'vita-client/assets/branding/livearea/bg.png',
+    'sce_sys/livearea/contents/startup.png': 'vita-client/assets/branding/livearea/startup.png',
+    'sce_sys/livearea/contents/template.xml': 'vita-client/assets/branding/livearea/template.xml',
     'branding/splash.pvi': 'vita-client/assets/branding/splash.pvi',
     'cacert.pem': 'vita-client/cacert.pem',
     'fonts/NotoSans-Regular.ttf': 'vita-client/assets/fonts/NotoSans-Regular.ttf',
@@ -117,7 +120,7 @@ def package_findings(vpk, root):
                 expected = committed_resource(root, RESOURCES[member.filename])
                 if hashlib.sha256(data).digest() != hashlib.sha256(expected).digest():
                     errors['package.resource_identity'] += 1
-            if member.filename == 'sce_sys/icon0.png':
+            if member.filename.endswith('.png'):
                 position = 8
                 while position + 12 <= len(data):
                     length = int.from_bytes(data[position:position+4], 'big')

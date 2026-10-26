@@ -50,8 +50,11 @@ static void cover(Canvas *display,const PlusVitaCovers *covers,const PlusVitaCat
 void plus_vita_app_paint_with_resources(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view,const PlusVitaCovers *covers,const PlusVitaBranding *branding)
 {
 	Canvas canvas = {pixels, pitch, font}; Canvas *display = &canvas;
-	for(int y = 0; y < HEIGHT; y++)
-		rectangle(display, 0, y, WIDTH, 1, RGB(0, 25 + y / 20, 70 + y / 6));
+	const uint32_t *background=plus_vita_branding_background(branding);
+	for(int y = 0; y < HEIGHT; y++) {
+		if(background) memcpy(pixels+y*pitch,background+y*WIDTH,WIDTH*sizeof(*pixels));
+		else rectangle(display, 0, y, WIDTH, 1, RGB(0, 25 + y / 20, 70 + y / 6));
+	}
 	rectangle(display, 0, 0, WIDTH, 4, RGB(246, 198, 91));
 	text(display, "plus vita", 64, 25, TEXT_BRAND, 400, 38, false, RGB(236, 244, 250));
 	text(display, PLUS_VITA_BUILD_LABEL, 712, 32, TEXT_MICRO, 220, 24, false, RGB(195, 211, 239));
@@ -78,16 +81,6 @@ void plus_vita_app_paint_with_resources(PlusVitaFont *font,uint32_t *pixels,int 
 			text(display,"14 px: Agjpqy é Å Müller",64,310,TEXT_MICRO,832,24,false,RGB(210,224,247));
 			text(display,"16 px: Agjpqy é Å Müller",64,342,TEXT_HINT,832,28,false,RGB(210,224,247));
 			text(display,"18 px: Agjpqy é Å Müller 日本",64,376,TEXT_COMPACT,832,32,false,RGB(210,224,247));
-		}
-	}
-	if(view->screen == PLUS_VITA_APP_WELCOME)
-	{
-		const uint32_t *logo=plus_vita_branding_logo(branding);
-		if(logo) for(int y=0;y<192;y++)
-			memcpy(pixels+(238+y)*pitch+674,logo+y*192,192*sizeof(*pixels));
-		else {
-			rounded(display,674,238,192,192,RGB(18,53,113));
-			text(display,"PLUS VITA",694,310,TEXT_COMPACT,160,32,false,RGB(246,198,91));
 		}
 	}
 	for(size_t i = 0; i < view->action_count; i++)

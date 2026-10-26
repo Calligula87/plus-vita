@@ -17,14 +17,13 @@ def main():
     parser.add_argument('--logo', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--splash', type=Path)
+    parser.add_argument('--menu', type=Path)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     logo = clean_image(args.logo)
     logo.save(args.output / 'logo-source.png', optimize=False, compress_level=9)
     icon = logo.resize((128, 128), Image.Resampling.LANCZOS).quantize(colors=256)
     icon.save(args.output / 'icon0.png', optimize=False, compress_level=9)
-    local_logo = logo.resize((192, 192), Image.Resampling.LANCZOS).convert('RGBA')
-    (args.output / 'logo.pvi').write_bytes(b'PVIMAGE1' + struct.pack('<II', 192, 192) + local_logo.tobytes())
     if args.splash:
         splash = clean_image(args.splash)
         splash.save(args.output / 'splash-source.png', optimize=False, compress_level=9)
@@ -33,6 +32,21 @@ def main():
         canvas = Image.new('RGB', (960, 544), (0, 12, 36))
         canvas.paste(fitted, ((960 - fitted.width)//2, (544 - fitted.height)//2))
         (args.output / 'splash.pvi').write_bytes(b'PVIMAGE1' + struct.pack('<II', 960, 544) + canvas.convert('RGBA').tobytes())
+        livearea = args.output / 'livearea'
+        livearea.mkdir(exist_ok=True)
+        for name, size in (('bg.png', (840, 500)), ('startup.png', (280, 158))):
+            fitted = splash.copy()
+            fitted.thumbnail(size, Image.Resampling.LANCZOS)
+            canvas = Image.new('RGB', size, (0, 12, 36))
+            canvas.paste(fitted, ((size[0]-fitted.width)//2, (size[1]-fitted.height)//2))
+            canvas.quantize(colors=128).save(livearea/name, optimize=False, compress_level=9)
+    if args.menu:
+        menu = clean_image(args.menu)
+        menu.save(args.output/'menu-source.png', optimize=False, compress_level=9)
+        fitted = menu.resize((960, 544), Image.Resampling.LANCZOS)
+        # Precompute the dark reading surface; no per-frame blending on Vita.
+        fitted = fitted.point(lambda channel: round(channel*0.45))
+        (args.output/'menu.pvi').write_bytes(b'PVIMAGE1'+struct.pack('<II',960,544)+fitted.convert('RGBA').tobytes())
     print('Prepared clean public logo source and Vita app icon')
 
 

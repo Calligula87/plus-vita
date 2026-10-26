@@ -137,7 +137,7 @@ def main():
         for command in (configure,[args.cmake,'--build',str(build),'--parallel','4']):
             subprocess.run(command,env=environment,stdout=log,stderr=log,check=True)
     original = build / 'plus_vita_smoke.vpk'
-    artifact = output / 'plus-vita-v0.1.0-beta-candidate-1.vpk'
+    artifact = output / 'plus-vita-v0.1.0-beta-candidate-2.vpk'
     # Package timestamps and host file attributes are not release inputs.
     with zipfile.ZipFile(original) as package, zipfile.ZipFile(artifact,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as clean:
         for name in sorted(package.namelist()):
