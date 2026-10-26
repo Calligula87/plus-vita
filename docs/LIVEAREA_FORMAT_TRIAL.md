@@ -27,7 +27,21 @@ output creation, and binds the base VPK to candidate 2's recorded checksum.
 Anonymous export preserves the committed XML bytes through a `-text` Git
 attribute. Package/privacy checks and synthetic leak-rejection fixtures pass.
 Native stream/UI tests were not rerun: no executable or runtime resource pixels
-changed. Independent Standards and Spec reviews found no remaining issues.
+changed.
+
+## Standards
+
+Independent review: zero documented-standard violations and zero actionable
+smells. The trial preserves earlier artifacts and binds repackaging to the
+recorded candidate 2 checksum.
+
+## Spec
+
+Independent review: zero concrete specification defects in the controlled trial.
+Actual LiveArea appearance is unresolved. The package tests and unchanged parsed
+layout do not establish that formatting caused the native failure.
+
+## Reproduction and device check
 
 Reproduce with a new output path:
 
