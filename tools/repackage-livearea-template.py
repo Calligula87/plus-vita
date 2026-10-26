@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import zipfile
+import xml.etree.ElementTree as ET
 
 root=Path(__file__).resolve().parents[1]
 parser=argparse.ArgumentParser()
@@ -20,9 +21,15 @@ replacement=(root/'vita-client/assets/branding/livearea/template.xml').read_byte
 if b'\r\n' not in replacement or b'\n' in replacement.replace(b'\r\n',b''):
     raise ValueError('LiveArea template must retain CRLF line endings')
 args.output.parent.mkdir(parents=True,exist_ok=True)
-with zipfile.ZipFile(args.input) as source, zipfile.ZipFile(args.output,'w') as output:
-    for member in source.infolist():
-        output.writestr(member,replacement if member.filename==name else source.read(member),compresslevel=9)
+def structure(node):
+    return node.tag,node.attrib,(node.text or '').strip(),tuple(structure(child) for child in node)
+
+with zipfile.ZipFile(args.input) as source:
+    if structure(ET.fromstring(source.read(name)))!=structure(ET.fromstring(replacement)):
+        raise ValueError('Formatting trial must preserve the parsed LiveArea layout')
+    with zipfile.ZipFile(args.output,'w') as output:
+        for member in source.infolist():
+            output.writestr(member,replacement if member.filename==name else source.read(member),compresslevel=9)
 with zipfile.ZipFile(args.input) as original, zipfile.ZipFile(args.output) as revised:
     if original.namelist()!=revised.namelist():
         raise ValueError('Package inventory changed')
