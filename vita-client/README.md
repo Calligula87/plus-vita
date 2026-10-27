@@ -2,9 +2,10 @@
 
 This directory contains the native VitaSDK client. Its current accepted build
 streams cloud games on the Vita with native H.264 decode, audio and controls.
-The combined input-worker/deferred-log VPK is the maintainer's playable
-pre-release baseline. See the [milestone](../docs/PLAYABLE_MILESTONE.md) for the
-exact accepted package, build configuration and remaining limitations.
+The accepted first version is **v000**, with graphical setup, remembered sign-in,
+catalogue/search/details and Play/stop/recovery. See the
+[v000 record](../docs/V000.md) for its exact artifact and validation. The older
+[milestone](../docs/PLAYABLE_MILESTONE.md) preserves streaming rollback builds.
 
 The original smoke application established portable `libchiaki` primitives and
 VPK packaging. The smoke-target description below records that early stage;
@@ -17,7 +18,7 @@ after cloning this repository:
 git submodule update --init --recursive
 ```
 
-## Current smoke target
+## Current graphical client
 
 New builds open a blue/gold graphical app with joystick/touch menu navigation,
 retained-JSON automatic sign-in and an initial catalogue.
@@ -25,11 +26,11 @@ Circle/back retains the runtime account; the JSON stays in place and later
 launches revalidate it while Sony accepts it. Account controls include label,
 disable-remember and Forget. Typography uses scalable system fonts and measured
 text bounds, requested-size ink baselines and bounded glyph caching. The
-graphical app starts a fresh deferred UI timing log on launch. The revised
-candidate needs its [Vita check](../docs/UI_FONT_RESPONSE_TEST.md); see the
+graphical app starts a fresh deferred diagnostic log on launch and before Play.
+The release uses FreeType/Noto Sans with system-font fallback, custom icon,
+splash, LiveArea and menu artwork. See the
 [setup guide](../docs/ACCOUNT_SETUP.md) and
-[startup check](../docs/GRAPHICAL_STARTUP_TEST.md). Stream integration follows
-in later release tickets. Select
+[anonymous distribution build](../release/README.md). Select
 `-DPLUS_VITA_DIAGNOSTIC_APP=ON` to build the historical smoke/stream interface
 described below. Retain accepted stream artifacts separately.
 
@@ -38,7 +39,9 @@ guide and current-session log availability. The
 [issue-reporting guide](../docs/REPORTING_ISSUES.md) explains how to copy and
 review the log before attaching it manually to GitHub.
 
-The target compiles Pylux's C base64 and logging implementations, threading,
+## Historical diagnostic target
+
+The diagnostic target compiles Pylux's C base64 and logging implementations, threading,
 protocol sequence/service primitives, nanopb runtime, generated Takion schema,
 Vita clock/entropy adapters, json-c, and the Pylux catalogue modules. On launch
 it runs deterministic tests—including a Takion protocol-negotiation round trip

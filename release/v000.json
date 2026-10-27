@@ -25,5 +25,5 @@
   "size_bytes": 4027154,
   "profile": "720p-input-worker-deferred-log",
   "public_version": "v000",
-  "hardware_gate": "pending_23"
+  "hardware_gate": "maintainer_reported_pass_2026-10-27"
 }

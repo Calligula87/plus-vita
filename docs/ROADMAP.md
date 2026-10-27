@@ -1,5 +1,14 @@
 # Roadmap
 
+## v000 acceptance — 2026-10-27
+
+The maintainer accepts the first v000 version and confirms its 45-minute play,
+stop/relaunch, Wi-Fi/sleep recovery, account persistence/Forget and catalogue
+search/back-navigation checks passed. Software privacy and package checks pass.
+See [v000 identity and acceptance](V000.md). Publication is awaiting a public
+distribution decision; the development repository remains private. Direct Sony
+sign-in research (#24) is separate future work, outside v000 completion.
+
 ## Current milestone — 2026-10-16
 
 The native Vita streaming proof of concept has reached a maintainer-accepted

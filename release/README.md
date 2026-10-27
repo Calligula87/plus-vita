@@ -1,6 +1,10 @@
 # Anonymous v000 build and publication gate
 
 Issue #22 prepares a candidate; it does not authorize public publication.
+The maintainer accepted the final v000 hardware checks on 2026-10-27; see
+[the acceptance record](../docs/V000.md). Publication is awaiting agreement on
+public distribution with corresponding source while keeping development
+history private.
 The graphical work is recorded in #31–#36.
 The #35 follow-up uses the original wide artwork for LiveArea and a logo/text-free
 plate for menu backgrounds, replacing the earlier welcome logo. The latest
@@ -74,6 +78,10 @@ JSON or working directories are release/publication inputs.
 
 Every report keeps publication unauthorized until #23's exact-candidate Vita
 validation, including the 45-minute run and remaining #16/#17 edge cases.
+The maintainer has now confirmed these v000 checks passed. Existing automated
+reports retain their conservative `pending_23`/unauthorized fields as snapshots;
+the dated hardware decision is recorded separately in `docs/V000.md` and
+`v000.json`. The scanner does not itself grant publication permission.
 Verify installed icon, brief/skippable splash, PNG wordmark and menu/LiveArea backgrounds on Vita as part
 of that gate. Host rendering, a package build and a software privacy pass cannot
 establish hardware acceptance. No automatic upload/release job is provided.
