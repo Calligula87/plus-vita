@@ -87,6 +87,14 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      - name: Allow Git reads of the mounted checkout
+        # checkout's temporary HOME does not persist into container run steps.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Verify source and history before building
+        if: matrix.release == 'ON'
+        run: python3 tools/publication_gate.py
+
       - name: Configure
         run: >-
           cmake -S vita-client -B build/vita -DCMAKE_BUILD_TYPE=Release
