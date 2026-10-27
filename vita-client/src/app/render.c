@@ -47,6 +47,26 @@ static void cover(Canvas *display,const PlusVitaCovers *covers,const PlusVitaCat
 	} else text(display,!game || (!game->cover_url[0] && game->cover_metadata==PLUS_VITA_ARTWORK_MISSING) ? "No cover" : !game->cover_url[0] || !covers ? "Cover unavailable" : !image || image->state==PLUS_VITA_COVER_LOADING ? "Loading cover" : "Cover unavailable",x+6,y+48,TEXT_MICRO,116,58,true,RGB(195,211,239));
 }
 
+static void wordmark(Canvas *display,const PlusVitaBranding *branding)
+{
+	const uint32_t *image=plus_vita_branding_wordmark(branding);
+	if(!image) {
+		text(display,"plus-vita",64,25,TEXT_BRAND,400,38,false,RGB(246,198,91));
+		return;
+	}
+	for(unsigned y=0;y<40;y++) for(unsigned x=0;x<224;x++) {
+		uint32_t source=image[y*224+x], alpha=source>>24;
+		uint32_t *destination=&display->pixels[(20+y)*display->pitch+64+x];
+		if(alpha==255) *destination=source;
+		else if(alpha) {
+			uint32_t result=0xff000000u;
+			for(unsigned shift=0;shift<24;shift+=8)
+				result|=(((((source>>shift)&255)*alpha+((*destination>>shift)&255)*(255-alpha)+127)/255)<<shift);
+			*destination=result;
+		}
+	}
+}
+
 void plus_vita_app_paint_with_resources(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view,const PlusVitaCovers *covers,const PlusVitaBranding *branding)
 {
 	Canvas canvas = {pixels, pitch, font}; Canvas *display = &canvas;
@@ -56,7 +76,7 @@ void plus_vita_app_paint_with_resources(PlusVitaFont *font,uint32_t *pixels,int 
 		else rectangle(display, 0, y, WIDTH, 1, RGB(0, 25 + y / 20, 70 + y / 6));
 	}
 	rectangle(display, 0, 0, WIDTH, 4, RGB(246, 198, 91));
-	text(display, "plus vita", 64, 25, TEXT_BRAND, 400, 38, false, RGB(236, 244, 250));
+	wordmark(display,branding);
 	text(display, PLUS_VITA_BUILD_LABEL, 712, 32, TEXT_MICRO, 220, 24, false, RGB(195, 211, 239));
 	text(display, view->subtitle, 64, 94, TEXT_HINT, 832, 26, false, RGB(246, 198, 91));
 	text(display, view->title, 64, 128, TEXT_HEADING, 832, 54, false, RGB(243, 247, 252));

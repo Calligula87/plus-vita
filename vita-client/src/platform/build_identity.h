@@ -2,9 +2,9 @@
 #ifndef PLUS_VITA_BUILD_IDENTITY_H
 #define PLUS_VITA_BUILD_IDENTITY_H
 #if PLUS_VITA_RELEASE_CANDIDATE
-#define PLUS_VITA_APP_BUILD "v0.1.0-beta-candidate-2"
-#define PLUS_VITA_BUILD_LABEL "BETA CANDIDATE"
-#define PLUS_VITA_ABOUT_STATUS "v0.1.0 beta candidate.\nFinal Vita release validation is still required."
+#define PLUS_VITA_APP_BUILD "v000"
+#define PLUS_VITA_BUILD_LABEL "v000"
+#define PLUS_VITA_ABOUT_STATUS "v000"
 #else
 #define PLUS_VITA_APP_BUILD "recovery-diagnostics-1"
 #define PLUS_VITA_BUILD_LABEL "DEVELOPMENT BUILD"

@@ -137,7 +137,7 @@ def main():
         for command in (configure,[args.cmake,'--build',str(build),'--parallel','4']):
             subprocess.run(command,env=environment,stdout=log,stderr=log,check=True)
     original = build / 'plus_vita_smoke.vpk'
-    artifact = output / 'plus-vita-v0.1.0-beta-candidate-2.vpk'
+    artifact = output / 'plus-vita-v000.vpk'
     # Package timestamps and host file attributes are not release inputs.
     with zipfile.ZipFile(original) as package, zipfile.ZipFile(artifact,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as clean:
         for name in sorted(package.namelist()):
@@ -146,7 +146,7 @@ def main():
             clean.writestr(entry,package.read(name),compresslevel=9)
     identity.update({'artifact':artifact.name,'sha256':hashlib.sha256(artifact.read_bytes()).hexdigest().upper(),
                      'size_bytes':artifact.stat().st_size,'profile':'720p-input-worker-deferred-log',
-                     'public_version':'0.1.0 beta candidate','hardware_gate':'pending_23'})
+                     'public_version':'v000','hardware_gate':'pending_23'})
     (output/'candidate-identity.json').write_text(json.dumps(identity,indent=2)+'\n')
     print(json.dumps(identity,indent=2))
 

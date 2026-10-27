@@ -1,13 +1,13 @@
-# Anonymous beta candidate gate
+# Anonymous v000 build and publication gate
 
 Issue #22 prepares a candidate; it does not authorize public publication.
-Graphics spec #31 and implementation slices #32–#34 are part of this candidate.
+The graphical work is recorded in #31–#36.
 The #35 follow-up uses the original wide artwork for LiveArea and a logo/text-free
 plate for menu backgrounds, replacing the earlier welcome logo. The latest
-builder emits candidate 2; candidate 1 remains available at its recorded commit.
+builder emits `plus-vita-v000.vpk`; earlier artifacts remain at their recorded commits.
 The accepted graphical/recovery and streaming VPKs remain unchanged outside Git.
 
-The release profile identifies itself as **0.1.0 beta candidate**, requires the
+The distribution profile identifies itself as **v000**, requires the
 accepted 720p independent-input/deferred-log and FreeType profile, and rejects
 diagnostic/comparison interfaces, test URLs and local certificates. Experimental
 replay-file loading is excluded from release startup. The normal live decoder,
@@ -27,7 +27,7 @@ Git checkout newline conversion. Resource hashes use committed bytes, following
 the root and nested dependency pins, rather than platform-specific checkouts.
 
 ```sh
-python tools/build_anonymous_candidate.py --output build/anonymous-beta-22 \
+python tools/build_anonymous_candidate.py --output build/anonymous-v000 \
   --sdk /path/to/vitasdk --cmake /path/to/cmake --ninja /path/to/ninja
 ```
 
@@ -38,11 +38,11 @@ status/artifact identity. It performs no network acquisition or publication.
 ## Verify the actual artifact
 
 ```sh
-python tools/publication_gate.py --vpk build/anonymous-beta-22/plus-vita-v0.1.0-beta-candidate-2.vpk \
-  --report build/anonymous-beta-22/privacy-report.json \
+python tools/publication_gate.py --vpk build/anonymous-v000/plus-vita-v000.vpk \
+  --report build/anonymous-v000/privacy-report.json \
   --materials README.md docs/ACCOUNT_SETUP.md docs/REPORTING_ISSUES.md release/README.md
-python tools/test-branding.py build/anonymous-beta-22/plus-vita-v0.1.0-beta-candidate-2.vpk
-python tools/test-publication-gate.py build/anonymous-beta-22/plus-vita-v0.1.0-beta-candidate-2.vpk
+python tools/test-branding.py build/anonymous-v000/plus-vita-v000.vpk
+python tools/test-publication-gate.py build/anonymous-v000/plus-vita-v000.vpk
 ```
 
 The first gate examines tracked source, complete relevant Git history, selected
@@ -74,7 +74,7 @@ JSON or working directories are release/publication inputs.
 
 Every report keeps publication unauthorized until #23's exact-candidate Vita
 validation, including the 45-minute run and remaining #16/#17 edge cases.
-Verify installed icon, brief/skippable splash and welcome logo on Vita as part
+Verify installed icon, brief/skippable splash, PNG wordmark and menu/LiveArea backgrounds on Vita as part
 of that gate. Host rendering, a package build and a software privacy pass cannot
 establish hardware acceptance. No automatic upload/release job is provided.
 

@@ -22,6 +22,7 @@ fi
 printf '#define JSON_C_HAVE_INTTYPES_H 1\n#define JSON_C_HAVE_STDINT_H 1\n' > "$dir/json_config.h"
 cc -std=c11 -g -O1 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -pthread \
  -ffunction-sections -fdata-sections -DPLUS_VITA_FONT_COMPARISON=1 \
+ -DPLUS_VITA_RELEASE_CANDIDATE=1 -DPLUS_VITA_APP_VERSION='"v000"' \
  -Ivita-client/src/app -Ivita-client/tests/vita_font_stubs -Iexternal/json-c -I"$dir" -Iexternal/freetype/include \
  vita-client/src/app/font_freetype.c vita-client/src/app/font_vita.c vita-client/src/app/app.c vita-client/src/app/branding.c \
  vita-client/src/app/render.c vita-client/src/app/covers.c vita-client/src/app/comparison_capture.c \

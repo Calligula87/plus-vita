@@ -14,6 +14,7 @@ MAX_MEMBER = 32 * 1024 * 1024
 RESOURCES = {
     'sce_sys/icon0.png': 'vita-client/assets/branding/icon0.png',
     'branding/menu.pvi': 'vita-client/assets/branding/menu.pvi',
+    'branding/wordmark.pvi': 'vita-client/assets/branding/wordmark.pvi',
     'sce_sys/livearea/contents/bg.png': 'vita-client/assets/branding/livearea/bg.png',
     'sce_sys/livearea/contents/startup.png': 'vita-client/assets/branding/livearea/startup.png',
     'sce_sys/livearea/contents/template.xml': 'vita-client/assets/branding/livearea/template.xml',
@@ -133,6 +134,8 @@ def package_findings(vpk, root):
                     errors['package.image_metadata'] += 1
             if member.filename == 'eboot.bin':
                 for segment in self_segments(data):
+                    if re.search(rb'beta[ -]candidate',segment,re.I):
+                        errors['executable.obsolete_branding'] += 1
                     for category in findings(segment, artifact=True):
                         errors['executable.'+category] += 1
                     if b'plus-vita-replay-720p.bin' in segment or b'local_probe_ca.der' in segment:
@@ -151,7 +154,7 @@ def package_findings(vpk, root):
                         raise ValueError('invalid_app_identity')
                     name=data[keys+key:data.index(b'\0',keys+key)]
                     identity[name]=data[values+offset:values+offset+length].rstrip(b'\0')
-                if identity.get(b'APP_VER')!=b'00.10' or identity.get(b'TITLE_ID')!=b'PLVT00001' or identity.get(b'TITLE')!=b'Plus Vita beta':
+                if identity.get(b'APP_VER')!=b'00.11' or identity.get(b'TITLE_ID')!=b'PLVT00001' or identity.get(b'TITLE')!=b'Plus-Vita':
                     errors['package.app_identity'] += 1
     return errors
 

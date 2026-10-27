@@ -7,6 +7,7 @@ typedef struct plus_vita_branding_t PlusVitaBranding;
 /* Bounded local package resources. A failed image remains independently absent. */
 PlusVitaBranding *plus_vita_branding_load(const char *directory);
 const uint32_t *plus_vita_branding_background(const PlusVitaBranding *branding);
+const uint32_t *plus_vita_branding_wordmark(const PlusVitaBranding *branding);
 const uint32_t *plus_vita_branding_splash(const PlusVitaBranding *branding);
 void plus_vita_branding_release_splash(PlusVitaBranding *branding);
 void plus_vita_branding_free(PlusVitaBranding *branding);

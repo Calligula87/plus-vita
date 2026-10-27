@@ -1,6 +1,11 @@
 # Candidate 2: LiveArea and menu background follow-up
 
-## Hardware correction: LiveArea remains unresolved
+## LiveArea follow-up: accepted on Vita
+
+On 2026-10-27 the maintainer confirmed the requested format-trial device test
+passed. #35 is closed; see [the exact accepted format variant](LIVEAREA_FORMAT_TRIAL.md).
+The prior investigation below is retained as history. The v000 follow-up
+supersedes the visible build naming while preserving the accepted resources.
 
 The maintainer's subsequent Vita photo still shows the system multicolor
 LiveArea background and default gate. #35 is reopened for this portion; the

@@ -26,6 +26,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--splash', type=Path)
     parser.add_argument('--menu', type=Path)
+    parser.add_argument('--wordmark', type=Path)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     logo = clean_image(args.logo)
@@ -48,6 +49,20 @@ def main():
         # Precompute the dark reading surface; no per-frame blending on Vita.
         fitted = fitted.point(lambda channel: round(channel*0.45))
         (args.output/'menu.pvi').write_bytes(b'PVIMAGE1'+struct.pack('<II',960,544)+fitted.convert('RGBA').tobytes())
+    if args.wordmark:
+        with Image.open(args.wordmark) as source:
+            rgba=source.convert('RGBA')
+            rgba=Image.frombytes('RGBA',rgba.size,rgba.tobytes())
+        rgba.save(args.output/'wordmark-source.png',optimize=False,compress_level=9)
+        bounds=rgba.getchannel('A').getbbox()
+        if not bounds:
+            raise ValueError('Wordmark must contain visible text')
+        fitted=rgba.crop(bounds)
+        fitted.thumbnail((224,40),Image.Resampling.LANCZOS)
+        canvas=Image.new('RGBA',(224,40),(0,0,0,0))
+        canvas.paste(fitted,((224-fitted.width)//2,(40-fitted.height)//2))
+        canvas.save(args.output/'wordmark.png',optimize=False,compress_level=9)
+        (args.output/'wordmark.pvi').write_bytes(b'PVIMAGE1'+struct.pack('<II',224,40)+canvas.tobytes())
     print('Prepared clean public logo source and Vita app icon')
 
 

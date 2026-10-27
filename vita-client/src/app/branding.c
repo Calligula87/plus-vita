@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct plus_vita_branding_t { uint32_t *background, *splash; };
+struct plus_vita_branding_t { uint32_t *background, *splash, *wordmark; };
 
 static uint32_t *load_image(const char *directory,const char *name,unsigned width,unsigned height)
 {
@@ -36,10 +36,12 @@ PlusVitaBranding *plus_vita_branding_load(const char *directory)
 	PlusVitaBranding *branding=calloc(1,sizeof(*branding));
 	if(!branding) return NULL;
 	branding->background=load_image(directory,"menu.pvi",960,544);
+	branding->wordmark=load_image(directory,"wordmark.pvi",224,40);
 	branding->splash=load_image(directory,"splash.pvi",960,544);
 	return branding;
 }
 const uint32_t *plus_vita_branding_background(const PlusVitaBranding *branding) { return branding ? branding->background : NULL; }
+const uint32_t *plus_vita_branding_wordmark(const PlusVitaBranding *branding) { return branding ? branding->wordmark : NULL; }
 const uint32_t *plus_vita_branding_splash(const PlusVitaBranding *branding) { return branding ? branding->splash : NULL; }
 void plus_vita_branding_release_splash(PlusVitaBranding *branding) { if(branding) { free(branding->splash); branding->splash=NULL; } }
-void plus_vita_branding_free(PlusVitaBranding *branding) { if(branding) { free(branding->background); free(branding->splash); free(branding); } }
+void plus_vita_branding_free(PlusVitaBranding *branding) { if(branding) { free(branding->background); free(branding->splash); free(branding->wordmark); free(branding); } }

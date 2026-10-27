@@ -10,7 +10,7 @@
 #include <json_tokener.h>
 
 #ifndef PLUS_VITA_APP_VERSION
-#define PLUS_VITA_APP_VERSION "00.01"
+#define PLUS_VITA_APP_VERSION "v000"
 #endif
 
 struct plus_vita_app_t {
@@ -45,7 +45,7 @@ static void welcome(PlusVitaApp *app)
 {
 	app->view = (PlusVitaAppView){
 		.screen = PLUS_VITA_APP_WELCOME,
-		.title = "Your games. Your Vita.",
+		.title = "Plus-Vita",
 		.subtitle = "WELCOME TO PLUS VITA",
 		.body = "Play your cloud games on the handheld you love.\nConnect your own Sony account to get started.",
 		.hint = "Left stick  Move     X  Select     O  Back",
@@ -86,8 +86,8 @@ static void welcome(PlusVitaApp *app)
 
 static void settings_view(PlusVitaApp *app)
 {
-	snprintf(app->settings_status, sizeof(app->settings_status), "Version %s (%s).\nSession log: %s.\nYour sign-in files stay on this Vita.",
-		PLUS_VITA_APP_VERSION, PLUS_VITA_APP_BUILD, app->log_available ? "available at ux0:data/plus-vita-allocation.log" : "unavailable");
+	snprintf(app->settings_status, sizeof(app->settings_status), "Version %s.\nSession log: %s.\nYour sign-in files stay on this Vita.",
+		PLUS_VITA_APP_VERSION, app->log_available ? "available at ux0:data/plus-vita-allocation.log" : "unavailable");
 	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_SETTINGS,
 		.title = "Settings and help.", .subtitle = "PLUS VITA", .body = app->settings_status,
 		.hint = "Left stick  Move     X  Select     O  Back",
@@ -134,7 +134,7 @@ static void about_view(PlusVitaApp *app)
 {
 	app->view=(PlusVitaAppView){.screen=PLUS_VITA_APP_ABOUT,
 		.title="Made for your handheld.",.subtitle="ABOUT PLUS VITA",
-		.body="An independent cloud gaming client for PlayStation Vita.\nUse your own Sony account and eligible subscription.\n\n" PLUS_VITA_ABOUT_STATUS,
+		.body="Use your own Sony account and eligible subscription.\n\n" PLUS_VITA_ABOUT_STATUS,
 		.hint="X  Select     O  Back",.actions={{PLUS_VITA_ACTION_BACK,"Back",64,444,500,52}},.action_count=1};
 #if PLUS_VITA_FONT_COMPARISON
 	app->view.actions[0]=(PlusVitaAppButton){PLUS_VITA_ACTION_FONT_COMPARISON,"Compare text rendering",64,380,832,52};

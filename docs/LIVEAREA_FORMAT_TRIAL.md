@@ -1,4 +1,11 @@
-# LiveArea format trial 1 — #35 remains open
+# LiveArea format trial 1 — accepted on Vita
+
+On 2026-10-27 the maintainer reported the requested device test passed: “All
+good!” This accepts the LiveArea display check for the exact artifact below and
+closes #35. The combination of template formatting and page reload was tested;
+the report does not independently isolate the cause or establish unreported
+long-session/account/catalogue/recovery checks under #23. The accepted format
+and VPK are preserved as the comparison for the v000 follow-up.
 
 The maintainer's candidate 2 photo still shows the system LiveArea background.
 Read-only inspection found the installed and decrypted metadata copies of all
@@ -62,6 +69,6 @@ files were changed; this VPK is for ordinary VitaShell installation.
 Install it as an update. Close the Plus Vita LiveArea page using the top-right
 peel gesture, then open its bubble again and inspect the background. Report that
 actual display result. Serialization is a hypothesis, not a confirmed root
-cause. Keep #35 open until the branded page is observed. #23's release validation
+cause. The maintainer has now confirmed the branded page. #23's release validation
 and publication gate remain pending. No cache dumps, device photos, account data
 or raw logs are published.

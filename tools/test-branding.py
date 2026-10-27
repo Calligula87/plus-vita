@@ -28,4 +28,8 @@ with zipfile.ZipFile(args.vpk) as package:
     assert 'branding/logo.pvi' not in package.namelist()
     menu=package.read('branding/menu.pvi')
     assert menu[:8]==b'PVIMAGE1' and len(menu)==16+960*544*4
+    wordmark=package.read('branding/wordmark.pvi')
+    assert wordmark[:16]==b'PVIMAGE1'+(224).to_bytes(4,'little')+(40).to_bytes(4,'little')
+    assert len(wordmark)==16+224*40*4
+    assert any(wordmark[19::4]) and 0 in wordmark[19::4], 'Header must retain visible artwork and transparency'
 print('branding package: installed Vita icon format, size and clean metadata passed')

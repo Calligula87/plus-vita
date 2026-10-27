@@ -54,6 +54,7 @@ with tempfile.TemporaryDirectory(prefix='plus-vita-publication-') as directory:
         ('licenses/opus.txt', b'{"npsso":"'+b'A'*64+b'"}', 'package.credential_literal'),
         ('eboot.bin', synthetic_self(canary, False), 'executable.private_canary'),
         ('eboot.bin', synthetic_self(canary, True), 'executable.private_canary'),
+        ('eboot.bin', synthetic_self(b'beta candidate', True), 'executable.obsolete_branding'),
         ('eboot.bin', synthetic_self(canary.decode().encode('utf-16le'),True), 'executable.private_canary'),
         ('licenses/opus.txt', b'http://10.20.30.40/fixture', 'package.private_network_address'),
     ]
