@@ -770,12 +770,26 @@ target_link_options(${PROJECT_NAME} PRIVATE
   -Wl,--gc-sections
 )
 
+# Some VitaSDK distributions ship an OpenSSL-backed static libcurl, while the
+# accepted Windows SDK uses mbedTLS. Resolve optional curl dependencies only
+# inside the target SDK; never use the host computer's TLS libraries.
+find_library(PLUS_VITA_CURL_SSL_LIBRARY NAMES ssl
+  PATHS "$ENV{VITASDK}/arm-vita-eabi/lib" NO_DEFAULT_PATH)
+find_library(PLUS_VITA_CURL_CRYPTO_LIBRARY NAMES crypto
+  PATHS "$ENV{VITASDK}/arm-vita-eabi/lib" NO_DEFAULT_PATH)
+set(PLUS_VITA_CURL_TLS_LIBRARIES)
+if(PLUS_VITA_CURL_SSL_LIBRARY AND PLUS_VITA_CURL_CRYPTO_LIBRARY)
+  list(APPEND PLUS_VITA_CURL_TLS_LIBRARIES
+    "${PLUS_VITA_CURL_SSL_LIBRARY}" "${PLUS_VITA_CURL_CRYPTO_LIBRARY}")
+endif()
+
 target_link_libraries(${PROJECT_NAME} PRIVATE
 	plus_vita_jerasure
 	opus
 	SceAudio_stub
 	json-c
   curl
+  ${PLUS_VITA_CURL_TLS_LIBRARIES}
   mbedtls
   mbedx509
   mbedcrypto
