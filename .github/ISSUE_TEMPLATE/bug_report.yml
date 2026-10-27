@@ -41,5 +41,5 @@ body:
   - type: textarea
     id: log
     attributes:
-      label: Optional current-session log
-      description: Copy ux0:data/plus-vita-allocation.log with VitaShell, review it, and attach only that file if available. Do not paste account or browser-response files.
+      label: Current-session log (needed for priority)
+      description: Copy ux0:data/plus-vita-allocation.log before another launch or Play attempt, review it, and attach only that file. Reports without a log are not treated as priority; explain if unavailable. Never attach account or browser-response files.

@@ -43,5 +43,5 @@ by these notes.
 
 [Report an issue](https://github.com/Calligula87/plus-vita/issues/new/choose) with
 version and reproduction steps. Copy the current diagnostic log before another
-launch/Play attempt, review it privately and share only the reviewed log if
-needed. Never upload account JSON, tokens, browser responses or full data folders.
+launch/Play attempt, review it privately and attach only the reviewed log.
+Reports without a log are not treated as priority. Never upload account JSON, tokens, browser responses or full data folders.

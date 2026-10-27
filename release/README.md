@@ -1,10 +1,10 @@
 # Anonymous v000 build and publication gate
 
 Issue #22 prepares a candidate; it does not authorize public publication.
-The maintainer accepted the final v000 hardware checks on 2026-10-27; see
-[the acceptance record](../docs/V000.md). Publication is awaiting agreement on
-public distribution with corresponding source while keeping development
-history private.
+The maintainer accepted the final v000 hardware checks on 2026-10-27 and then
+authorized publishing the project and identified VPK while excluding personal
+account material. See [the acceptance record](../docs/V000.md),
+[release notes](v000-notes.md) and [source/license notices](THIRD_PARTY_NOTICES.md).
 The graphical work is recorded in #31–#36.
 The #35 follow-up uses the original wide artwork for LiveArea and a logo/text-free
 plate for menu backgrounds, replacing the earlier welcome logo. The latest
@@ -85,6 +85,14 @@ the dated hardware decision is recorded separately in `docs/V000.md` and
 Verify installed icon, brief/skippable splash, PNG wordmark and menu/LiveArea backgrounds on Vita as part
 of that gate. Host rendering, a package build and a software privacy pass cannot
 establish hardware acceptance. No automatic upload/release job is provided.
+
+The first release's source archive is exported from its exact executable commit
+and pinned dependencies, with separate build/license documentation. GitHub's
+automatic archive does not include submodule contents; the provided source ZIP
+does. Existing accepted/fallback packages remain unchanged. Never upload a
+working directory, account JSON, private log or compiler output as a release
+asset. The supplementary licenses ZIP accompanies the tested VPK without
+modifying it.
 
 SELF layout validation follows the primary
 [VitaSDK header](https://github.com/vitasdk/vita-toolchain/blob/master/src/self.h)

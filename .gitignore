@@ -21,7 +21,9 @@ secrets/
 auth/
 secret.json
 plus-vita-auth.json
+account.json
 *npsso*.json
+*.log
 
 # Build products.
 build/
