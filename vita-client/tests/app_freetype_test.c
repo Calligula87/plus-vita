@@ -86,6 +86,10 @@ int main(void)
  PlusVitaAppView preview_view=plus_vita_app_view(preview);
  plus_vita_app_paint_with_resources(b,pixels,960,&preview_view,NULL,branding);
  assert(plus_vita_comparison_capture(pixels,960,"build/debug/app-freetype-host/branded-welcome.ppm"));
+ plus_vita_app_dispatch(preview,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH,.x=80,.y=420});
+ preview_view=plus_vita_app_view(preview);assert(preview_view.screen==PLUS_VITA_APP_ABOUT);
+ plus_vita_app_paint_with_resources(b,pixels,960,&preview_view,NULL,branding);
+ assert(plus_vita_comparison_capture(pixels,960,"build/debug/app-freetype-host/v000-about.ppm"));
  const uint32_t *splash=plus_vita_branding_splash(branding); assert(splash);
  assert(plus_vita_comparison_capture(splash,960,"build/debug/app-freetype-host/branded-splash.ppm"));
  plus_vita_branding_free(branding);

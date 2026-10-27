@@ -1,0 +1,19 @@
+{
+  "software_privacy_pass": true,
+  "checks": [
+    "source",
+    "history",
+    "actual_vpk_and_executable",
+    "selected_public_materials"
+  ],
+  "findings": {},
+  "counts": {
+    "source_files": 773,
+    "history_commit_messages": 117,
+    "history_blobs": 1298,
+    "reviewed_legacy_workspace_paths": 1,
+    "history_tag_messages": 1
+  },
+  "hardware_release_gate": "pending_23",
+  "publication_authorized": false
+}
