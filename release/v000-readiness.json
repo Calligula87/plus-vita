@@ -1,0 +1,28 @@
+{
+  "public_version": "v000",
+  "artifact": "plus-vita-v000.vpk",
+  "sha256": "90BD483B6092FD4162D4B37083EA43D2EB2919257342AF2990B6F744369C996A",
+  "size_bytes": 4027154,
+  "executable_source_commit": "ae350183b44b663b76f7683933597fcbfdd514a7",
+  "hardware_acceptance": "maintainer_reported_all_listed_checks_passed_2026-10-27",
+  "software_privacy_pass": true,
+  "hosted_ci": {
+    "url": "https://github.com/Calligula87/plus-vita/actions/runs/40600747477",
+    "result": "success",
+    "jobs_passed": 4
+  },
+  "hosted_privacy_review": {
+    "completed_workflow_logs": 38,
+    "historical_vpks": 16,
+    "issue_and_comment_text_reviewed": true,
+    "private_issue_image_attachments": 0,
+    "credential_findings": 0
+  },
+  "source_snapshot_review": {
+    "committed_files_verified": 7564,
+    "additional_distribution_files": 20,
+    "reviewed_unchanged_upstream_findings": 5
+  },
+  "publication_authorized_by_maintainer": true,
+  "release_url": "https://github.com/Calligula87/plus-vita/releases/tag/v000"
+}

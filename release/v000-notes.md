@@ -3,6 +3,12 @@
 The first Plus-Vita release version brings eligible PlayStation Plus cloud games
 to a homebrew-enabled PlayStation Vita, using your own account and subscription.
 
+[**Download plus-vita-v000.vpk**](https://github.com/Calligula87/plus-vita/releases/download/v000/plus-vita-v000.vpk)
+
+Players need the VPK and their own account setup. The separate source and license
+archives are provided for source availability and notices; they are not needed
+to run the app. `SHA256SUMS` identifies the downloadable files.
+
 ## Included
 
 - Native 720p video, audio and Vita controls using the accepted independent-input
@@ -36,8 +42,11 @@ included. Catalogue listing alone does not guarantee streaming eligibility.
 The [identity manifest](https://github.com/Calligula87/plus-vita/blob/main/release/v000.json)
 records pinned dependencies and toolchain. The
 [validation record](https://github.com/Calligula87/plus-vita/blob/main/docs/V000.md)
-records the scope of software and hardware evidence. No hosted-CI pass is claimed
-by these notes.
+records the scope of software and hardware evidence.
+[Hosted CI](https://github.com/Calligula87/plus-vita/actions/runs/40600747477)
+passes the native workflow and all three Vita package profiles, including the
+release privacy and synthetic leak-rejection checks. The published VPK remains
+the exact artifact accepted on Vita.
 
 ## Help
 
