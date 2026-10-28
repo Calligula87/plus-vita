@@ -2,15 +2,14 @@
   <img src="vita-client/assets/branding/logo-source.png" alt="Plus-Vita logo" width="200">
 </p>
 
-<h1 align="center">Plus-Vita · v000</h1>
+<h1 align="center">Plus-Vita</h1>
 
 ## Introduction
 
 Plus-Vita lets you play eligible **PlayStation Plus cloud games directly on your
-PlayStation Vita**, with video, sound and Vita controls. Browse the cover
-catalogue, search for a game and choose Play. You need your own Sony account and
+PlayStation Vita**. You need your own Sony account and
 **a PlayStation Plus subscription tier that includes cloud streaming in your
-region**. A listed game must also be eligible for your account.
+region**. 
 
 [**Download Plus-Vita v000**](https://github.com/Calligula87/plus-vita/releases/tag/v000)
 
