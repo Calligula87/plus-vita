@@ -11,7 +11,7 @@ PlayStation Vita**. You need your own Sony account and
 **a PlayStation Plus subscription tier that includes cloud streaming in your
 region**. 
 
-[**Download Plus-Vita v000**](https://github.com/Calligula87/plus-vita/releases/tag/v000)
+[**Download Plus-Vita**](https://github.com/Calligula87/plus-vita/releases/tag/v000)
 
 This is an unofficial homebrew project, not affiliated with Sony Interactive
 Entertainment. No PC relay is needed during play; initial sign-in uses a phone
@@ -28,7 +28,7 @@ or PC browser.
 
 ## Setup
 
-1. Download **plus-vita-v000.vpk**, copy it to your Vita and install it using
+1. Download **plus-vita.vpk**, copy it to your Vita and install it using
    VitaShell. Existing Plus-Vita installations are updated using the same app ID.
 2. On your phone or PC, sign in to your own account at
    [PlayStation](https://www.playstation.com/). Complete Sony's verification or
