@@ -59,7 +59,7 @@ resume the previous session.
 ## Report an issue
 
 If you encounter a problem, [submit a GitHub ticket](https://github.com/Calligula87/plus-vita/issues/new/choose).
-Include **v000**, the steps to reproduce it, what you expected and what happened.
+Include **v000** (or the corresponding version ), the steps to reproduce it, what you expected and what happened.
 
 **A session log is needed for priority investigation. Reports without a log will
 not be treated as priority.** To provide one:
