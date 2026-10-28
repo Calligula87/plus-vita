@@ -24,5 +24,8 @@
     "reviewed_unchanged_upstream_findings": 5
   },
   "publication_authorized_by_maintainer": true,
-  "release_url": "https://github.com/Calligula87/plus-vita/releases/tag/v000"
+  "release_url": "https://github.com/Calligula87/plus-vita/releases/tag/v000",
+  "publication_status": "published",
+  "repository_public": true,
+  "anonymous_vpk_download_verified": true
 }
