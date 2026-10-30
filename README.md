@@ -56,6 +56,13 @@ See the [full setup and account-recovery guide](docs/ACCOUNT_SETUP.md) for help.
 After Wi-Fi loss or sleep, Retry starts a fresh cloud connection; it does not
 resume the previous session.
 
+For a possible small improvement in streaming responsiveness, you can try the
+optional [Wi-Fi Turbo plugin](https://github.com/juanjsebgarcia/vita-turbo-wifi).
+A slight improvement was reported with v0.4.1 on firmware 3.65 using **Max
+performance** and **40 MHz**. Results depend on your network; 40 MHz needs router
+support and may perform worse in congested areas. Follow the plugin's installation
+and firmware compatibility guidance. Wi-Fi Turbo is not required to use Plus-Vita.
+
 ## Report an issue
 
 If you encounter a problem, [submit a GitHub ticket](https://github.com/Calligula87/plus-vita/issues/new/choose).
