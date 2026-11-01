@@ -108,3 +108,9 @@ Built on [Pylux/libchiaki](https://github.com/ForWard-Technologies-LLC/Pylux) an
 [licenses and credits](release/THIRD_PARTY_NOTICES.md), and the
 [v000 identity and validation record](docs/V000.md). Source is provided under the
 [AGPL-3.0](LICENSE); third-party components retain their own license terms.
+
+
+
+if you appreciate the work
+
+[![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/caligolare6)
