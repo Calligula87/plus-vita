@@ -43,6 +43,7 @@ struct plus_vita_app_t {
 	PlusVitaControlDevice control_device;
 	unsigned binding_page, action_page, binding_input;
 	char controls_status[256], binding_labels[3][160];
+	char controls_help[1024];
 };
 
 static void welcome(PlusVitaApp *app)
@@ -187,7 +188,7 @@ static PlusVitaAppEffect edit_controls(PlusVitaApp *app,PlusVitaAppAction action
 
 static void controls_view(PlusVitaApp *app)
 {
-	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_CONTROLS,
+	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_CONTROLS,.control_device=app->control_device,
 		.title = "Controls.", .subtitle = "SETTINGS AND HELP",
 		.body = "Menus: D-pad or left stick; Cross selects, Circle goes back.\n"
 			"Touch: lift inside a button; slide away to cancel.\n"
@@ -198,22 +199,19 @@ static void controls_view(PlusVitaApp *app)
 			"Hold START + SELECT for 2 seconds to stop a stream.",
 		.hint = "X  Select     O  Back",
 		.actions = {{ PLUS_VITA_ACTION_BACK, "Back to settings", 64, 444, 832, 52 }}, .action_count = 1 };
-	if(app->control_device==PLUS_VITA_DEVICE_DS3 || app->control_device==PLUS_VITA_DEVICE_DS4)
-		app->view.body=app->control_device==PLUS_VITA_DEVICE_DS4
-			? "DualShock 4: pair in PS TV system settings using USB + PS.\n"
-			  "Menus: D-pad/stick, Cross selects, Circle goes back.\n"
-			  "Physical buttons, sticks, L1/R1, L2/R2 and L3/R3 work in games.\n"
-			  "Control mapping: assign a button to cloud touchpad click.\n"
-			  "Native touchpad movement, motion and rumble are unavailable.\n"
-			  "Hold OPTIONS + SHARE for 2 seconds to stop.\n"
-			  "Reconnect, then release all controls before playing."
-			: "DualShock 3: pair in PS TV system settings using USB + PS.\n"
-			  "Menus: D-pad/stick, Cross selects, Circle goes back.\n"
-			  "Physical buttons, sticks, L1/R1, L2/R2 and L3/R3 work in games.\n"
-			  "Control mapping: assign a button to cloud touchpad click.\n"
-			  "Touchpad movement, motion and rumble are unavailable.\n"
-			  "Hold START + SELECT for 2 seconds to stop.\n"
-			  "Reconnect, then release all controls before playing.";
+	if(app->control_device==PLUS_VITA_DEVICE_DS3 || app->control_device==PLUS_VITA_DEVICE_DS4) {
+		bool ds4=app->control_device==PLUS_VITA_DEVICE_DS4;
+		snprintf(app->controls_help,sizeof(app->controls_help),
+			"%s: pair in PS TV system settings using USB + PS.\n"
+			"Menus: D-pad/stick, Cross selects, Circle goes back.\n"
+			"Physical buttons, sticks, L1/R1, L2/R2 and L3/R3 work in games.\n"
+			"Control mapping: assign a button to cloud touchpad click.\n"
+			"Touchpad movement, motion and rumble are unavailable.\n"
+			"Hold %s for 2 seconds to stop.\n"
+			"Reconnect, then release all controls before playing.",
+			ds4 ? "DualShock 4" : "DualShock 3",ds4 ? "OPTIONS + SHARE" : "START + SELECT");
+		app->view.body=app->controls_help;
+	}
 	else if(app->control_device==PLUS_VITA_DEVICE_DISCONNECTED)
 		app->view.body="No supported controller connected.\nPair DualShock 3 or DualShock 4 in PS TV system settings\nusing USB, then press PS. Release controls after connecting.\nControl mapping can assign a button to cloud touchpad click.";
 }

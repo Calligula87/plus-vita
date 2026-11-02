@@ -48,5 +48,9 @@ verify a fresh press/movement, repeat the cycle, and check a second controller
 does not take over while the active one remains connected. Test stop/restart and
 normal network/sleep recovery separately.
 
+Keep the same active controller through menus, connection and gameplay, including
+when a second controller appears at a lower-numbered port. Check touch-down in an
+idle menu, sleep/wake, then finger release: the old target must not activate.
+
 Keep these issues open for the hardware acceptance results. No upload, release,
 device installation or acceptance of this candidate is implied by software work.

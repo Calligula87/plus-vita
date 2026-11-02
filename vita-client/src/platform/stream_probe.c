@@ -112,6 +112,7 @@ typedef enum plus_vita_stream_probe_state_t
 typedef struct plus_vita_stream_probe_t
 {
 	PlusVitaControlLayout controls;
+	PlusVitaStreamInput *input;
 	ChiakiLog *log;
 	ChiakiTakion takion;
 	ChiakiECDH ecdh;
@@ -1559,7 +1560,11 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 #if PLUS_VITA_INPUT_WORKER
 	PlusVitaInputVita input_vita = { .rear_ready = rear_ready, .front_ready = front_ready,
 		.rear_mid_x = rear_mid_x, .rear_mid_y = rear_mid_y, .front_info = front_info,
-		.layout=probe->controls,.layout_ready=true };
+		.layout=probe->controls,.layout_ready=true,
+		.controller=probe->input ? probe->input->controller : (PlusVitaController){0} };
+	if(input_vita.controller.external) {
+		input_vita.controller.neutral_required=true;input_vita.controller.ready=false;
+	}
 #endif
 	probe_preview_lock(probe);
 	CHIAKI_LOGI(probe->log, "Stream probe rear touch ready=%d panel_x=%d..%d mid_x=%d panel_y=%d..%d mid_y=%d sampling_prev=%d",
@@ -1941,6 +1946,7 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 	if(input_worker)
 	{
 		ChiakiErrorCode input_err = plus_vita_input_worker_stop(input_worker, &input_stats);
+		if(probe->input && input_stats.joined) probe->input->controller=input_vita.controller;
 		if(err == CHIAKI_ERR_SUCCESS && input_err != CHIAKI_ERR_SUCCESS) err = input_err;
 		probe->latency.input_poll_gap = input_stats.poll_gap;
 		probe->latency.input_publish_call = input_stats.publish_call;
@@ -2220,7 +2226,7 @@ done:
 
 ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResult *provision,
 	ChiakiLog *log, bool *user_stopped, bool (*connect_pump)(void *), void *pump_user,
-	const PlusVitaControlLayout *controls)
+	PlusVitaStreamInput *input)
 {
 	if(user_stopped) *user_stopped = false;
 #if !PLUS_VITA_RELEASE_CANDIDATE
@@ -2238,8 +2244,8 @@ ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResul
 		|| !provision->session_id || provision->server_port <= 0)
 		return CHIAKI_ERR_INVALID_DATA;
 	PlusVitaStreamProbe probe = { .log = log, .provision = provision,
-		.state = PROBE_CONNECTING };
-	if(plus_vita_control_layout_valid(controls)) probe.controls=*controls;
+		.state = PROBE_CONNECTING,.input=input };
+	if(input && plus_vita_control_layout_valid(&input->layout)) probe.controls=input->layout;
 	else plus_vita_control_layout_defaults(&probe.controls);
 	CHIAKI_LOGI(log, "Stream probe build=%s", PLUS_VITA_STREAM_PROBE_BUILD);
 	const uint8_t idr3[] = { 0, 0, 1, 0x65 };

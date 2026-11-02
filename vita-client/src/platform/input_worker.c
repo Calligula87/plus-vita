@@ -169,12 +169,14 @@ ChiakiErrorCode plus_vita_input_worker_stop(PlusVitaInputWorker *w,
 	PlusVitaInputStats *stats)
 {
 	if(!w || !stats) return CHIAKI_ERR_INVALID_DATA;
+	stats->joined=false;
 	pthread_mutex_lock(&w->mutex);
 	w->stop = true;
 	pthread_cond_signal(&w->cond);
 	pthread_mutex_unlock(&w->mutex);
 	if(pthread_join(w->thread, NULL)) return CHIAKI_ERR_THREAD;
 	*stats = w->stats;
+	stats->joined=true;
 	ChiakiErrorCode result = w->status.error;
 	pthread_cond_destroy(&w->cond);
 	pthread_mutex_destroy(&w->mutex);

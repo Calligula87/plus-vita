@@ -182,10 +182,10 @@ int plus_vita_app_run(void)
 	bool log_available = plus_vita_diagnostic_persistence_ok();
 	UiDisplay *display = calloc(1, sizeof(*display));
 	PlusVitaApp *app = plus_vita_app_create();
-	PlusVitaControlLayout session_controls;
-	plus_vita_control_layout_defaults(&session_controls);
-	plus_vita_control_layout_load(PLUS_VITA_CONTROLS_PATH,&session_controls);
-	if(app) plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_CONTROLS_LOADED,.controls=session_controls});
+	PlusVitaStreamInput session_input={0};
+	plus_vita_control_layout_defaults(&session_input.layout);
+	plus_vita_control_layout_load(PLUS_VITA_CONTROLS_PATH,&session_input.layout);
+	if(app) plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_CONTROLS_LOADED,.controls=session_input.layout});
 	PlusVitaAccount *account = plus_vita_account_create();
 	PlusVitaAccount *storage = plus_vita_account_create();
 	PlusVitaPlay *play = plus_vita_play_create();
@@ -240,9 +240,8 @@ int plus_vita_app_run(void)
 			reported_screen=current.screen;
 		}
 		PlusVitaRecovery interruption=plus_vita_recovery_poll();
-		if(interruption==PLUS_VITA_RECOVERY_SLEEP && !current.operation)
-			plus_vita_recovery_acknowledge();
-		if(interruption!=PLUS_VITA_RECOVERY_NONE && current.operation) {
+		if(interruption==PLUS_VITA_RECOVERY_SLEEP
+			|| (interruption!=PLUS_VITA_RECOVERY_NONE && current.operation)) {
 			plus_vita_diagnostic_event(interruption==PLUS_VITA_RECOVERY_SLEEP ? "recovery.sleep" : "recovery.wifi",0);
 			handle_input(&flow,account,play,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_INTERRUPTED,
 				.status=interruption==PLUS_VITA_RECOVERY_SLEEP ? PLUS_VITA_RESULT_SLEEP : PLUS_VITA_RESULT_NETWORK_ERROR});
@@ -355,7 +354,7 @@ int plus_vita_app_run(void)
 				}
 				else if(effect.kind==PLUS_VITA_EFFECT_PLAY)
 				{
-					session_controls=effect.controls;
+					session_input.layout=effect.controls;
 					if(plus_vita_play_busy(play) || !plus_vita_account_idle(account))
 						plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
 							.operation=effect.operation,.status=PLUS_VITA_RESULT_BUSY},0);
@@ -407,8 +406,10 @@ int plus_vita_app_run(void)
 					chiaki_log_init(&stream_log,CHIAKI_LOG_INFO | CHIAKI_LOG_WARNING | CHIAKI_LOG_ERROR,
 						plus_vita_diagnostic_chiaki_log,NULL);
 					plus_vita_diagnostic_event("stream_probe.begin",0);
+					session_input.controller=menu_controller;
 					stream_error=plus_vita_stream_probe_with_pump(&provision,&stream_log,
-						&user_stopped,play_connect_pump,&menu_controller,&session_controls);
+						&user_stopped,play_connect_pump,&session_input.controller,&session_input);
+					menu_controller=session_input.controller;
 					plus_vita_diagnostic_event("stream_probe.complete",(int)stream_error);
 				}
 				PlusVitaRecovery stopped=plus_vita_recovery_poll();

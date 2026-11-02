@@ -9,8 +9,13 @@ static int16_t probe_vita_axis(uint8_t value)
 	return (int16_t)((int)value * 257 - 32768);
 }
 
-void plus_vita_input_map_pad(const SceCtrlData *pad,
-	ChiakiControllerState *state)
+static void map_pad_axes(const SceCtrlData *pad,ChiakiControllerState *state)
+{
+	state->left_x=probe_vita_axis(pad->lx);state->left_y=probe_vita_axis(pad->ly);
+	state->right_x=probe_vita_axis(pad->rx);state->right_y=probe_vita_axis(pad->ry);
+}
+
+void plus_vita_input_map_pad(const SceCtrlData *pad,ChiakiControllerState *state)
 {
 	chiaki_controller_state_set_idle(state);
 	uint32_t buttons = pad->buttons;
@@ -26,10 +31,7 @@ void plus_vita_input_map_pad(const SceCtrlData *pad,
 	if(buttons & SCE_CTRL_RTRIGGER) state->buttons |= CHIAKI_CONTROLLER_BUTTON_R1;
 	if(buttons & SCE_CTRL_START) state->buttons |= CHIAKI_CONTROLLER_BUTTON_OPTIONS;
 	if(buttons & SCE_CTRL_SELECT) state->buttons |= CHIAKI_CONTROLLER_BUTTON_SHARE;
-	state->left_x = probe_vita_axis(pad->lx);
-	state->left_y = probe_vita_axis(pad->ly);
-	state->right_x = probe_vita_axis(pad->rx);
-	state->right_y = probe_vita_axis(pad->ry);
+	map_pad_axes(pad,state);
 }
 
 void plus_vita_input_map_rear(const SceTouchData *touch,
@@ -63,7 +65,7 @@ static uint16_t probe_vita_touch_coord(int value, int minimum, int maximum,
 		/ (maximum - minimum));
 }
 
-void plus_vita_input_map_front(const SceTouchData *front,
+static void map_front_contacts(const SceTouchData *front,
 	const SceTouchPanelInfo *panel, const ChiakiControllerState *previous,
 	ChiakiControllerState *state)
 {
@@ -102,8 +104,13 @@ void plus_vita_input_map_front(const SceTouchData *front,
 			break;
 		}
 	}
-	if(count >= 2)
-		state->buttons |= CHIAKI_CONTROLLER_BUTTON_TOUCHPAD;
+}
+
+void plus_vita_input_map_front(const SceTouchData *front,
+	const SceTouchPanelInfo *panel,const ChiakiControllerState *previous,ChiakiControllerState *state)
+{
+	map_front_contacts(front,panel,previous,state);
+	if(front->reportNum>=2) state->buttons|=CHIAKI_CONTROLLER_BUTTON_TOUCHPAD;
 }
 
 unsigned int plus_vita_input_touch_count(const ChiakiControllerState *state)
@@ -146,7 +153,8 @@ int plus_vita_input_vita_read(void *user, const ChiakiControllerState *previous,
 	if(sample->stop_chord) pad.buttons &= ~chord;
 	sample->native_timestamp = pad.timeStamp;
 	if(!input->controller.ready) { chiaki_controller_state_set_idle(&sample->state);return 1; }
-	plus_vita_input_map_pad(&pad, &sample->state);
+	chiaki_controller_state_set_idle(&sample->state);
+	map_pad_axes(&pad,&sample->state);
 	PlusVitaControlLayout defaults;
 	plus_vita_control_layout_defaults(&defaults);
 	const PlusVitaControlLayout *layout=input->layout_ready && plus_vita_control_layout_valid(&input->layout) ? &input->layout : &defaults;
@@ -177,7 +185,7 @@ int plus_vita_input_vita_read(void *user, const ChiakiControllerState *previous,
 	{
 		SceTouchData touch = { 0 };
 		if(sceTouchPeek(SCE_TOUCH_PORT_FRONT, &touch, 1) > 0) {
-			if(layout->front_motion) plus_vita_input_map_front(&touch, &input->front_info, previous, &sample->state);
+			if(layout->front_motion) map_front_contacts(&touch,&input->front_info,previous,&sample->state);
 			if(touch.reportNum>=2) levels[PLUS_VITA_INPUT_FRONT_CLICK]=255;
 		}
 	}

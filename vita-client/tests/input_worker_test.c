@@ -32,6 +32,10 @@ int sceCtrlPeekBufferPositiveExt2(int port,SceCtrlData *pad,int count)
 	pthread_cond_broadcast(&device_cond);pthread_mutex_unlock(&device_mutex);return result;
 }
 static bool fail_send, fatal_device, fail_create;
+static bool fail_join;
+int __real_pthread_join(pthread_t,void **);
+int __wrap_pthread_join(pthread_t thread,void **result)
+{ return fail_join ? EDEADLK : __real_pthread_join(thread,result); }
 static unsigned int history_packets;
 static pthread_mutex_t boundary_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t boundary_cond = PTHREAD_COND_INITIALIZER;
@@ -301,6 +305,21 @@ static void external_reconnect_feedback(void)
 	tv_model=false;device_ports=(SceCtrlPortInfo){.port={SCE_CTRL_TYPE_PHY}};
 }
 
+static void join_ownership_contract(void)
+{
+	device_pad=(SceCtrlData){.lx=128,.ly=128,.rx=128,.ry=128};reads=0;
+	ChiakiLog log={0};ChiakiTakion takion={.log=&log};ChiakiFeedbackSender sender={0};
+	assert(chiaki_feedback_sender_init(&sender,&takion)==CHIAKI_ERR_SUCCESS);
+	PlusVitaInputVita input={0};PlusVitaInputWorker *worker=NULL;
+	assert(plus_vita_input_worker_start(&worker,&sender,scripted_read,&input)==CHIAKI_ERR_SUCCESS);
+	wait_reads(3);
+	PlusVitaInputStats stats={.joined=true};fail_join=true;
+	assert(plus_vita_input_worker_stop(worker,&stats)==CHIAKI_ERR_THREAD && !stats.joined);
+	fail_join=false;
+	assert(plus_vita_input_worker_stop(worker,&stats)==CHIAKI_ERR_SUCCESS && stats.joined);
+	chiaki_feedback_sender_fini(&sender);
+}
+
 static PlusVitaInputStatus wait_done(PlusVitaInputWorker *worker)
 {
 	uint64_t deadline=plus_vita_latency_now_us()+5000000;
@@ -399,6 +418,7 @@ int main(void)
 	external_controller_contract();
 	remapped_touch_contract();
 	external_reconnect_feedback();
+	join_ownership_contract();
 	adapter_contract();
 	ChiakiLog log = { 0 };
 	ChiakiTakion takion = { .log = &log };
