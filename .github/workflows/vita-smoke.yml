@@ -9,6 +9,7 @@ on:
       - "external/freetype"
       - "vita-client/**"
       - "tools/test-app-workflow.sh"
+      - "tools/test-app-controls.sh"
       - "tools/test-app-account-integration.sh"
       - "tools/test-app-text.sh"
       - "tools/test-app-font.sh"
@@ -26,6 +27,7 @@ on:
       - "external/freetype"
       - "vita-client/**"
       - "tools/test-app-workflow.sh"
+      - "tools/test-app-controls.sh"
       - "tools/test-app-account-integration.sh"
       - "tools/test-app-text.sh"
       - "tools/test-app-font.sh"
@@ -46,6 +48,8 @@ jobs:
           submodules: recursive
       - name: Test native application workflow
         run: sh tools/test-app-workflow.sh
+      - name: Test saved control layouts through Settings and gameplay input
+        run: sh tools/test-app-controls.sh
       - name: Test app text output and bounds
         run: sh tools/test-app-text.sh
       - name: Test real font adapter and menu painting

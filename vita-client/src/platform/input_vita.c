@@ -114,30 +114,74 @@ unsigned int plus_vita_input_touch_count(const ChiakiControllerState *state)
 	return count;
 }
 
+static void apply_layout(const PlusVitaControlLayout *layout,const uint8_t *levels,ChiakiControllerState *state)
+{
+	static const uint32_t buttons[PLUS_VITA_CONTROL_COUNT]={0,
+		CHIAKI_CONTROLLER_BUTTON_CROSS,CHIAKI_CONTROLLER_BUTTON_MOON,
+		CHIAKI_CONTROLLER_BUTTON_BOX,CHIAKI_CONTROLLER_BUTTON_PYRAMID,
+		CHIAKI_CONTROLLER_BUTTON_DPAD_UP,CHIAKI_CONTROLLER_BUTTON_DPAD_DOWN,
+		CHIAKI_CONTROLLER_BUTTON_DPAD_LEFT,CHIAKI_CONTROLLER_BUTTON_DPAD_RIGHT,
+		CHIAKI_CONTROLLER_BUTTON_L1,CHIAKI_CONTROLLER_BUTTON_R1,0,0,
+		CHIAKI_CONTROLLER_BUTTON_L3,CHIAKI_CONTROLLER_BUTTON_R3,
+		CHIAKI_CONTROLLER_BUTTON_OPTIONS,CHIAKI_CONTROLLER_BUTTON_SHARE,CHIAKI_CONTROLLER_BUTTON_TOUCHPAD};
+	state->buttons=0;state->l2_state=state->r2_state=0;
+	for(unsigned i=0;i<PLUS_VITA_INPUT_COUNT;i++) {
+		unsigned action=layout->bindings[i];
+		if(action==PLUS_VITA_CONTROL_L2) { if(levels[i]>state->l2_state) state->l2_state=levels[i]; }
+		else if(action==PLUS_VITA_CONTROL_R2) { if(levels[i]>state->r2_state) state->r2_state=levels[i]; }
+		/* Half pressure is a digital press; below half releases it. */
+		else if(levels[i]>=128 && action<PLUS_VITA_CONTROL_COUNT) state->buttons|=buttons[action];
+	}
+}
+
 int plus_vita_input_vita_read(void *user, const ChiakiControllerState *previous,
 	PlusVitaInputSample *sample)
 {
-	const PlusVitaInputVita *input = user;
+	PlusVitaInputVita *input = user;
 	SceCtrlData pad = { 0 };
-	int available = sceCtrlPeekBufferPositive(0, &pad, 1);
+	int available = plus_vita_controller_read(&input->controller,&pad);
 	if(available <= 0) return available < 0 ? -1 : 0;
 	const uint32_t chord = SCE_CTRL_START | SCE_CTRL_SELECT;
 	sample->stop_chord = (pad.buttons & chord) == chord;
 	if(sample->stop_chord) pad.buttons &= ~chord;
 	sample->native_timestamp = pad.timeStamp;
+	if(!input->controller.ready) { chiaki_controller_state_set_idle(&sample->state);return 1; }
 	plus_vita_input_map_pad(&pad, &sample->state);
-	if(input->rear_ready)
+	PlusVitaControlLayout defaults;
+	plus_vita_control_layout_defaults(&defaults);
+	const PlusVitaControlLayout *layout=input->layout_ready && plus_vita_control_layout_valid(&input->layout) ? &input->layout : &defaults;
+	uint8_t levels[PLUS_VITA_INPUT_COUNT]={0};
+	static const uint32_t pad_buttons[]={SCE_CTRL_CROSS,SCE_CTRL_CIRCLE,SCE_CTRL_SQUARE,SCE_CTRL_TRIANGLE,
+		SCE_CTRL_UP,SCE_CTRL_DOWN,SCE_CTRL_LEFT,SCE_CTRL_RIGHT,SCE_CTRL_LTRIGGER,SCE_CTRL_RTRIGGER,SCE_CTRL_START,SCE_CTRL_SELECT};
+	for(unsigned i=0;i<sizeof(pad_buttons)/sizeof(*pad_buttons);i++) if(pad.buttons&pad_buttons[i]) levels[i]=255;
+	if(input->controller.external) {
+		levels[PLUS_VITA_INPUT_L1]=(pad.buttons&SCE_CTRL_L1) ? 255 : 0;
+		levels[PLUS_VITA_INPUT_R1]=(pad.buttons&SCE_CTRL_R1) ? 255 : 0;
+		levels[PLUS_VITA_INPUT_L2]=pad.lt ? pad.lt : (pad.buttons&SCE_CTRL_L2) ? 255 : 0;
+		levels[PLUS_VITA_INPUT_R2]=pad.rt ? pad.rt : (pad.buttons&SCE_CTRL_R2) ? 255 : 0;
+		levels[PLUS_VITA_INPUT_L3]=(pad.buttons&SCE_CTRL_L3) ? 255 : 0;
+		levels[PLUS_VITA_INPUT_R3]=(pad.buttons&SCE_CTRL_R3) ? 255 : 0;
+	}
+	if(input->rear_ready && !input->controller.external)
 	{
 		SceTouchData touch = { 0 };
-		if(sceTouchPeek(SCE_TOUCH_PORT_BACK, &touch, 1) > 0)
-			plus_vita_input_map_rear(&touch, input->rear_mid_x, input->rear_mid_y, &sample->state);
+		if(sceTouchPeek(SCE_TOUCH_PORT_BACK, &touch, 1) > 0) {
+			unsigned count=touch.reportNum>SCE_TOUCH_MAX_REPORT ? SCE_TOUCH_MAX_REPORT : touch.reportNum;
+			for(unsigned i=0;i<count;i++) {
+				unsigned quadrant=(touch.report[i].y<input->rear_mid_y ? 0 : 2)+(touch.report[i].x<input->rear_mid_x ? 0 : 1);
+				levels[PLUS_VITA_INPUT_REAR_TL+quadrant]=255;
+			}
+		}
 	}
-	if(input->front_ready)
+	if(input->front_ready && !input->controller.external)
 	{
 		SceTouchData touch = { 0 };
-		if(sceTouchPeek(SCE_TOUCH_PORT_FRONT, &touch, 1) > 0)
-			plus_vita_input_map_front(&touch, &input->front_info, previous, &sample->state);
+		if(sceTouchPeek(SCE_TOUCH_PORT_FRONT, &touch, 1) > 0) {
+			if(layout->front_motion) plus_vita_input_map_front(&touch, &input->front_info, previous, &sample->state);
+			if(touch.reportNum>=2) levels[PLUS_VITA_INPUT_FRONT_CLICK]=255;
+		}
 	}
+	apply_layout(layout,levels,&sample->state);
 	return 1;
 }
 

@@ -5,6 +5,7 @@
 
 #include <chiaki/cloudsession.h>
 #include <chiaki/log.h>
+#include "control_layout.h"
 
 #if PLUS_VITA_INPUT_WORKER && PLUS_VITA_DEFERRED_LOG
 #define PLUS_VITA_STREAM_PROBE_BUILD "live-720p-refs5-input-worker-deferred-log-1"
@@ -26,6 +27,7 @@ ChiakiErrorCode plus_vita_stream_probe(const ChiakiCloudProvisionResult *provisi
 /* The optional UI pump runs on the caller's thread while Takion connects.
  * Return false to cancel before video presentation takes over the display. */
 ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResult *provision,
-	ChiakiLog *log, bool *user_stopped, bool (*connect_pump)(void *), void *pump_user);
+	ChiakiLog *log, bool *user_stopped, bool (*connect_pump)(void *), void *pump_user,
+	const PlusVitaControlLayout *controls);
 
 #endif

@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 #include <errno.h>
 
@@ -18,6 +19,18 @@ static unsigned int reads;
 static int16_t sent_x;
 static unsigned int state_packets;
 static int device_mode=1;
+static SceCtrlPortInfo device_ports={.port={SCE_CTRL_TYPE_PHY}};
+static bool tv_model;
+static int expected_external_port=2;
+int sceKernelGetModel(void) { return tv_model ? SCE_KERNEL_MODEL_VITATV : SCE_KERNEL_MODEL_VITA; }
+int sceCtrlGetControllerPortInfo(SceCtrlPortInfo *info)
+{ pthread_mutex_lock(&device_mutex);*info=device_ports;pthread_mutex_unlock(&device_mutex);return 0; }
+int sceCtrlPeekBufferPositiveExt2(int port,SceCtrlData *pad,int count)
+{
+	assert(port==expected_external_port && count==1);
+	pthread_mutex_lock(&device_mutex);*pad=device_pad;reads++;int result=device_mode;
+	pthread_cond_broadcast(&device_cond);pthread_mutex_unlock(&device_mutex);return result;
+}
 static bool fail_send, fatal_device, fail_create;
 static unsigned int history_packets;
 static pthread_mutex_t boundary_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -157,6 +170,89 @@ static void adapter_contract(void)
 	assert(sample.state.touches[0].id<0 && sample.state.touches[1].id<0);
 }
 
+static void external_controller_contract(void)
+{
+	for(unsigned kind=0;kind<2;kind++) {
+		tv_model=true;device_ports=(SceCtrlPortInfo){.port={SCE_CTRL_TYPE_VIRT,0,kind ? SCE_CTRL_TYPE_DS4 : SCE_CTRL_TYPE_DS3}};
+		PlusVitaInputVita input={.rear_ready=true,.front_ready=true};
+		ChiakiControllerState previous;chiaki_controller_state_set_idle(&previous);
+		PlusVitaInputSample sample={0};
+		device_pad=(SceCtrlData){.lx=128,.ly=128,.rx=128,.ry=128};
+		assert(plus_vita_input_vita_read(&input,&previous,&sample)==1);
+		device_pad.buttons=SCE_CTRL_L1|SCE_CTRL_R1|SCE_CTRL_L2|SCE_CTRL_R2|SCE_CTRL_L3|SCE_CTRL_R3;
+		device_pad.lt=80;device_pad.rt=192;
+		device_touch[1].reportNum=1;device_touch[1].report[0]=(SceTouchReport){.x=0,.y=0};
+		assert(plus_vita_input_vita_read(&input,&previous,&sample)==1);
+		assert(sample.state.buttons==(CHIAKI_CONTROLLER_BUTTON_L1|CHIAKI_CONTROLLER_BUTTON_R1|CHIAKI_CONTROLLER_BUTTON_L3|CHIAKI_CONTROLLER_BUTTON_R3));
+		assert(sample.state.l2_state==80 && sample.state.r2_state==192);
+		plus_vita_control_layout_defaults(&input.layout);input.layout_ready=true;
+		input.layout.bindings[PLUS_VITA_INPUT_L2]=PLUS_VITA_CONTROL_CROSS;
+		device_pad.lt=127;
+		assert(plus_vita_input_vita_read(&input,&previous,&sample)==1 && !(sample.state.buttons&CHIAKI_CONTROLLER_BUTTON_CROSS));
+		device_pad.lt=128;
+		assert(plus_vita_input_vita_read(&input,&previous,&sample)==1 && (sample.state.buttons&CHIAKI_CONTROLLER_BUTTON_CROSS));
+		input.layout.bindings[PLUS_VITA_INPUT_L2]=PLUS_VITA_CONTROL_L2;
+		input.layout.bindings[PLUS_VITA_INPUT_CROSS]=PLUS_VITA_CONTROL_L2;
+		device_pad.buttons|=SCE_CTRL_CROSS;device_pad.lt=80;
+		assert(plus_vita_input_vita_read(&input,&previous,&sample)==1 && sample.state.l2_state==255);
+		device_pad.buttons&=~SCE_CTRL_CROSS;
+		assert(plus_vita_input_vita_read(&input,&previous,&sample)==1 && sample.state.l2_state==80);
+		plus_vita_control_layout_defaults(&input.layout);
+		previous=sample.state;
+		device_ports.port[2]=SCE_CTRL_TYPE_UNPAIRED;
+		assert(plus_vita_input_vita_read(&input,&previous,&sample)==1);
+		assert(sample.state.buttons==0 && sample.state.l2_state==0 && sample.state.r2_state==0);
+		device_ports.port[2]=kind ? SCE_CTRL_TYPE_DS4 : SCE_CTRL_TYPE_DS3;
+		device_pad=(SceCtrlData){.buttons=SCE_CTRL_CROSS,.lx=255,.ly=128,.rx=128,.ry=128};
+		assert(plus_vita_input_vita_read(&input,&previous,&sample)==1 && sample.state.buttons==0 && sample.state.left_x==0);
+		device_pad.buttons=0;
+		assert(plus_vita_input_vita_read(&input,&previous,&sample)==1 && sample.state.left_x==0);
+		device_pad.lx=128;
+		assert(plus_vita_input_vita_read(&input,&previous,&sample)==1 && sample.state.buttons==0);
+		device_pad.buttons=SCE_CTRL_CROSS;
+		assert(plus_vita_input_vita_read(&input,&previous,&sample)==1 && sample.state.buttons==CHIAKI_CONTROLLER_BUTTON_CROSS);
+		device_ports.port[1]=SCE_CTRL_TYPE_DS4; /* A second pad must not replace the active port. */
+		assert(plus_vita_input_vita_read(&input,&previous,&sample)==1 && sample.state.buttons==CHIAKI_CONTROLLER_BUTTON_CROSS);
+	}
+	tv_model=false;device_ports=(SceCtrlPortInfo){.port={SCE_CTRL_TYPE_PHY}};
+	memset(device_touch,0,sizeof(device_touch));
+}
+
+static void remapped_touch_contract(void)
+{
+	PlusVitaInputVita input={.rear_ready=true,.front_ready=true,.rear_mid_x=960,.rear_mid_y=544,
+		.front_info={.minAaX=0,.maxAaX=1920,.minAaY=0,.maxAaY=1088},.layout_ready=true};
+	plus_vita_control_layout_defaults(&input.layout);
+	input.layout.bindings[PLUS_VITA_INPUT_CROSS]=PLUS_VITA_CONTROL_CIRCLE;
+	input.layout.bindings[PLUS_VITA_INPUT_CIRCLE]=PLUS_VITA_CONTROL_DISABLED;
+	input.layout.bindings[PLUS_VITA_INPUT_REAR_TL]=PLUS_VITA_CONTROL_CIRCLE;
+	input.layout.bindings[PLUS_VITA_INPUT_FRONT_CLICK]=PLUS_VITA_CONTROL_SQUARE;
+	input.layout.front_motion=false;
+	device_pad=(SceCtrlData){.buttons=SCE_CTRL_CROSS|SCE_CTRL_CIRCLE,.lx=128,.ly=128,.rx=128,.ry=128};
+	device_touch[1].reportNum=1;device_touch[1].report[0]=(SceTouchReport){.x=0,.y=0};
+	ChiakiControllerState previous;chiaki_controller_state_set_idle(&previous);
+	PlusVitaInputSample sample={0};
+	assert(plus_vita_input_vita_read(&input,&previous,&sample)==1 && sample.state.buttons==CHIAKI_CONTROLLER_BUTTON_MOON);
+	device_pad.buttons=0;
+	assert(plus_vita_input_vita_read(&input,&previous,&sample)==1 && sample.state.buttons==CHIAKI_CONTROLLER_BUTTON_MOON);
+	device_touch[1].reportNum=0;
+	assert(plus_vita_input_vita_read(&input,&previous,&sample)==1 && sample.state.buttons==0);
+	device_touch[0].reportNum=2;
+	device_touch[0].report[0]=(SceTouchReport){.id=1,.x=300,.y=300};
+	device_touch[0].report[1]=(SceTouchReport){.id=2,.x=600,.y=600};
+	assert(plus_vita_input_vita_read(&input,&previous,&sample)==1 && sample.state.buttons==CHIAKI_CONTROLLER_BUTTON_BOX);
+	assert(sample.state.touches[0].id<0 && sample.state.touches[1].id<0);
+	input.layout.front_motion=true;input.layout.bindings[PLUS_VITA_INPUT_FRONT_CLICK]=PLUS_VITA_CONTROL_DISABLED;
+	assert(plus_vita_input_vita_read(&input,&previous,&sample)==1 && sample.state.buttons==0);
+	assert(sample.state.touches[0].id==1 && sample.state.touches[1].id==2);
+	device_touch[0].reportNum=0;
+	input.layout.bindings[PLUS_VITA_INPUT_START]=PLUS_VITA_CONTROL_CROSS;
+	input.layout.bindings[PLUS_VITA_INPUT_SELECT]=PLUS_VITA_CONTROL_TRIANGLE;
+	device_pad.buttons=SCE_CTRL_START|SCE_CTRL_SELECT;
+	assert(plus_vita_input_vita_read(&input,&previous,&sample)==1 && sample.stop_chord && sample.state.buttons==0);
+	memset(device_touch,0,sizeof(device_touch));
+}
+
 static void wait_x(int16_t expected)
 {
 	struct timespec limit;
@@ -181,6 +277,28 @@ static int scripted_read(void *user, const ChiakiControllerState *previous,
 	PlusVitaInputSample *sample)
 {
 	return plus_vita_input_vita_read(user,previous,sample);
+}
+
+static void external_reconnect_feedback(void)
+{
+	tv_model=true;device_ports=(SceCtrlPortInfo){.port={SCE_CTRL_TYPE_VIRT,0,SCE_CTRL_TYPE_DS4}};
+	device_pad=(SceCtrlData){.lx=128,.ly=128,.rx=128,.ry=128};reads=state_packets=0;sent_x=0;
+	ChiakiLog log={0};ChiakiTakion takion={.log=&log};ChiakiFeedbackSender sender={0};
+	assert(chiaki_feedback_sender_init(&sender,&takion)==CHIAKI_ERR_SUCCESS);
+	PlusVitaInputVita input={0};PlusVitaInputWorker *worker=NULL;
+	assert(plus_vita_input_worker_start(&worker,&sender,scripted_read,&input)==CHIAKI_ERR_SUCCESS);
+	wait_reads(3);
+	pthread_mutex_lock(&device_mutex);device_pad.lx=255;pthread_mutex_unlock(&device_mutex);wait_x(32767);
+	pthread_mutex_lock(&device_mutex);device_ports.port[2]=SCE_CTRL_TYPE_UNPAIRED;pthread_mutex_unlock(&device_mutex);wait_x(0);
+	assert(!plus_vita_input_worker_status(worker).done);
+	pthread_mutex_lock(&device_mutex);unsigned target=reads+3;device_ports.port[2]=SCE_CTRL_TYPE_DS4;pthread_mutex_unlock(&device_mutex);
+	wait_reads(target);
+	pthread_mutex_lock(&device_mutex);assert(sent_x==0);device_pad.lx=128;target=reads+3;pthread_mutex_unlock(&device_mutex);
+	wait_reads(target);
+	pthread_mutex_lock(&device_mutex);device_pad.lx=255;pthread_mutex_unlock(&device_mutex);wait_x(32767);
+	PlusVitaInputStats stats;assert(plus_vita_input_worker_stop(worker,&stats)==CHIAKI_ERR_SUCCESS && stats.neutral_consumed);
+	wait_x(0);chiaki_feedback_sender_fini(&sender);
+	tv_model=false;device_ports=(SceCtrlPortInfo){.port={SCE_CTRL_TYPE_PHY}};
 }
 
 static PlusVitaInputStatus wait_done(PlusVitaInputWorker *worker)
@@ -278,6 +396,9 @@ static void lifecycle_cases(void)
 
 int main(void)
 {
+	external_controller_contract();
+	remapped_touch_contract();
+	external_reconnect_feedback();
 	adapter_contract();
 	ChiakiLog log = { 0 };
 	ChiakiTakion takion = { .log = &log };

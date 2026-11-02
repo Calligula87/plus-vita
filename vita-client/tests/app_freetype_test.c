@@ -25,6 +25,39 @@ static void assert_button_labels(const PlusVitaAppView *view)
  for(size_t i=0;i<view->action_count;i++)
   assert(button_has_label(&view->actions[i],i==view->selected ? 0xff421d09u : 0xfffcf7f3u));
 }
+static void preview_action(PlusVitaApp *app,PlusVitaAppAction action)
+{
+ PlusVitaAppView view=plus_vita_app_view(app);
+ for(size_t i=0;i<view.action_count;i++) if(view.actions[i].id==action) {
+  plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH,.x=view.actions[i].x+10,.y=view.actions[i].y+10});return;
+ }
+ assert(!"Missing preview action");
+}
+static void controls_previews(PlusVitaApp *app,PlusVitaFont *font,const PlusVitaBranding *branding)
+{
+ plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK});
+ preview_action(app,PLUS_VITA_ACTION_SETTINGS);
+ preview_action(app,PLUS_VITA_ACTION_CONTROL_LAYOUT);
+ const char *outputs[]={"controls-layout.ppm","controls-inputs.ppm","controls-actions.ppm"};
+ for(unsigned step=0;step<3;step++) {
+  PlusVitaAppView view=plus_vita_app_view(app);
+  plus_vita_app_paint_with_resources(font,pixels,960,&view,NULL,branding);assert_button_labels(&view);
+  char output[160];snprintf(output,sizeof(output),"build/debug/app-freetype-host/%s",outputs[step]);
+  assert(plus_vita_comparison_capture(pixels,960,output));
+  if(step==0) preview_action(app,PLUS_VITA_ACTION_BINDINGS);
+  if(step==1) preview_action(app,PLUS_VITA_ACTION_BINDING);
+ }
+ plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK});
+ plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK});
+ preview_action(app,PLUS_VITA_ACTION_CANCEL_CONTROLS);
+ preview_action(app,PLUS_VITA_ACTION_CONTROLS);
+ for(unsigned kind=0;kind<2;kind++) {
+  plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_CONTROL_DEVICE,.device=kind ? PLUS_VITA_DEVICE_DS4 : PLUS_VITA_DEVICE_DS3});
+  PlusVitaAppView view=plus_vita_app_view(app);
+  plus_vita_app_paint_with_resources(font,pixels,960,&view,NULL,branding);assert_button_labels(&view);
+  assert(plus_vita_comparison_capture(pixels,960,kind ? "build/debug/app-freetype-host/controls-ds4.ppm" : "build/debug/app-freetype-host/controls-ds3.ppm"));
+ }
+}
 int main(void)
 {
  const char *path="vita-client/assets/fonts/NotoSans-Regular.ttf";
@@ -90,6 +123,7 @@ int main(void)
  preview_view=plus_vita_app_view(preview);assert(preview_view.screen==PLUS_VITA_APP_ABOUT);
  plus_vita_app_paint_with_resources(b,pixels,960,&preview_view,NULL,branding);
  assert(plus_vita_comparison_capture(pixels,960,"build/debug/app-freetype-host/v000-about.ppm"));
+ controls_previews(preview,b,branding);
  const uint32_t *splash=plus_vita_branding_splash(branding); assert(splash);
  assert(plus_vita_comparison_capture(splash,960,"build/debug/app-freetype-host/branded-splash.ppm"));
  plus_vita_branding_free(branding);

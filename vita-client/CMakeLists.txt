@@ -590,6 +590,8 @@ add_executable(${PROJECT_NAME}
   src/platform/diagnostic_log.c
   src/platform/latency_stats.c
   src/platform/input_vita.c
+  src/platform/control_layout.c
+  src/platform/controller_vita.c
   src/platform/auth_probe.c
   src/platform/catalog_fetch_guard.c
   src/platform/credential.c

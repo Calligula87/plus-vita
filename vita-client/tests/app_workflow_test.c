@@ -46,8 +46,36 @@ static void joystick_menu(void)
 	plus_vita_app_destroy(app);
 }
 
+static void dpad_menu(void)
+{
+	PlusVitaApp *app = plus_vita_app_create();
+	assert(app);
+	menu_pad(app, 0x40, 255, 100); /* Down + stick: one move. */
+	assert(plus_vita_app_view(app).selected == 1);
+	menu_pad(app, 0x40, 128, 400099);
+	assert(plus_vita_app_view(app).selected == 1);
+	menu_pad(app, 0x40, 128, 400100);
+	assert(plus_vita_app_view(app).selected == 2);
+	menu_pad(app, 0x40, 128, 560100);
+	assert(plus_vita_app_view(app).selected == 3);
+	menu_pad(app, 0x10, 128, 560101);
+	assert(plus_vita_app_view(app).selected == 2);
+	menu_pad(app, 0x50, 128, 560102); /* Opposing directions cancel. */
+	assert(plus_vita_app_view(app).selected == 2);
+	menu_pad(app, 0x10, 128, 560103);
+	assert(plus_vita_app_view(app).selected == 1);
+	menu_pad(app, 0x4000, 128, 560104);
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_SETTINGS);
+	menu_pad(app, 0x40, 128, 560105);
+	assert(plus_vita_app_view(app).selected == 1);
+	menu_pad(app, 0x2000, 128, 560106);
+	assert(plus_vita_app_view(app).screen == PLUS_VITA_APP_WELCOME);
+	plus_vita_app_destroy(app);
+}
+
 int main(void)
 {
+	dpad_menu();
 	joystick_menu();
 	PlusVitaApp *app = plus_vita_app_create();
 	assert(app);
@@ -62,7 +90,7 @@ int main(void)
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
 	view = plus_vita_app_view(app);
 	assert(view.screen == PLUS_VITA_APP_SETTINGS);
-	assert(view.action_count == 4 && view.actions[0].id == PLUS_VITA_ACTION_SETUP);
+	assert(view.action_count == 5 && view.actions[0].id == PLUS_VITA_ACTION_SETUP);
 	assert(strstr(view.body, "ux0:data/plus-vita-allocation.log"));
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_DOWN });
 	plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });

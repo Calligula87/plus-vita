@@ -6,7 +6,7 @@
 #define PLUS_VITA_BUILD_LABEL "v000"
 #define PLUS_VITA_ABOUT_STATUS "v000"
 #else
-#define PLUS_VITA_APP_BUILD "recovery-diagnostics-1"
+#define PLUS_VITA_APP_BUILD "feedback-controls-37-38-39-1"
 #define PLUS_VITA_BUILD_LABEL "DEVELOPMENT BUILD"
 #define PLUS_VITA_ABOUT_STATUS "Development build. Not a public release."
 #endif

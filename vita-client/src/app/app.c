@@ -39,6 +39,10 @@ struct plus_vita_app_t {
 	uint32_t previous_buttons;
 	int previous_direction;
 	uint64_t repeat_at;
+	PlusVitaControlLayout controls, controls_draft;
+	PlusVitaControlDevice control_device;
+	unsigned binding_page, action_page, binding_input;
+	char controls_status[256], binding_labels[3][160];
 };
 
 static void welcome(PlusVitaApp *app)
@@ -96,22 +100,122 @@ static void settings_view(PlusVitaApp *app)
 				app->connected || app->saved ? "Account and Remember" : "Account setup", 64, 300, 832, 44 },
 			{ PLUS_VITA_ACTION_CONTROLS, "Controls", 64, 350, 832, 44 },
 			{ PLUS_VITA_ACTION_REPORTING, "Report an issue", 64, 400, 832, 44 },
-			{ PLUS_VITA_ACTION_BACK, "Back", 64, 450, 832, 44 }
-		}, .action_count = 4 };
+			{ PLUS_VITA_ACTION_CONTROL_LAYOUT, "Control mapping", 64, 406, 832, 40 },
+			{ PLUS_VITA_ACTION_BACK, "Back", 64, 450, 832, 40 }
+		}, .action_count = 5 };
+	for(size_t i=0;i<3;i++) { app->view.actions[i].y=274+(int)i*44;app->view.actions[i].height=40; }
+}
+
+static bool controls_screen(PlusVitaAppScreen screen)
+{
+	return screen==PLUS_VITA_APP_CONTROL_LAYOUT || screen==PLUS_VITA_APP_BINDINGS
+		|| screen==PLUS_VITA_APP_BIND_ACTIONS;
+}
+
+static void layout_view(PlusVitaApp *app)
+{
+	app->view=(PlusVitaAppView){.screen=PLUS_VITA_APP_CONTROL_LAYOUT,.title="Control mapping.",
+		.subtitle="GAMEPLAY LAYOUT",.body=app->controls_status,.hint="D-pad / left stick  Move     X  Select     O  Cancel",
+		.actions={{PLUS_VITA_ACTION_BINDINGS,"Edit input bindings",64,260,832,40},
+			{PLUS_VITA_ACTION_FRONT_MOTION,app->controls_draft.front_motion ? "Front-touch movement: On" : "Front-touch movement: Off",64,304,832,40},
+			{PLUS_VITA_ACTION_CONTROL_DEFAULTS,"Restore defaults",64,348,832,40},
+			{PLUS_VITA_ACTION_SAVE_CONTROLS,"Save for next session",64,392,832,40},
+			{PLUS_VITA_ACTION_CANCEL_CONTROLS,"Cancel",64,436,832,40}},.action_count=5};
+}
+
+static void bindings_view(PlusVitaApp *app,bool destinations)
+{
+	unsigned page=destinations ? app->action_page : app->binding_page;
+	unsigned count=destinations ? PLUS_VITA_CONTROL_COUNT : PLUS_VITA_INPUT_COUNT;
+	app->view=(PlusVitaAppView){.screen=destinations ? PLUS_VITA_APP_BIND_ACTIONS : PLUS_VITA_APP_BINDINGS,
+		.controls_page=page,.control_device=app->control_device,
+		.title=destinations ? plus_vita_control_input_name(app->binding_input,app->control_device) : "Choose an input.",
+		.subtitle=destinations ? "CHOOSE GAME ACTION" : "GAMEPLAY BINDINGS",
+		.body=destinations ? "One action per input. Several inputs may share an action."
+			: "Unavailable inputs can be set up for other supported hardware.",
+		.hint="D-pad / left stick  Move     X  Select     O  Back"};
+	for(unsigned row=0;row<3 && page*3+row<count;row++) {
+		unsigned index=page*3+row;
+		if(destinations) snprintf(app->binding_labels[row],sizeof(app->binding_labels[row]),"%s",plus_vita_control_action_name(index));
+		else snprintf(app->binding_labels[row],sizeof(app->binding_labels[row]),"%s: %s%s",
+			plus_vita_control_input_name(index,app->control_device),plus_vita_control_action_name(app->controls_draft.bindings[index]),
+			plus_vita_control_input_available(index,app->control_device) ? "" : " (unavailable)");
+		app->view.actions[app->view.action_count++]=(PlusVitaAppButton){
+			destinations ? PLUS_VITA_ACTION_BIND_ACTION : PLUS_VITA_ACTION_BINDING,
+			app->binding_labels[row],64,260+(int)row*44,832,40};
+	}
+	app->view.actions[app->view.action_count++]=(PlusVitaAppButton){PLUS_VITA_ACTION_BIND_PREVIOUS,destinations ? "Previous actions" : "Previous inputs",64,400,400,40};
+	app->view.actions[app->view.action_count++]=(PlusVitaAppButton){PLUS_VITA_ACTION_BIND_NEXT,destinations ? "Next actions" : "Next inputs",496,400,400,40};
+	app->view.actions[app->view.action_count++]=(PlusVitaAppButton){PLUS_VITA_ACTION_BACK,"Back",64,450,832,40};
+}
+
+static PlusVitaAppEffect edit_controls(PlusVitaApp *app,PlusVitaAppAction action)
+{
+	bool destinations=app->view.screen==PLUS_VITA_APP_BIND_ACTIONS;
+	if(action==PLUS_VITA_ACTION_CONTROL_LAYOUT) {
+		app->controls_draft=app->controls;app->binding_page=0;
+		snprintf(app->controls_status,sizeof(app->controls_status),"Save for next session. Menu controls and exit stay fixed.");
+		layout_view(app);
+	} else if(action==PLUS_VITA_ACTION_BINDINGS) bindings_view(app,false);
+	else if(action==PLUS_VITA_ACTION_BINDING) {
+		app->binding_input=app->binding_page*3+(unsigned)app->view.selected;
+		app->action_page=0;bindings_view(app,true);
+	} else if(action==PLUS_VITA_ACTION_BIND_ACTION) {
+		app->controls_draft.bindings[app->binding_input]=(uint8_t)(app->action_page*3+app->view.selected);
+		bindings_view(app,false);
+	} else if(action==PLUS_VITA_ACTION_BIND_PREVIOUS || action==PLUS_VITA_ACTION_BIND_NEXT) {
+		unsigned *page=destinations ? &app->action_page : &app->binding_page;
+		unsigned pages=((destinations ? PLUS_VITA_CONTROL_COUNT : PLUS_VITA_INPUT_COUNT)+2)/3;
+		*page=action==PLUS_VITA_ACTION_BIND_NEXT ? (*page+1)%pages : (*page+pages-1)%pages;
+		bindings_view(app,destinations);
+	} else if(action==PLUS_VITA_ACTION_FRONT_MOTION) {
+		app->controls_draft.front_motion=!app->controls_draft.front_motion;layout_view(app);app->view.selected=1;
+	} else if(action==PLUS_VITA_ACTION_CONTROL_DEFAULTS) {
+		plus_vita_control_layout_defaults(&app->controls_draft);layout_view(app);app->view.selected=2;
+	} else if(action==PLUS_VITA_ACTION_SAVE_CONTROLS) {
+		app->pending_operation=++app->next_operation;app->waiting_for=PLUS_VITA_EFFECT_SAVE_CONTROLS;
+		app->view.operation=app->pending_operation;
+		return (PlusVitaAppEffect){.kind=PLUS_VITA_EFFECT_SAVE_CONTROLS,.operation=app->pending_operation,.controls=app->controls_draft};
+	} else if(action==PLUS_VITA_ACTION_CANCEL_CONTROLS) settings_view(app);
+	else if(action==PLUS_VITA_ACTION_BACK) {
+		if(destinations) bindings_view(app,false);
+		else if(app->view.screen==PLUS_VITA_APP_BINDINGS) layout_view(app);
+		else settings_view(app);
+	}
+	return (PlusVitaAppEffect){0};
 }
 
 static void controls_view(PlusVitaApp *app)
 {
 	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_CONTROLS,
 		.title = "Controls.", .subtitle = "SETTINGS AND HELP",
-		.body = "Menus: left stick, Cross to select, Circle to go back, or touch.\n"
-			"D-pad does not move menu focus.\n"
+		.body = "Menus: D-pad or left stick; Cross selects, Circle goes back.\n"
+			"Touch: lift inside a button; slide away to cancel.\n"
 			"In a game: Vita buttons and sticks map to PlayStation controls.\n"
 			"Rear top corners: L2/R2; lower corners: L3/R3.\n"
 			"Front touch moves the touchpad; two touches press it.\n"
+			"Settings > Control mapping: Save applies next session.\n"
 			"Hold START + SELECT for 2 seconds to stop a stream.",
 		.hint = "X  Select     O  Back",
 		.actions = {{ PLUS_VITA_ACTION_BACK, "Back to settings", 64, 444, 832, 52 }}, .action_count = 1 };
+	if(app->control_device==PLUS_VITA_DEVICE_DS3 || app->control_device==PLUS_VITA_DEVICE_DS4)
+		app->view.body=app->control_device==PLUS_VITA_DEVICE_DS4
+			? "DualShock 4: pair in PS TV system settings using USB + PS.\n"
+			  "Menus: D-pad/stick, Cross selects, Circle goes back.\n"
+			  "Physical buttons, sticks, L1/R1, L2/R2 and L3/R3 work in games.\n"
+			  "Control mapping: assign a button to cloud touchpad click.\n"
+			  "Native touchpad movement, motion and rumble are unavailable.\n"
+			  "Hold OPTIONS + SHARE for 2 seconds to stop.\n"
+			  "Reconnect, then release all controls before playing."
+			: "DualShock 3: pair in PS TV system settings using USB + PS.\n"
+			  "Menus: D-pad/stick, Cross selects, Circle goes back.\n"
+			  "Physical buttons, sticks, L1/R1, L2/R2 and L3/R3 work in games.\n"
+			  "Control mapping: assign a button to cloud touchpad click.\n"
+			  "Touchpad movement, motion and rumble are unavailable.\n"
+			  "Hold START + SELECT for 2 seconds to stop.\n"
+			  "Reconnect, then release all controls before playing.";
+	else if(app->control_device==PLUS_VITA_DEVICE_DISCONNECTED)
+		app->view.body="No supported controller connected.\nPair DualShock 3 or DualShock 4 in PS TV system settings\nusing USB, then press PS. Release controls after connecting.\nControl mapping can assign a button to cloud touchpad click.";
 }
 
 static void reporting_view(PlusVitaApp *app)
@@ -147,6 +251,7 @@ PlusVitaApp *plus_vita_app_create(void)
 	PlusVitaApp *app = calloc(1, sizeof(*app));
 	if(!app) return NULL;
 	app->remember = true;
+	plus_vita_control_layout_defaults(&app->controls);
 	welcome(app);
 	return app;
 }
@@ -453,6 +558,14 @@ static bool title_matches(const char *title, const char *query)
 
 static int menu_direction(const PlusVitaApp *app, PlusVitaAppPad pad)
 {
+	uint32_t directions = pad.buttons & (PLUS_VITA_MENU_UP | PLUS_VITA_MENU_DOWN);
+	if(app->view.screen == PLUS_VITA_APP_CATALOGUE)
+		directions |= pad.buttons & (PLUS_VITA_MENU_LEFT | PLUS_VITA_MENU_RIGHT);
+	if(directions) {
+		bool forward = (directions & (PLUS_VITA_MENU_DOWN | PLUS_VITA_MENU_RIGHT)) != 0;
+		bool backward = (directions & (PLUS_VITA_MENU_UP | PLUS_VITA_MENU_LEFT)) != 0;
+		return forward == backward ? 0 : forward ? 1 : -1;
+	}
 	int axis = pad.left_y;
 	if(app->view.screen == PLUS_VITA_APP_CATALOGUE
 		&& abs((int)pad.left_x - 128) > abs(axis - 128)) axis = pad.left_x;
@@ -584,6 +697,31 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 {
 	PlusVitaAppView *view = &app->view;
 	PlusVitaAppEffect effect = { .kind = PLUS_VITA_EFFECT_NONE };
+	if(event.kind==PLUS_VITA_EVENT_CONTROLS_LOADED) {
+		if(plus_vita_control_layout_valid(&event.controls)) app->controls=event.controls;
+		return effect;
+	}
+	if(event.kind==PLUS_VITA_EVENT_CONTROLS_SAVED) {
+		if(app->waiting_for!=PLUS_VITA_EFFECT_SAVE_CONTROLS || !event.operation || event.operation!=app->pending_operation) return effect;
+		app->pending_operation=0;app->waiting_for=PLUS_VITA_EFFECT_NONE;
+		if(event.status==PLUS_VITA_RESULT_OK) {
+			app->controls=app->controls_draft;settings_view(app);
+			view->body="Controls saved. Your next gaming session will use this layout.";
+		} else {
+			snprintf(app->controls_status,sizeof(app->controls_status),"Save failed. Previous layout kept. Retry Save or Cancel.");
+			layout_view(app);
+		}
+		return effect;
+	}
+	if(event.kind==PLUS_VITA_EVENT_CONTROL_DEVICE) {
+		if(app->control_device==event.device) return effect;
+		app->control_device=event.device;
+		if(view->screen==PLUS_VITA_APP_BINDINGS || view->screen==PLUS_VITA_APP_BIND_ACTIONS)
+			bindings_view(app,view->screen==PLUS_VITA_APP_BIND_ACTIONS);
+		else if(view->screen==PLUS_VITA_APP_CONTROLS) controls_view(app);
+		return effect;
+	}
+	if(app->waiting_for==PLUS_VITA_EFFECT_SAVE_CONTROLS) return effect;
 	if(view->screen == PLUS_VITA_APP_CLOSED) return effect;
 	if(event.kind == PLUS_VITA_EVENT_START)
 	{
@@ -897,6 +1035,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		view->selected = (view->selected + view->action_count - 1) % view->action_count;
 	else if(event.kind == PLUS_VITA_EVENT_BACK)
 	{
+		if(controls_screen(view->screen)) return edit_controls(app,PLUS_VITA_ACTION_BACK);
 #if PLUS_VITA_FONT_COMPARISON
 		if(view->screen==PLUS_VITA_APP_FONT_COMPARISON) {
 			about_view(app); return effect;
@@ -928,6 +1067,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	else if(event.kind == PLUS_VITA_EVENT_ACTIVATE && view->action_count)
 	{
 		PlusVitaAppAction action = view->actions[view->selected].id;
+		if(action==PLUS_VITA_ACTION_CONTROL_LAYOUT || controls_screen(view->screen)) return edit_controls(app,action);
 #if PLUS_VITA_FONT_COMPARISON
 		if(action==PLUS_VITA_ACTION_FONT_COMPARISON || action==PLUS_VITA_ACTION_FONT_TOGGLE || action==PLUS_VITA_ACTION_FONT_SAMPLE) {
 			if(action==PLUS_VITA_ACTION_FONT_TOGGLE) app->alternative_font=!app->alternative_font;
@@ -948,7 +1088,8 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		else if(action==PLUS_VITA_ACTION_PLAY && (view->screen==PLUS_VITA_APP_DETAILS
 			|| view->screen==PLUS_VITA_APP_STREAM_STOPPED)) {
 			PlusVitaCatalogEntry game=*view->detail;
-			effect=operation(app,PLUS_VITA_EFFECT_PLAY,"Preparing a cloud session. Circle cancels.",true); effect.game=game; return effect;
+			effect=operation(app,PLUS_VITA_EFFECT_PLAY,"Preparing a cloud session. Circle cancels.",true);
+			effect.game=game;effect.controls=app->controls;return effect;
 		}
 		else if(action == PLUS_VITA_ACTION_CATALOGUE)
 		{

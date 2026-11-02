@@ -111,6 +111,7 @@ typedef enum plus_vita_stream_probe_state_t
 
 typedef struct plus_vita_stream_probe_t
 {
+	PlusVitaControlLayout controls;
 	ChiakiLog *log;
 	ChiakiTakion takion;
 	ChiakiECDH ecdh;
@@ -1557,7 +1558,8 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 	bool front_ready = front_info_result >= 0 && front_start_result >= 0;
 #if PLUS_VITA_INPUT_WORKER
 	PlusVitaInputVita input_vita = { .rear_ready = rear_ready, .front_ready = front_ready,
-		.rear_mid_x = rear_mid_x, .rear_mid_y = rear_mid_y, .front_info = front_info };
+		.rear_mid_x = rear_mid_x, .rear_mid_y = rear_mid_y, .front_info = front_info,
+		.layout=probe->controls,.layout_ready=true };
 #endif
 	probe_preview_lock(probe);
 	CHIAKI_LOGI(probe->log, "Stream probe rear touch ready=%d panel_x=%d..%d mid_x=%d panel_y=%d..%d mid_y=%d sampling_prev=%d",
@@ -2217,7 +2219,8 @@ done:
 #endif
 
 ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResult *provision,
-	ChiakiLog *log, bool *user_stopped, bool (*connect_pump)(void *), void *pump_user)
+	ChiakiLog *log, bool *user_stopped, bool (*connect_pump)(void *), void *pump_user,
+	const PlusVitaControlLayout *controls)
 {
 	if(user_stopped) *user_stopped = false;
 #if !PLUS_VITA_RELEASE_CANDIDATE
@@ -2236,6 +2239,8 @@ ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResul
 		return CHIAKI_ERR_INVALID_DATA;
 	PlusVitaStreamProbe probe = { .log = log, .provision = provision,
 		.state = PROBE_CONNECTING };
+	if(plus_vita_control_layout_valid(controls)) probe.controls=*controls;
+	else plus_vita_control_layout_defaults(&probe.controls);
 	CHIAKI_LOGI(log, "Stream probe build=%s", PLUS_VITA_STREAM_PROBE_BUILD);
 	const uint8_t idr3[] = { 0, 0, 1, 0x65 };
 	const uint8_t idr4[] = { 0, 0, 0, 1, 0x65 };
@@ -2386,5 +2391,5 @@ done_key:
 ChiakiErrorCode plus_vita_stream_probe(const ChiakiCloudProvisionResult *provision,
 	ChiakiLog *log, bool *user_stopped)
 {
-	return plus_vita_stream_probe_with_pump(provision, log, user_stopped, NULL, NULL);
+	return plus_vita_stream_probe_with_pump(provision, log, user_stopped, NULL, NULL, NULL);
 }

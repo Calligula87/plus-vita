@@ -20,6 +20,7 @@
 #include "../platform/request_cancel.h"
 #include "../platform/recovery_vita.h"
 #include "../platform/stream_probe.h"
+#include "../platform/controller_vita.h"
 #include <curl/curl.h>
 #include <psp2/sysmodule.h>
 #include <psp2/touch.h>
@@ -36,6 +37,10 @@
 _Static_assert((unsigned)PLUS_VITA_MENU_CROSS == (unsigned)SCE_CTRL_CROSS, "Menu Cross bit must match VitaSDK");
 _Static_assert((unsigned)PLUS_VITA_MENU_CIRCLE == (unsigned)SCE_CTRL_CIRCLE, "Menu Circle bit must match VitaSDK");
 _Static_assert((unsigned)PLUS_VITA_MENU_TRIANGLE == (unsigned)SCE_CTRL_TRIANGLE, "Menu Triangle bit must match VitaSDK");
+_Static_assert((unsigned)PLUS_VITA_MENU_UP == (unsigned)SCE_CTRL_UP, "Menu Up bit must match VitaSDK");
+_Static_assert((unsigned)PLUS_VITA_MENU_DOWN == (unsigned)SCE_CTRL_DOWN, "Menu Down bit must match VitaSDK");
+_Static_assert((unsigned)PLUS_VITA_MENU_LEFT == (unsigned)SCE_CTRL_LEFT, "Menu Left bit must match VitaSDK");
+_Static_assert((unsigned)PLUS_VITA_MENU_RIGHT == (unsigned)SCE_CTRL_RIGHT, "Menu Right bit must match VitaSDK");
 
 typedef struct {
 	SceUID blocks[2];
@@ -157,11 +162,18 @@ static PlusVitaAppEventKind completion(PlusVitaAppEffectKind kind)
  * takes over the display and input only after this stage has completed. */
 static bool play_connect_pump(void *user)
 {
-	(void)user;
+	PlusVitaController *controller=user;
 	SceCtrlData pad={0};
 	if(plus_vita_recovery_poll()!=PLUS_VITA_RECOVERY_NONE) return false;
-	return sceCtrlPeekBufferPositive(0,&pad,1) <= 0
+	return plus_vita_controller_read(controller,&pad) <= 0
 		|| !(pad.buttons & SCE_CTRL_CIRCLE);
+}
+
+static int menu_read(PlusVitaController *controller,SceCtrlData *pad)
+{
+	int count=plus_vita_controller_read(controller,pad);
+	if(count>0 && !controller->ready) *pad=(SceCtrlData){.lx=128,.ly=128,.rx=128,.ry=128};
+	return count;
 }
 
 int plus_vita_app_run(void)
@@ -170,6 +182,10 @@ int plus_vita_app_run(void)
 	bool log_available = plus_vita_diagnostic_persistence_ok();
 	UiDisplay *display = calloc(1, sizeof(*display));
 	PlusVitaApp *app = plus_vita_app_create();
+	PlusVitaControlLayout session_controls;
+	plus_vita_control_layout_defaults(&session_controls);
+	plus_vita_control_layout_load(PLUS_VITA_CONTROLS_PATH,&session_controls);
+	if(app) plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_CONTROLS_LOADED,.controls=session_controls});
 	PlusVitaAccount *account = plus_vita_account_create();
 	PlusVitaAccount *storage = plus_vita_account_create();
 	PlusVitaPlay *play = plus_vita_play_create();
@@ -188,6 +204,8 @@ int plus_vita_app_run(void)
 	SceCtrlPadInputMode previous_mode = SCE_CTRL_MODE_DIGITAL;
 	bool restore_mode = sceCtrlGetSamplingMode(&previous_mode) == 0;
 	sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
+	int previous_extended_mode=sceCtrlSetSamplingModeExt(SCE_CTRL_MODE_ANALOG);
+	PlusVitaController menu_controller={0};
 	SceTouchSamplingState previous_touch = SCE_TOUCH_SAMPLING_STATE_STOP;
 	bool restore_touch = sceTouchGetSamplingState(SCE_TOUCH_PORT_FRONT, &previous_touch) == 0;
 	SceTouchPanelInfo panel = { 0 };
@@ -195,6 +213,8 @@ int plus_vita_app_run(void)
 		&& panel.maxAaX > panel.minAaX && panel.maxAaY > panel.minAaY
 		&& sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START) == 0;
 	bool touched = false;
+	unsigned touch_id=0;
+	int touch_x=0,touch_y=0;
 #if PLUS_VITA_FONT_COMPARISON
 	uint32_t capture_buttons=0;
 #endif
@@ -257,8 +277,9 @@ int plus_vita_app_run(void)
 		if(previous_poll && polled >= previous_poll) plus_vita_diagnostic_ui_sample(PLUS_VITA_UI_POLL_GAP, polled-previous_poll);
 		previous_poll = polled;
 		bool input_changed = false;
-		if(sceCtrlPeekBufferPositive(0, &pad, 1) > 0)
+		if(menu_read(&menu_controller,&pad) > 0)
 		{
+			plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_CONTROL_DEVICE,.device=menu_controller.device},0);
 			input_changed = handle_input(&flow, account, play, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_PAD,
 				.pad = { .buttons = pad.buttons, .left_x = pad.lx, .left_y = pad.ly, .time_us = sceKernelGetProcessTimeWide() } });
 #if PLUS_VITA_FONT_COMPARISON
@@ -278,16 +299,27 @@ int plus_vita_app_run(void)
 #endif
 		}
 		SceTouchData touch = { 0 };
-		if(touch_ready && sceTouchPeek(SCE_TOUCH_PORT_FRONT, &touch, 1) > 0)
-		{
-			if(!input_changed && touch.reportNum && !touched)
-			{
-				input_changed = handle_input(&flow, account, play, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_TOUCH,
-					.x = (touch.report[0].x - panel.minAaX) * (WIDTH - 1) / (panel.maxAaX - panel.minAaX),
-					.y = (touch.report[0].y - panel.minAaY) * (HEIGHT - 1) / (panel.maxAaY - panel.minAaY) });
+		if(touch_ready && sceTouchPeek(SCE_TOUCH_PORT_FRONT, &touch, 1) > 0) {
+			if(touch.reportNum) {
+				bool began=!touched;
+				if(began) touch_id=touch.report[0].id;
+				unsigned contact=0;
+				while(contact<touch.reportNum && contact<SCE_TOUCH_MAX_REPORT && touch.report[contact].id!=touch_id) contact++;
+				if(contact<touch.reportNum && contact<SCE_TOUCH_MAX_REPORT) {
+					touch_x=((int)touch.report[contact].x-panel.minAaX)*(WIDTH-1)/(panel.maxAaX-panel.minAaX);
+					touch_y=((int)touch.report[contact].y-panel.minAaY)*(HEIGHT-1)/(panel.maxAaY-panel.minAaY);
+					input_changed|=handle_input(&flow,account,play,(PlusVitaAppEvent){
+						.kind=began ? PLUS_VITA_EVENT_TOUCH_DOWN : PLUS_VITA_EVENT_TOUCH_MOVE,.x=touch_x,.y=touch_y});
+				}
+				if(touch.reportNum!=1 || contact>=touch.reportNum || contact>=SCE_TOUCH_MAX_REPORT)
+					input_changed|=handle_input(&flow,account,play,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_CANCEL});
+				touched=true;
+			} else if(touched) {
+				input_changed|=handle_input(&flow,account,play,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_UP,.x=touch_x,.y=touch_y});
+				touched=false;
 			}
-			touched = touch.reportNum != 0;
-		}
+		} else if(touched)
+			input_changed|=handle_input(&flow,account,play,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_CANCEL});
 		flow.dirty = flow.dirty || input_changed;
 		if(input_changed && !flow.input_since) flow.input_since = polled;
 		if(!input_changed && !flow.splash_active && flow.pending.kind != PLUS_VITA_EFFECT_NONE
@@ -297,26 +329,33 @@ int plus_vita_app_run(void)
 			if(effect.operation && effect.operation == plus_vita_app_view(app).operation)
 			{
 				if(effect.kind == PLUS_VITA_EFFECT_PREPARE_SETUP)
-					plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_SETUP_READY, .operation = effect.operation });
+					plus_vita_ui_flow_event(&flow, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_SETUP_READY, .operation = effect.operation },0);
 				else if(effect.kind == PLUS_VITA_EFFECT_EDIT_LABEL || effect.kind == PLUS_VITA_EFFECT_EDIT_SEARCH)
 				{
 					char label[129]; PlusVitaCredentialImeResult keyboard;
 					if(effect.kind==PLUS_VITA_EFFECT_EDIT_SEARCH) plus_vita_catalogue_search_read(label,&keyboard);
 					else plus_vita_account_label_read(label, &keyboard);
+					plus_vita_ui_flow_tick(&flow,plus_vita_latency_now_us());
 					PlusVitaAppResult status = !keyboard.initialized ? PLUS_VITA_RESULT_STORAGE_ERROR
 						: !keyboard.accepted ? PLUS_VITA_RESULT_CANCELLED : !keyboard.validated ? PLUS_VITA_RESULT_STORAGE_ERROR : PLUS_VITA_RESULT_OK;
 					plus_vita_ui_flow_event(&flow, (PlusVitaAppEvent){ .kind = effect.kind==PLUS_VITA_EFFECT_EDIT_SEARCH ? PLUS_VITA_EVENT_SEARCH_ENTERED : PLUS_VITA_EVENT_LABEL_ENTERED,
 						.operation = effect.operation, .status = status, .data = label, .data_size = strlen(label) }, 0);
 					memset(label, 0, sizeof(label));
 					SceCtrlData after = {0};
-					sceCtrlPeekBufferPositive(0, &after, 1);
+					menu_read(&menu_controller,&after);
 					plus_vita_app_dispatch(app, (PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_PAD_RESET,
 						.pad = { .buttons = after.buttons, .left_x = after.lx, .left_y = after.ly, .time_us = sceKernelGetProcessTimeWide() } });
 					touched = true;
 					previous_poll = flow.input_since = 0; /* Human keyboard time is not menu latency. */
 				}
+				else if(effect.kind==PLUS_VITA_EFFECT_SAVE_CONTROLS) {
+					bool saved=plus_vita_control_layout_save(PLUS_VITA_CONTROLS_PATH,&effect.controls);
+					plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_CONTROLS_SAVED,
+						.operation=effect.operation,.status=saved ? PLUS_VITA_RESULT_OK : PLUS_VITA_RESULT_STORAGE_ERROR},0);
+				}
 				else if(effect.kind==PLUS_VITA_EFFECT_PLAY)
 				{
+					session_controls=effect.controls;
 					if(plus_vita_play_busy(play) || !plus_vita_account_idle(account))
 						plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
 							.operation=effect.operation,.status=PLUS_VITA_RESULT_BUSY},0);
@@ -369,10 +408,11 @@ int plus_vita_app_run(void)
 						plus_vita_diagnostic_chiaki_log,NULL);
 					plus_vita_diagnostic_event("stream_probe.begin",0);
 					stream_error=plus_vita_stream_probe_with_pump(&provision,&stream_log,
-						&user_stopped,play_connect_pump,NULL);
+						&user_stopped,play_connect_pump,&menu_controller,&session_controls);
 					plus_vita_diagnostic_event("stream_probe.complete",(int)stream_error);
 				}
 				PlusVitaRecovery stopped=plus_vita_recovery_poll();
+				plus_vita_ui_flow_tick(&flow,plus_vita_latency_now_us());
 				if(stopped!=PLUS_VITA_RECOVERY_NONE) {
 					plus_vita_diagnostic_event(stopped==PLUS_VITA_RECOVERY_SLEEP ? "recovery.sleep" : "recovery.wifi",0);
 					plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_INTERRUPTED,
@@ -384,11 +424,13 @@ int plus_vita_app_run(void)
 						? PLUS_VITA_RESULT_CANCELLED : allocation_error!=CHIAKI_ERR_SUCCESS
 						? plus_vita_play_failure(allocation_error,&provision) : PLUS_VITA_RESULT_STREAM_STOPPED},0);
 				SceCtrlData released={0};
-				sceCtrlPeekBufferPositive(0,&released,1);
+				menu_read(&menu_controller,&released);
 				plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PAD_RESET,
 					.pad={.buttons=released.buttons,.left_x=released.lx,.left_y=released.ly,
 						.time_us=sceKernelGetProcessTimeWide()}});
 				previous_poll=flow.input_since=0;
+				touched=true;
+				plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_CANCEL},0);
 				flow.dirty=true;
 			}
 			/* Complete/cancelled attempts stay readable on disk while browsing.
@@ -417,6 +459,7 @@ int plus_vita_app_run(void)
 	}
 	if(restore_touch) sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, previous_touch);
 	if(restore_mode) sceCtrlSetSamplingMode(previous_mode);
+	if(previous_extended_mode>=0) sceCtrlSetSamplingModeExt((SceCtrlPadInputMode)previous_extended_mode);
 	plus_vita_credential_clear(&flow.pending.credential);
 	bool account_closed = plus_vita_account_close(account);
 	bool storage_closed = plus_vita_account_close(storage);

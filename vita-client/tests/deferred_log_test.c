@@ -160,7 +160,7 @@ int main(void)
 	while(fgets(line,sizeof(line),f)) {
 		bytes+=strlen(line);
 		assert(!strstr(line,"allocation.complete") && !strstr(line,"999999"));
-		if(strstr(line,"build=recovery-diagnostics-1")) ui_build=true;
+		if(strstr(line,"build=feedback-controls-37-38-39-1")) ui_build=true;
 		if(strstr(line,"draw count=500")) ui_timing=true;
 		if(strstr(line,"metadata_missing=2 available=3 unsupported=4 rejected=5 loaded=1 dns=1")) artwork_summary=true;
 	}
