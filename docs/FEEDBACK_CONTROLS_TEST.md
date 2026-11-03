@@ -30,6 +30,27 @@ Run the native host scripts under Linux/WSL, including
 `PLUS_VITA_INPUT_TEST_DEFERRED_LOG=1`. Compile the graphical Vita target and
 retain the candidate package checksum with the final software results.
 
+## Software verification
+
+Verified source commit: `66cc53dac6e4bcbac5f3fc7a7e749871c6ce5587`.
+
+- All 16 native host scripts pass with their normal address/undefined-behavior
+  sanitizer settings; the deferred-logging input-worker variant also passes.
+- All 34 desktop reference tests pass on Node 24.21.0.
+- The graphical VitaSDK development build compiles and links with the accepted
+  input-worker/deferred-log and FreeType configuration. Diagnostic and font
+  comparison interfaces are disabled; this is not a release-profile package.
+- Real-font mapping overview, source/action pages and DS3/DS4 guides were
+  rendered and inspected. The mapping overview help text fits without clipping.
+- Review findings for idle-menu sleep, controller handoff and join ownership are
+  resolved. Both duplication concerns are resolved. Final shutdown fault handling
+  received follow-up lifecycle review and external-boundary fault tests.
+
+Candidate: `build/vita-feedback/plus_vita_smoke.vpk`, 4,038,545 bytes, SHA-256
+`E569C4C57C779693F452B8FEC678C9DEF6A9BA8577607AC3882001C92E86B294`.
+Host logs, compiler output and generated previews remain local in the ignored
+build directory. These software results do not establish hardware acceptance.
+
 ## Required hardware checks — pending
 
 Ownership faults are fail-safe: stop retries a failed join once. If joining

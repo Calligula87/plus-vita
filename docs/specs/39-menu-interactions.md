@@ -83,3 +83,17 @@ Original feedback:
 > the UI doesn’t have any animation so it “feels” a little off putting when you tap something and it instantly reacts so fast that your finger is still there and the entire screen already changed.
 >
 > The D pad also won’t scroll games, can only use the thumb stick for that which also felt weird.
+
+<!-- plus-vita-software-status -->
+### Software implementation and validation
+
+Software implementation is prepared locally on `main` at source commit `66cc53dac6e4bcbac5f3fc7a7e749871c6ce5587` (implementation and review-fix commits: `aeb51ef`, `a5f15c3`, `66cc53d`). These commits have not been pushed.
+
+Validation: all 16 native host test scripts, the deferred-logging input-worker variant, and all 34 desktop reference tests pass. The graphical VitaSDK development VPK builds successfully. Review findings for idle-menu sleep, active-controller handoff and input-owner shutdown have been addressed.
+
+Development candidate: 4,038,545 bytes; SHA-256 `E569C4C57C779693F452B8FEC678C9DEF6A9BA8577607AC3882001C92E86B294`. The accepted v000 package remains the comparison/rollback reference.
+
+**Pending human hardware acceptance:** Verify D-pad/stick navigation, touch feel and cancellation, idle-menu sleep/wake, short transitions and catalogue/details/back on real Vita, then both PS TV controller types.
+
+This issue remains open and is marked `ready-for-human` for those checks. Host tests and packaging do not establish an accepted stream build. No release or hardware acceptance is claimed.
+<!-- /plus-vita-software-status -->
