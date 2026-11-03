@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
+#include <setjmp.h>
 #include <time.h>
 #include <errno.h>
 
@@ -32,10 +33,18 @@ int sceCtrlPeekBufferPositiveExt2(int port,SceCtrlData *pad,int count)
 	pthread_cond_broadcast(&device_cond);pthread_mutex_unlock(&device_mutex);return result;
 }
 static bool fail_send, fatal_device, fail_create;
-static bool fail_join;
+static unsigned fail_joins;
+static bool expect_abort;
+static jmp_buf abort_boundary;
+_Noreturn void __real_abort(void);
+_Noreturn void __wrap_abort(void)
+{
+	if(expect_abort) longjmp(abort_boundary,1);
+	__real_abort();
+}
 int __real_pthread_join(pthread_t,void **);
 int __wrap_pthread_join(pthread_t thread,void **result)
-{ return fail_join ? EDEADLK : __real_pthread_join(thread,result); }
+{ if(fail_joins) { fail_joins--;return EDEADLK; }return __real_pthread_join(thread,result); }
 static unsigned int history_packets;
 static pthread_mutex_t boundary_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t boundary_cond = PTHREAD_COND_INITIALIZER;
@@ -313,9 +322,21 @@ static void join_ownership_contract(void)
 	PlusVitaInputVita input={0};PlusVitaInputWorker *worker=NULL;
 	assert(plus_vita_input_worker_start(&worker,&sender,scripted_read,&input)==CHIAKI_ERR_SUCCESS);
 	wait_reads(3);
-	PlusVitaInputStats stats={.joined=true};fail_join=true;
-	assert(plus_vita_input_worker_stop(worker,&stats)==CHIAKI_ERR_THREAD && !stats.joined);
-	fail_join=false;
+	PlusVitaInputStats stats={0};fail_joins=1;
+	assert(plus_vita_input_worker_stop(worker,&stats)==CHIAKI_ERR_SUCCESS && stats.joined);
+	assert(fail_joins==0);
+	chiaki_feedback_sender_fini(&sender);
+	/* Intercept the OS termination boundary so the fixture can release its
+	 * synthetic sender afterward. Production must never return to teardown. */
+	memset(&sender,0,sizeof(sender));
+	assert(chiaki_feedback_sender_init(&sender,&takion)==CHIAKI_ERR_SUCCESS);
+	assert(plus_vita_input_worker_start(&worker,&sender,scripted_read,&input)==CHIAKI_ERR_SUCCESS);
+	fail_joins=2;expect_abort=true;
+	if(setjmp(abort_boundary)==0) {
+		plus_vita_input_worker_stop(worker,&stats);
+		assert(!"A permanent join failure must not return to teardown");
+	}
+	expect_abort=false;
 	assert(plus_vita_input_worker_stop(worker,&stats)==CHIAKI_ERR_SUCCESS && stats.joined);
 	chiaki_feedback_sender_fini(&sender);
 }

@@ -32,6 +32,11 @@ retain the candidate package checksum with the final software results.
 
 ## Required hardware checks — pending
 
+Ownership faults are fail-safe: stop retries a failed join once. If joining
+fails twice, it terminates the process before sender/context teardown. The host
+fixture intercepts this system termination boundary to verify that stop cannot
+return live-owned resources to its caller.
+
 Record the exact VPK hash, firmware, device/controller type and connection method
 for each run. Do not infer PS TV support from system pairing or synthetic samples.
 

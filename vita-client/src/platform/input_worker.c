@@ -168,13 +168,18 @@ PlusVitaInputStatus plus_vita_input_worker_status(PlusVitaInputWorker *w)
 ChiakiErrorCode plus_vita_input_worker_stop(PlusVitaInputWorker *w,
 	PlusVitaInputStats *stats)
 {
-	if(!w || !stats) return CHIAKI_ERR_INVALID_DATA;
+	if(!stats) return CHIAKI_ERR_INVALID_DATA;
 	stats->joined=false;
+	if(!w) return CHIAKI_ERR_INVALID_DATA;
 	pthread_mutex_lock(&w->mutex);
 	w->stop = true;
 	pthread_cond_signal(&w->cond);
 	pthread_mutex_unlock(&w->mutex);
-	if(pthread_join(w->thread, NULL)) return CHIAKI_ERR_THREAD;
+	/* The caller owns the sender and sample context. Never return them to
+	 * teardown while this worker could still use them. Recover one join
+	 * failure; losing the ability to join twice is an unrecoverable lifecycle
+	 * fault, so terminate instead of returning live-owned stack references. */
+	if(pthread_join(w->thread,NULL) && pthread_join(w->thread,NULL)) abort();
 	*stats = w->stats;
 	stats->joined=true;
 	ChiakiErrorCode result = w->status.error;
