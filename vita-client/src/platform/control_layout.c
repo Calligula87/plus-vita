@@ -30,8 +30,8 @@ const char *plus_vita_control_action_name(unsigned action)
 const char *plus_vita_control_input_name(unsigned input,PlusVitaControlDevice device)
 {
 	static const char *const names[]={"Cross","Circle","Square","Triangle","D-pad Up","D-pad Down",
-		"D-pad Left","D-pad Right","L1","R1","START","SELECT","L2","R2","L3","R3",
-		"Rear top left","Rear top right","Rear bottom left","Rear bottom right","Front two-finger click"};
+		"D-pad Left","D-pad Right","L1","R1","START","SELECT","L2 button","R2 button","L3 button","R3 button",
+		"Rear touch top-left","Rear touch top-right","Rear touch bottom-left","Rear touch bottom-right","Front two-finger click"};
 	if(device==PLUS_VITA_DEVICE_DS4 && input==PLUS_VITA_INPUT_START) return "OPTIONS";
 	if(device==PLUS_VITA_DEVICE_DS4 && input==PLUS_VITA_INPUT_SELECT) return "SHARE";
 	return input<PLUS_VITA_INPUT_COUNT ? names[input] : "Invalid";

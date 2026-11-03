@@ -22,8 +22,11 @@ screen's controls. These rules affect app menus, not gameplay touch.
 
 Open **Settings and help → Control mapping → Edit input bindings**. Choose an
 input, then its game action or **Disabled**. Previous/Next shows the remaining
-inputs or actions. Unavailable inputs are labelled so you can prepare the same
-global layout for other supported hardware.
+inputs or actions. Physical L2/R2/L3/R3 button rows are labelled **PS TV only**
+on Vita. The separate **Rear touch top-left/top-right/bottom-left/bottom-right**
+rows are the Vita touch zones, defaulting to L2/R2/L3/R3 respectively. Hardware
+availability labels are separate from the **Disabled** game-action choice;
+every binding remains editable for the same global layout.
 
 - Each input performs one action or none. Several inputs can share an action.
   A shared action stays active until all contributors release it.

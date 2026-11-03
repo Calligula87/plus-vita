@@ -48,6 +48,15 @@ static void controls_previews(PlusVitaApp *app,PlusVitaFont *font,const PlusVita
   if(step==1) preview_action(app,PLUS_VITA_ACTION_BINDING);
  }
  plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK});
+ for(unsigned page=1;page<=6;page++) {
+  preview_action(app,PLUS_VITA_ACTION_BIND_NEXT);
+  if(page>=4) {
+   PlusVitaAppView view=plus_vita_app_view(app);
+   plus_vita_app_paint_with_resources(font,pixels,960,&view,NULL,branding);assert_button_labels(&view);
+   char output[160];snprintf(output,sizeof(output),"build/debug/app-freetype-host/controls-inputs-%u.ppm",page);
+   assert(plus_vita_comparison_capture(pixels,960,output));
+  }
+ }
  plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK});
  preview_action(app,PLUS_VITA_ACTION_CANCEL_CONTROLS);
  preview_action(app,PLUS_VITA_ACTION_CONTROLS);

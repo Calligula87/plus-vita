@@ -46,7 +46,7 @@ Verified source commit: `66cc53dac6e4bcbac5f3fc7a7e749871c6ce5587`.
   resolved. Both duplication concerns are resolved. Final shutdown fault handling
   received follow-up lifecycle review and external-boundary fault tests.
 
-Candidate: `build/vita-feedback/plus_vita_smoke.vpk`, 4,038,545 bytes, SHA-256
+Initial candidate: 4,038,545 bytes, SHA-256
 `E569C4C57C779693F452B8FEC678C9DEF6A9BA8577607AC3882001C92E86B294`.
 Host logs, compiler output and generated previews remain local in the ignored
 build directory. These software results do not establish hardware acceptance.
@@ -80,3 +80,19 @@ idle menu, sleep/wake, then finger release: the old target must not activate.
 
 Keep these issues open for the hardware acceptance results. No upload, release,
 device installation or acceptance of this candidate is implied by software work.
+
+## Mapping-label clarification
+
+The maintainer reports that the menus seem OK and clarified that the mapping
+confusion came from physical PS TV button rows appearing before the Vita rear
+touch zones. This is scoped feedback, not full hardware acceptance.
+
+Physical L2/R2/L3/R3 inputs now say "button" and show "PS TV only" on Vita.
+Rear inputs explicitly say "Rear touch" and identify their corner. The input
+list also states the Vita default layout: top L2/R2, bottom L3/R3. All inputs
+remain editable; the stored defaults and gameplay mapping policy are unchanged.
+
+The Settings-to-session test, real-font preview checks and Vita build pass.
+The updated candidate is `build/vita-feedback/plus_vita_smoke.vpk`, 4,038,842
+bytes, SHA-256
+`331BF5D44841203F97673C683B81191FB15206073CF820D12BFBEE3BF75B37E4`.

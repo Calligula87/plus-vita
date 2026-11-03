@@ -133,14 +133,20 @@ static void bindings_view(PlusVitaApp *app,bool destinations)
 		.title=destinations ? plus_vita_control_input_name(app->binding_input,app->control_device) : "Choose an input.",
 		.subtitle=destinations ? "CHOOSE GAME ACTION" : "GAMEPLAY BINDINGS",
 		.body=destinations ? "One action per input. Several inputs may share an action."
-			: "Unavailable inputs can be set up for other supported hardware.",
+			: app->control_device==PLUS_VITA_DEVICE_VITA
+			? "Vita rear touch: top L2/R2; bottom L3/R3 by default."
+			: app->control_device==PLUS_VITA_DEVICE_DISCONNECTED
+			? "No controller connected. All bindings remain editable."
+			: "PS TV buttons and Vita rear-touch zones are separate inputs.",
 		.hint="D-pad / left stick  Move     X  Select     O  Back"};
 	for(unsigned row=0;row<3 && page*3+row<count;row++) {
 		unsigned index=page*3+row;
 		if(destinations) snprintf(app->binding_labels[row],sizeof(app->binding_labels[row]),"%s",plus_vita_control_action_name(index));
 		else snprintf(app->binding_labels[row],sizeof(app->binding_labels[row]),"%s: %s%s",
 			plus_vita_control_input_name(index,app->control_device),plus_vita_control_action_name(app->controls_draft.bindings[index]),
-			plus_vita_control_input_available(index,app->control_device) ? "" : " (unavailable)");
+			plus_vita_control_input_available(index,app->control_device) ? ""
+			: app->control_device==PLUS_VITA_DEVICE_VITA ? " (PS TV only)"
+			: app->control_device==PLUS_VITA_DEVICE_DISCONNECTED ? " (no controller)" : " (Vita only)");
 		app->view.actions[app->view.action_count++]=(PlusVitaAppButton){
 			destinations ? PLUS_VITA_ACTION_BIND_ACTION : PLUS_VITA_ACTION_BINDING,
 			app->binding_labels[row],64,260+(int)row*44,832,40};
