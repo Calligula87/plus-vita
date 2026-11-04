@@ -473,7 +473,7 @@ int main(void)
 	for(unsigned i = 0; i < 5000 && plus_vita_app_view(app).screen == PLUS_VITA_APP_AUTHORIZING; i++) drive(app, account, &pending);
 	PlusVitaAppView view = plus_vita_app_view(app);
 	assert(view.screen == PLUS_VITA_APP_CATALOGUE);
-	assert(view.action_count == 3 && strcmp(view.actions[0].label, "Alpha") == 0);
+	assert(view.action_count == 4 && strcmp(view.actions[0].label, "Alpha") == 0);
 	assert(strcmp(view.games[0]->cover_url, "https://vulcan.dl.playstation.net/fixture.png") == 0);
 	assert(view.games[1]->cover_url[0] == 0);
 	assert(view.artwork_metadata[PLUS_VITA_ARTWORK_AVAILABLE]==1 && view.artwork_metadata[PLUS_VITA_ARTWORK_REJECTED]==1);
@@ -486,8 +486,9 @@ int main(void)
 	bool artwork_done=false;
 	for(unsigned i=0;i<5000 && !artwork_done;i++) { artwork_done=plus_vita_covers_poll(artwork); if(!artwork_done) pause_poll(); }
 	assert(artwork_done && plus_vita_covers_last_result(artwork)==PLUS_VITA_ARTWORK_OK);
+	view.preview_eligible=true;
 	plus_vita_app_paint_with_covers(artwork_font,artwork_pixels,960,&view,artwork);
-	assert(artwork_pixels[356*960+138]==0xff0000ff && artwork_pixels[356*960+230]==0xffff0000);
+	assert(artwork_pixels[280*960+752]==0xff0000ff);
 	plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_ACTIVATE});
 	view=plus_vita_app_view(app); assert(view.screen==PLUS_VITA_APP_DETAILS);
 	plus_vita_app_paint_with_covers(artwork_font,artwork_pixels,960,&view,artwork);

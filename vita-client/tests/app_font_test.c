@@ -39,6 +39,8 @@ static void painted(PlusVitaApp *app,PlusVitaFont *font,PlusVitaAppScreen screen
  plus_vita_app_paint(font,pixels,960,&view);
  /* Cross-screen cache pressure may evict a few glyphs; a warmed view must
   * remain identical and do bounded work, rather than rerasterize every row. */
+ if(memcmp(previous,pixels,sizeof(pixels)) || api_calls>64)
+  fprintf(stderr,"Warm screen %u: pixels stable=%d, system calls=%u\n",screen,!memcmp(previous,pixels,sizeof(pixels)),api_calls);
  assert(!memcmp(previous,pixels,sizeof(pixels)) && api_calls<=64);
 }
 static void screen_journey(PlusVitaFont *font)

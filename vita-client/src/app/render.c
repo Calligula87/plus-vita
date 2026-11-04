@@ -81,10 +81,20 @@ void plus_vita_app_paint_with_resources(PlusVitaFont *font,uint32_t *pixels,int 
 	text(display, view->subtitle, 64, 94, TEXT_HINT, 832, 26, false, RGB(246, 198, 91));
 	text(display, view->title, 64, 128, TEXT_HEADING, 832, 54, false, RGB(243, 247, 252));
 	int body_bottom = view->action_count ? view->actions[0].y - 12 : 480;
-	if(view->screen==PLUS_VITA_APP_CATALOGUE) body_bottom=224;
+	if(view->screen==PLUS_VITA_APP_CATALOGUE) {
+		body_bottom=196;
+		text(display,view->body,744,186,TEXT_MICRO,152,24,false,RGB(210,224,247));
+	}
 	if(view->screen==PLUS_VITA_APP_FONT_COMPARISON) body_bottom=view->comparison_page ? 224 : 302;
-	text(display, view->body, 64, 196, view->screen == PLUS_VITA_APP_ACCOUNT ? TEXT_COMPACT : TEXT_BODY,
+	text(display, view->body, 64, 196, (view->screen == PLUS_VITA_APP_ACCOUNT || view->screen==PLUS_VITA_APP_DETAILS) ? TEXT_COMPACT : TEXT_BODY,
 		view->screen == PLUS_VITA_APP_WELCOME ? 520 : view->screen==PLUS_VITA_APP_DETAILS ? 624 : 832, body_bottom - 196, view->screen!=PLUS_VITA_APP_CATALOGUE, RGB(210, 224, 247));
+	if(view->screen==PLUS_VITA_APP_CATALOGUE && view->detail) {
+		if(view->preview_eligible || !view->detail->cover_url[0]) cover(display,covers,view->detail,744,216);
+		else {
+			rectangle(display,744,216,128,128,RGB(9,29,66));
+			text(display,"Loading cover",750,264,TEXT_MICRO,116,58,true,RGB(195,211,239));
+		}
+	}
 	if(view->screen==PLUS_VITA_APP_DETAILS) cover(display,covers,view->detail,744,216);
 	if(view->screen==PLUS_VITA_APP_FONT_COMPARISON) {
 		if(view->comparison_page) {
@@ -103,6 +113,14 @@ void plus_vita_app_paint_with_resources(PlusVitaFont *font,uint32_t *pixels,int 
 			text(display,"18 px: Agjpqy é Å Müller 日本",64,376,TEXT_COMPACT,832,32,false,RGB(210,224,247));
 		}
 	}
+	if(view->list_total>view->list_count && view->list_count) {
+		int height=view->list_height;
+		int thumb=(int)((size_t)height*view->list_count/view->list_total);
+		if(thumb<8) thumb=8;
+		int offset=(int)((size_t)(height-thumb)*view->list_first/(view->list_total-view->list_count));
+		rectangle(display,view->list_x+view->list_width+8,view->list_y,4,height,RGB(17,57,125));
+		rectangle(display,view->list_x+view->list_width+8,view->list_y+offset,4,thumb,RGB(246,198,91));
+	}
 	for(size_t i = 0; i < view->action_count; i++)
 	{
 		const PlusVitaAppButton *button = &view->actions[i];
@@ -110,17 +128,11 @@ void plus_vita_app_paint_with_resources(PlusVitaFont *font,uint32_t *pixels,int 
 		bool pressed = view->touch_pressed && i == view->pressed_index;
 		rounded(display, button->x, button->y, button->width, button->height,
 			pressed ? RGB(77,180,244) : selected ? RGB(246, 198, 91) : RGB(17, 57, 125));
-		if(view->screen==PLUS_VITA_APP_CATALOGUE && button->id==PLUS_VITA_ACTION_GAME) {
-			cover(display,covers,view->games[i],button->x+66,button->y+10);
-			text(display,button->label,button->x+12,button->y+146,TEXT_COMPACT,button->width-24,48,true,selected || pressed ? RGB(9,29,66) : RGB(243,247,252));
-		} else {
-			bool compact = button->height < 48;
-			int inset = compact ? 6 : 8;
-			text(display, button->label, button->x + 20, button->y + inset,
-				compact ? TEXT_COMPACT : TEXT_CONTROL, button->width - 40,
-				button->height - 2 * inset, false,
-				selected || pressed ? RGB(9, 29, 66) : RGB(243, 247, 252));
-		}
+		bool compact=button->height<48;
+		int inset=button->height<=32 ? 2 : compact ? 4 : 8;
+		text(display,button->label,button->x+20,button->y+inset,
+			compact ? TEXT_COMPACT : TEXT_CONTROL,button->width-40,button->height-2*inset,false,
+			selected || pressed ? RGB(9,29,66) : RGB(243,247,252));
 	}
 	text(display, view->hint, 64, 509, TEXT_HINT, 832, 28, false, RGB(195, 211, 239));
 }

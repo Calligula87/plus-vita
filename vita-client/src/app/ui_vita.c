@@ -250,19 +250,16 @@ int plus_vita_app_run(void)
 			current=plus_vita_app_view(app);
 		}
 		if(current.account_epoch!=artwork_epoch) {
-			plus_vita_covers_reset(covers); artwork_epoch=current.account_epoch; metadata_reported=false;
+			artwork_epoch=current.account_epoch; metadata_reported=false;
 			plus_vita_diagnostic_artwork_metadata(current.artwork_metadata);
 		}
 		if(current.account_connected && !metadata_reported) {
 			plus_vita_diagnostic_artwork_metadata(current.artwork_metadata); metadata_reported=true;
 		}
-		if(plus_vita_covers_poll(covers)) {
+		if(flow.artwork_completed) {
+			flow.artwork_completed=false;
 			plus_vita_diagnostic_artwork_result(plus_vita_covers_last_result(covers)); flow.dirty=true;
 		}
-		const char *urls[3]={NULL,NULL,NULL}; size_t url_count=0;
-		if(current.screen==PLUS_VITA_APP_CATALOGUE) for(unsigned i=0;i<3;i++) if(current.games[i]) urls[url_count++]=current.games[i]->cover_url;
-		if(current.screen==PLUS_VITA_APP_DETAILS && current.detail) urls[url_count++]=current.detail->cover_url;
-		plus_vita_covers_request(covers,urls,url_count);
 		if(flow.dirty)
 		{
 			if(!draw(display, &flow)) { result = 1; break; }

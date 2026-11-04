@@ -74,6 +74,12 @@ void plus_vita_covers_request(PlusVitaCovers *covers,const char *const *urls,siz
 		return;
 	}
 }
+void plus_vita_covers_retry(PlusVitaCovers *covers,const char *url)
+{
+	if(!covers || !url) return;
+	for(unsigned i=0;i<6;i++) if(covers->slots[i].state==PLUS_VITA_COVER_FAILED
+		&& strcmp(covers->slots[i].url,url)==0) memset(&covers->slots[i],0,sizeof(covers->slots[i]));
+}
 void plus_vita_covers_reset(PlusVitaCovers *covers)
 {
 	if(!covers) return;

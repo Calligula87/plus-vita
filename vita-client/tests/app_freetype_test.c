@@ -22,8 +22,10 @@ static bool button_has_label(const PlusVitaAppButton *button, uint32_t color)
 }
 static void assert_button_labels(const PlusVitaAppView *view)
 {
- for(size_t i=0;i<view->action_count;i++)
+ for(size_t i=0;i<view->action_count;i++) {
+  if(!button_has_label(&view->actions[i],i==view->selected ? 0xff421d09u : 0xfffcf7f3u)) fprintf(stderr,"Unreadable label on screen %u: %s (height %d)\n",view->screen,view->actions[i].label,view->actions[i].height);
   assert(button_has_label(&view->actions[i],i==view->selected ? 0xff421d09u : 0xfffcf7f3u));
+ }
 }
 static void preview_action(PlusVitaApp *app,PlusVitaAppAction action)
 {
@@ -49,7 +51,7 @@ static void controls_previews(PlusVitaApp *app,PlusVitaFont *font,const PlusVita
  }
  plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK});
  for(unsigned page=1;page<=6;page++) {
-  preview_action(app,PLUS_VITA_ACTION_BIND_NEXT);
+  for(unsigned step=0;step<4;step++) plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_DOWN});
   if(page>=4) {
    PlusVitaAppView view=plus_vita_app_view(app);
    plus_vita_app_paint_with_resources(font,pixels,960,&view,NULL,branding);assert_button_labels(&view);
@@ -135,7 +137,7 @@ int main(void)
  controls_previews(preview,b,branding);
  const uint32_t *splash=plus_vita_branding_splash(branding); assert(splash);
  assert(plus_vita_comparison_capture(splash,960,"build/debug/app-freetype-host/branded-splash.ppm"));
- plus_vita_branding_free(branding);
+
  plus_vita_app_destroy(preview);
  plus_vita_app_paint(b,pixels,960,&normal_view);
  memcpy(previous,pixels,sizeof(pixels)); api_calls=0;
@@ -147,13 +149,33 @@ int main(void)
  const char saved[]="{\"npsso\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}";
  PlusVitaAppEffect auth=plus_vita_app_dispatch(normal,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_ACCOUNT_LOADED,
   .operation=load.operation,.data=saved,.data_size=sizeof(saved)-1,.retained_json=true});
- PlusVitaCatalogEntry title={.name="Game",.id="FAKECUSA",.launch_id_valid=true};
+ PlusVitaCatalogEntry titles[12]={0};
+ for(unsigned i=0;i<12;i++) {
+  snprintf(titles[i].name,sizeof(titles[i].name),"Game %02u: M\u00fcller and a deliberately long complete edition title with extra adventures",i);
+  snprintf(titles[i].id,sizeof(titles[i].id),"FAKECUSA%02u",i);titles[i].launch_id_valid=true;
+  if(i<11) snprintf(titles[i].cover_url,sizeof(titles[i].cover_url),"https://vulcan.dl.playstation.net/%u.png",i);
+ }
  plus_vita_app_dispatch(normal,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_AUTHORIZED,
-  .operation=auth.operation,.entries=&title,.entry_count=1});
+  .operation=auth.operation,.entries=titles,.entry_count=12});
+ for(unsigned position=0;position<3;position++) {
+  normal_view=plus_vita_app_view(normal);
+  if(position==1) normal_view.preview_eligible=true;
+  plus_vita_app_paint_with_resources(b,pixels,960,&normal_view,NULL,branding);
+  assert_button_labels(&normal_view);
+  char path[160];snprintf(path,sizeof(path),"build/debug/app-freetype-host/catalogue-%u.ppm",position);
+  assert(plus_vita_comparison_capture(pixels,960,path));
+  if(position==1) for(unsigned i=0;i<20;i++) plus_vita_app_dispatch(normal,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_DOWN});
+ }
+ plus_vita_app_dispatch(normal,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_ACTIVATE});
+ normal_view=plus_vita_app_view(normal);
+ assert(normal_view.screen==PLUS_VITA_APP_DETAILS);
+ plus_vita_app_paint_with_resources(b,pixels,960,&normal_view,NULL,branding);assert_button_labels(&normal_view);
+ assert(plus_vita_comparison_capture(pixels,960,"build/debug/app-freetype-host/catalogue-details.ppm"));
+ plus_vita_app_dispatch(normal,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK});
  plus_vita_app_dispatch(normal,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK});
  normal_view=plus_vita_app_view(normal); assert(normal_view.screen==PLUS_VITA_APP_WELCOME && normal_view.action_count==5);
  plus_vita_app_paint(b,pixels,960,&normal_view); assert_button_labels(&normal_view);
- plus_vita_app_destroy(normal);
+ plus_vita_app_destroy(normal);plus_vita_branding_free(branding);
  for(unsigned page=0;page<2;page++) for(unsigned mode=0;mode<2;mode++) {
   PlusVitaAppView view=plus_vita_app_view(app);
   assert(view.comparison_page==page && view.alternative_font==(mode!=0));

@@ -1,6 +1,6 @@
 # Development control guide
 
-These controls describe current source implementing #37, #38 and #39. The
+These controls describe current source implementing #37 through #43. The
 downloadable v000 remains the accepted stream build and retains its original
 fixed mappings and stick/touch menus. The new behavior is a candidate until the
 [hardware checks](FEEDBACK_CONTROLS_TEST.md) pass.
@@ -18,11 +18,25 @@ back before lifting. Additional contacts cancel the gesture. Screen changes use 
 120 ms fade; input during that transition is consumed and cannot select the next
 screen's controls. These rules affect app menus, not gameplay touch.
 
+Lists overflow within a bounded viewport and show a proportional position
+indicator. Dragging by at least 12 screen pixels cancels activation; release
+stops scrolling immediately. Short menus show all their rows.
+
+The catalogue shows seven title rows and one fixed cover preview. A first tap
+highlights a different title; tapping that highlighted row again or pressing
+Cross opens details. Each new highlight waits three settled seconds before
+showing cached art or starting its single cover request. Dragging suspends this
+interval and release restarts it. Details can load immediately. Failed covers
+retry only after leaving the title and revisiting it for a fresh interval.
+Triangle searches and Circle returns; Search and Back also remain touch targets.
+Filter, selected title and viewport survive details and Play return.
+
 ## One saved gameplay layout
 
 Open **Settings and help → Control mapping → Edit input bindings**. Choose an
-input, then its game action or **Disabled**. Previous/Next shows the remaining
-inputs or actions. Physical L2/R2/L3/R3 button rows are labelled **PS TV only**
+input, then its game action or **Disabled**. Scroll the continuous lists with
+the D-pad/stick or drag; focus stops at each end. The side indicator shows
+position, and returning from the action picker restores the edited input. Physical L2/R2/L3/R3 button rows are labelled **PS TV only**
 on Vita. The separate **Rear touch top-left/top-right/bottom-left/bottom-right**
 rows are the Vita touch zones, defaulting to L2/R2/L3/R3 respectively. Hardware
 availability labels are separate from the **Disabled** game-action choice;

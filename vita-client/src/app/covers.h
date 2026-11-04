@@ -15,6 +15,8 @@ void plus_vita_covers_request(PlusVitaCovers *covers,const char *const *urls,siz
 bool plus_vita_covers_poll(PlusVitaCovers *covers);
 PlusVitaArtworkResult plus_vita_covers_last_result(const PlusVitaCovers *covers);
 const PlusVitaCoverImage *plus_vita_covers_find(const PlusVitaCovers *covers,const char *url);
+/* A new explicit visit may retry a cached failure once. Never cancels a worker. */
+void plus_vita_covers_retry(PlusVitaCovers *covers,const char *url);
 void plus_vita_covers_reset(PlusVitaCovers *covers);
 bool plus_vita_covers_close(PlusVitaCovers *covers);
 #endif

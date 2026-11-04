@@ -49,16 +49,20 @@ typedef struct {
 typedef struct {
 	PlusVitaAppScreen screen;
 	const char *title, *subtitle, *body, *hint;
-	PlusVitaAppButton actions[6];
+	PlusVitaAppButton actions[10];
 	size_t action_count, selected;
+	/* Stable list focus is independent of the bounded visible action index. */
+	size_t list_total, list_first, list_count, focus;
+	int list_x, list_y, list_width, list_height, row_step;
 	uint64_t operation;
-	const PlusVitaCatalogEntry *games[3], *detail;
+	const PlusVitaCatalogEntry *games[7], *detail;
 	uint64_t account_epoch;
 	unsigned artwork_metadata[PLUS_VITA_ARTWORK_METADATA_STATES];
 	bool account_connected;
 	bool alternative_font;
 	unsigned comparison_page;
 	bool touch_pressed;
+	bool preview_eligible;
 	size_t pressed_index;
 	unsigned controls_page;
 	PlusVitaControlDevice control_device;
@@ -76,6 +80,7 @@ typedef enum {
 	PLUS_VITA_EVENT_INTERRUPTED,
 	PLUS_VITA_EVENT_TOUCH_DOWN, PLUS_VITA_EVENT_TOUCH_MOVE,
 	PLUS_VITA_EVENT_TOUCH_UP, PLUS_VITA_EVENT_TOUCH_CANCEL,
+	PLUS_VITA_EVENT_SCROLL, PLUS_VITA_EVENT_FOCUS,
 	PLUS_VITA_EVENT_CONTROLS_LOADED, PLUS_VITA_EVENT_CONTROLS_SAVED, PLUS_VITA_EVENT_CONTROL_DEVICE
 } PlusVitaAppEventKind;
 typedef enum {
