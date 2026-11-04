@@ -2,9 +2,11 @@
 
 These controls describe current source implementing #37 through #43. The
 downloadable v000 remains the accepted stream build and retains its original
-fixed mappings and stick/touch menus. The new behavior is a candidate until the
-[control hardware checks](FEEDBACK_CONTROLS_TEST.md) and
-[scrolling/catalogue checks](SCROLLING_MENUS_TEST.md) pass.
+fixed mappings and stick/touch menus. The maintainer accepted the current
+Vita-facing development result on 2026-11-04; see the
+[acceptance record](SCROLLING_MENUS_TEST.md). PS TV DualShock 3/4 hardware
+validation remains open in #38. These changes are staged for the unreleased
+[v001](V001.md); no new public package has been built or published.
 
 ## Menus
 

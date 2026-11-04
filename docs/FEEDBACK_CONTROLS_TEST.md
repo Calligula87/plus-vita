@@ -96,3 +96,17 @@ The Settings-to-session test, real-font preview checks and Vita build pass.
 The updated candidate is `build/vita-feedback/plus_vita_smoke.vpk`, 4,038,842
 bytes, SHA-256
 `331BF5D44841203F97673C683B81191FB15206073CF820D12BFBEE3BF75B37E4`.
+
+## Superseding maintainer acceptance - 2026-11-04
+
+The maintainer tested the later `scrolling-menus-41-42-43-1` package and accepted
+the current result, authorizing completed-issue closure and local commits.
+See [the exact package and scoped acceptance](SCROLLING_MENUS_TEST.md).
+The Vita-facing remapping and menu work in #37/#39 is accepted on that later
+candidate; the old package identities above remain historical records.
+
+Keep #38 open for actual PS TV tests with both DualShock 3 and DualShock 4,
+including trigger pressure, disconnect/reconnect, neutral gating and exit.
+The maintainer did not report those controller/device results. Remaining PS TV
+integration checks formerly repeated in #37/#39 and #40-#43 are tracked there.
+Pushing and a new public VPK are on hold at the maintainer's request.

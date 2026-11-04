@@ -1,5 +1,13 @@
 # Roadmap
 
+## Next version - v001 (unreleased)
+
+The maintainer accepted the current Vita-facing development result on 2026-11-04.
+Controls, menu interaction, scrolling lists and focused catalogue artwork are
+saved locally for [v001](V001.md). Pushing and another VPK release are explicitly
+on hold while further changes are considered. PS TV DS3/DS4 hardware validation
+remains open in #38. Published v000 and its preserved artifact are unchanged.
+
 ## v000 acceptance — 2026-10-27
 
 The maintainer accepts the first v000 version and confirms its 45-minute play,

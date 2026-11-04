@@ -1,10 +1,12 @@
-# Scrolling menus and focused artwork candidate
+# Scrolling menus and focused artwork acceptance
 
 Tickets: #41 (control mapping), #42 (ordinary menus), #43 (catalogue).
 The approved [spec](specs/scrollable-menus-and-focused-cover-preview.md) defines
 behavior and the shared app/UI-flow/painter test boundary. Source starts at
-`c19cbdb`. This is development work, not an accepted stream build.
-Earlier hardware-validation tickets remain open and retain their separate gates.
+`c19cbdb`. The maintainer accepted the current tested result on 2026-11-04.
+This is the local development baseline for the planned v001; v000 remains the
+published version and preserved rollback package. PS TV controller validation
+remains separately tracked in #38.
 
 Hardware-test package: `build/debug/plus-vita-scrolling-41-43-1.vpk` (4,040,577
 bytes), SHA256
@@ -68,7 +70,29 @@ and `catalogue-0.ppm` through `catalogue-2.ppm`. They cover first/last scrollbar
 positions, long-title ellipsis and Loading cover / Cover unavailable / No cover.
 Compact rows reserve enough height for the real Noto Sans ascent/descent.
 
-## Required hardware comparison
+## Maintainer acceptance - 2026-11-04
+
+The identified VPK was uploaded to `ux0:data/plus-vita-scrolling-41-43-1.vpk`;
+FTP download readback matched the SHA256 above. The maintainer then reported:
+
+> I tested. I'm happy with the current result.
+
+The maintainer authorized committing and closing completed issues, and explicitly
+asked to defer pushing and releasing another VPK because further changes may
+follow. Record this as acceptance of the tested result, without inventing device
+firmware, controller models, individual test outcomes, session duration or
+numerical response measurements.
+
+Close #41, #42 and #43 and their parent #40. The current mapping/menu changes
+also supersede the earlier Vita-facing candidates in #37/#39. Their Vita work is
+accepted; remaining PS TV/controller-only coverage is consolidated in #38.
+No DualShock 3/4 hardware compatibility acceptance is inferred from this report.
+
+The original comparison checklist below remains useful for future regressions
+and the outstanding PS TV checks. Its broader device matrix is not a claim that
+the maintainer reported every listed scenario individually.
+
+## Hardware comparison checklist
 
 Keep the accepted v000 package and earlier comparison artifacts. Use the new
 candidate's recorded SHA256 and `build=scrolling-menus-41-42-43-1` diagnostic
@@ -98,16 +122,17 @@ marker; record Vita/PS TV model, controller and exact observations.
   picture, sound, controls/releases and stop/restart remain acceptable. Keep the
   earlier #37/#38/#39 hardware checks separate and complete them as applicable.
 
-Record actual Vita and controller-only PS TV results before accepting this build
-or closing these tickets. Controlled HTTP counts establish reduced artwork
-activity, not physical input response latency or total process memory use.
+The maintainer acceptance above resolves the Vita-facing work. Record actual
+controller-only PS TV results under #38 before claiming DS3/DS4 compatibility.
+Controlled HTTP counts establish reduced artwork activity, not physical input
+response latency or total process memory use.
 
 ## Standards
 
 Review against `c19cbdb...d8f2709`, with the final account-test/documentation
 delta checked separately: no documented standard violations. The glossary and
 ADR distinction between development candidates and the accepted stream build
-is preserved, and hardware acceptance remains explicitly pending.
+is preserved; the later scoped acceptance is recorded above.
 
 One optional baseline smell: duplicated gesture-reset field assignments in
 `ui_flow.c`. A helper could simplify maintenance as gesture state grows. This is
@@ -119,8 +144,8 @@ Independent review found no actionable correctness findings: no missing software
 requirements, unasked behavior or demonstrably incorrect implementation.
 Inspected mapping focus/viewport restoration, controller boundaries, touch
 drag/cancellation, catalogue selection/search and production cover scheduling
-through the real worker/cache lifecycle. No ADR conflicts were found. Hardware
-acceptance remains pending.
+through the real worker/cache lifecycle. No ADR conflicts were found. At review
+time hardware acceptance was pending; the later maintainer report is above.
 
 Review totals: Standards 0 rule violations / 1 optional maintenance suggestion;
 Spec 0 findings. Neither axis identified a blocking issue.
