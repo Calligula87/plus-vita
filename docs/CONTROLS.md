@@ -3,7 +3,8 @@
 These controls describe current source implementing #37 through #43. The
 downloadable v000 remains the accepted stream build and retains its original
 fixed mappings and stick/touch menus. The new behavior is a candidate until the
-[hardware checks](FEEDBACK_CONTROLS_TEST.md) pass.
+[control hardware checks](FEEDBACK_CONTROLS_TEST.md) and
+[scrolling/catalogue checks](SCROLLING_MENUS_TEST.md) pass.
 
 ## Menus
 

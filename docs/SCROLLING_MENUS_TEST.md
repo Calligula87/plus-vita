@@ -6,7 +6,36 @@ behavior and the shared app/UI-flow/painter test boundary. Source starts at
 `c19cbdb`. This is development work, not an accepted stream build.
 Earlier hardware-validation tickets remain open and retain their separate gates.
 
+Hardware-test package: `build/debug/plus-vita-scrolling-41-43-1.vpk` (4,040,577
+bytes), SHA256
+`8AAF6F108B030572C562AE0259C04D98ECA3DA0E7F9F148E6D20888685932445`.
+This uses the existing development build configuration, including independent
+input and deferred logging, with FreeType enabled. It is not a public distribution
+package. The public-package gate was checked and fails its release identity,
+workspace-path/test-input and exact resource-identity requirements; no release or
+publication is authorized or performed by this work.
+
 ## Software validation
+
+Validation completed on 2026-11-04:
+
+- All 17 `tools/test-*.sh` host runners passed with their configured sanitizers,
+  plus the input-worker/deferred-log combination. The full run exposed old
+  account-layout and diagnostic-marker expectations; these were corrected and
+  their runners passed. The final remaining logging/input/latency/video batch
+  completed with exit status zero. Logs are retained in
+  `build/planning/scroll-full-host-tests.log` and
+  `build/planning/scroll-remaining-host-tests.log`.
+- All 34 desktop reference tests passed.
+- The Vita Release build passed using the existing development configuration;
+  no video, audio, FEC/reorder, stream-quality or gameplay mapping policy changed.
+- Actual Noto Sans previews were inspected, including complete long titles in
+  details and first/last scrollbar positions. The warmed system-font checks pass
+  without increasing their existing call budget.
+- Package artwork/inventory-format checks passed. The development VPK's
+  diagnostic marker was verified inside its actual executable. Public-package
+  gate limitations are recorded above; this is a hardware-test artifact only.
+
 
 The app view exposes stable item focus, total items, first visible item, bounded
 visible rows and viewport geometry. Control mapping prepares five rows; catalogue
@@ -72,3 +101,26 @@ marker; record Vita/PS TV model, controller and exact observations.
 Record actual Vita and controller-only PS TV results before accepting this build
 or closing these tickets. Controlled HTTP counts establish reduced artwork
 activity, not physical input response latency or total process memory use.
+
+## Standards
+
+Review against `c19cbdb...d8f2709`, with the final account-test/documentation
+delta checked separately: no documented standard violations. The glossary and
+ADR distinction between development candidates and the accepted stream build
+is preserved, and hardware acceptance remains explicitly pending.
+
+One optional baseline smell: duplicated gesture-reset field assignments in
+`ui_flow.c`. A helper could simplify maintenance as gesture state grows. This is
+a judgement call, not a rule breach or demonstrated correctness defect.
+
+## Spec
+
+Independent review found no actionable correctness findings: no missing software
+requirements, unasked behavior or demonstrably incorrect implementation.
+Inspected mapping focus/viewport restoration, controller boundaries, touch
+drag/cancellation, catalogue selection/search and production cover scheduling
+through the real worker/cache lifecycle. No ADR conflicts were found. Hardware
+acceptance remains pending.
+
+Review totals: Standards 0 rule violations / 1 optional maintenance suggestion;
+Spec 0 findings. Neither axis identified a blocking issue.
