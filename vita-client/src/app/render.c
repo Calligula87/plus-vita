@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "render.h"
 #include <string.h>
+#include <stdlib.h>
 #include "../platform/build_identity.h"
 #define WIDTH 960
 #define HEIGHT 544
@@ -67,12 +68,26 @@ static void wordmark(Canvas *display,const PlusVitaBranding *branding)
 	}
 }
 
-void plus_vita_app_paint_with_resources(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view,const PlusVitaCovers *covers,const PlusVitaBranding *branding)
+static uint32_t backdrop_pixel(const uint32_t *background,int x,int y,uint64_t animation_us,bool animate)
+{
+	uint32_t color=background ? background[y*WIDTH+x] : RGB(0,25+y/20,70+y/6);
+	if(!animate) return color;
+	unsigned phase=(unsigned)((animation_us/50000u)%1600u);
+	int distance=abs((int)((x+2*y+phase)%1600)-800);
+	unsigned blue=distance<100 ? (unsigned)(100-distance)/10u : 0;
+	distance=abs((int)((2*x+y+phase/2)%2000)-1000);
+	unsigned gold=distance<60 ? (unsigned)(60-distance)/20u : 0;
+	unsigned r=(color&255)+gold,g=((color>>8)&255)+blue/2+gold,b=((color>>16)&255)+blue;
+	return RGB(r>255 ? 255:r,g>255 ? 255:g,b>255 ? 255:b);
+}
+
+void plus_vita_app_paint_frame(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view,const PlusVitaCovers *covers,const PlusVitaBranding *branding,uint64_t animation_us,bool animate,unsigned content_opacity)
 {
 	Canvas canvas = {pixels, pitch, font}; Canvas *display = &canvas;
 	const uint32_t *background=plus_vita_branding_background(branding);
 	for(int y = 0; y < HEIGHT; y++) {
-		if(background) memcpy(pixels+y*pitch,background+y*WIDTH,WIDTH*sizeof(*pixels));
+		if(animate) for(int x=0;x<WIDTH;x++) pixels[y*pitch+x]=backdrop_pixel(background,x,y,animation_us,true);
+		else if(background) memcpy(pixels+y*pitch,background+y*WIDTH,WIDTH*sizeof(*pixels));
 		else rectangle(display, 0, y, WIDTH, 1, RGB(0, 25 + y / 20, 70 + y / 6));
 	}
 	rectangle(display, 0, 0, WIDTH, 4, RGB(246, 198, 91));
@@ -135,7 +150,16 @@ void plus_vita_app_paint_with_resources(PlusVitaFont *font,uint32_t *pixels,int 
 			selected || pressed ? RGB(9,29,66) : RGB(243,247,252));
 	}
 	text(display, view->hint, 64, 509, TEXT_HINT, 832, 28, false, RGB(195, 211, 239));
+	if(content_opacity<255) for(int y=80;y<HEIGHT;y++) for(int x=0;x<WIDTH;x++) {
+		uint32_t source=pixels[y*pitch+x],base=backdrop_pixel(background,x,y,animation_us,animate),result=0xff000000u;
+		for(unsigned shift=0;shift<24;shift+=8)
+			result|=(((((source>>shift)&255)*content_opacity+((base>>shift)&255)*(255-content_opacity)+127)/255)<<shift);
+		pixels[y*pitch+x]=result;
+	}
 }
+
+void plus_vita_app_paint_with_resources(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view,const PlusVitaCovers *covers,const PlusVitaBranding *branding)
+{ plus_vita_app_paint_frame(font,pixels,pitch,view,covers,branding,0,false,255); }
 
 void plus_vita_app_paint(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view)
 { plus_vita_app_paint_with_covers(font,pixels,pitch,view,NULL); }

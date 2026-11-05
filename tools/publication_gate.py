@@ -12,6 +12,8 @@ import zlib
 
 MAX_MEMBER = 32 * 1024 * 1024
 RESOURCES = {
+    'audio/menu.pcm': 'vita-client/assets/audio/menu.pcm',
+    'licenses/menu-audio.txt': 'vita-client/assets/audio/NOTICE.txt',
     'sce_sys/icon0.png': 'vita-client/assets/branding/icon0.png',
     'branding/menu.pvi': 'vita-client/assets/branding/menu.pvi',
     'branding/wordmark.pvi': 'vita-client/assets/branding/wordmark.pvi',

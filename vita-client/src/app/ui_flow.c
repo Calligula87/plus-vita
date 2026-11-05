@@ -5,7 +5,7 @@
 #include <stdio.h>
 /* Twelve native screen pixels distinguish a deliberate drag from a tap. */
 #define TOUCH_DRAG_PIXELS 12
-#define MENU_TRANSITION_US 120000u
+#define MENU_TRANSITION_US 150000u
 
 static bool inside(const PlusVitaAppButton *button,int x,int y)
 {
@@ -73,6 +73,7 @@ void plus_vita_ui_flow_start(PlusVitaUiFlow *flow,PlusVitaBranding *branding,uin
 {
 	if(flow->startup_started) return;
 	flow->startup_started=true;
+	flow->foreground=true;flow->animation_tick_us=now_us;
 	flow->branding=branding;
 	flow->splash_active=plus_vita_branding_splash(branding)!=NULL;
 	flow->splash_started_us=now_us;
@@ -90,6 +91,14 @@ bool plus_vita_ui_flow_tick(PlusVitaUiFlow *flow,uint64_t now_us)
 {
 	flow->now_us=now_us;
 	bool changed=false;
+	PlusVitaPresentation preferences=plus_vita_app_presentation(flow->app);
+	if(preferences.reduced_motion) flow->transition_active=false;
+	if(flow->foreground && !flow->splash_active && !preferences.reduced_motion
+		&& now_us>=flow->animation_tick_us && now_us-flow->animation_tick_us>=50000u) {
+		/* Long blocking dialogs/sleep never turn into an animation catch-up jump. */
+		flow->animation_us+=50000u;flow->animation_tick_us=now_us;
+		flow->dirty=true;changed=true;
+	}
 	if(flow->splash_active && now_us>=flow->splash_started_us
 		&& now_us-flow->splash_started_us>=1000000u) { finish_splash(flow);changed=true; }
 	if(flow->transition_active) {
@@ -100,10 +109,19 @@ bool plus_vita_ui_flow_tick(PlusVitaUiFlow *flow,uint64_t now_us)
 	return artwork_tick(flow) || changed;
 }
 
+void plus_vita_ui_flow_foreground(PlusVitaUiFlow *flow,bool foreground,uint64_t now_us)
+{
+	if(flow->foreground==foreground) return;
+	flow->foreground=foreground;flow->animation_tick_us=now_us;
+	flow->transition_active=false;flow->touch_captured=false;flow->touch_list=false;
+	flow->touch_dragging=false;flow->dirty=true;
+}
+
 static bool flow_event(PlusVitaUiFlow *flow, PlusVitaAppEvent event, uint64_t sampled_us)
 {
 	flow->cancel_account=false;
 	if(sampled_us>flow->now_us) flow->now_us=sampled_us;
+	if(plus_vita_app_presentation(flow->app).reduced_motion) flow->transition_active=false;
 	if(flow->transition_active && event.kind==PLUS_VITA_EVENT_PAD) {
 		plus_vita_app_dispatch(flow->app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PAD_RESET,.pad=event.pad});
 		return false;
@@ -188,7 +206,9 @@ static bool flow_event(PlusVitaUiFlow *flow, PlusVitaAppEvent event, uint64_t sa
 	if(before.screen!=after.screen && !flow->splash_active && !flow->splash_release
 		&& after.screen!=PLUS_VITA_APP_CLOSED) {
 		flow->touch_list=false;flow->touch_dragging=false;
-		flow->transition_active=true;flow->transition_started_us=flow->now_us;
+		flow->transition_active=!plus_vita_app_presentation(flow->app).reduced_motion
+			&& event.kind!=PLUS_VITA_EVENT_INTERRUPTED;
+		flow->transition_started_us=flow->now_us;
 	}
 	if(effect.kind != PLUS_VITA_EFFECT_NONE) {
 		plus_vita_credential_clear(&flow->pending.credential);
@@ -202,9 +222,16 @@ static bool flow_event(PlusVitaUiFlow *flow, PlusVitaAppEvent event, uint64_t sa
 
 bool plus_vita_ui_flow_event(PlusVitaUiFlow *flow,PlusVitaAppEvent event,uint64_t sampled_us)
 {
+	PlusVitaPresentation before=plus_vita_app_presentation(flow->app);
 	bool changed=flow_event(flow,event,sampled_us);
+	PlusVitaPresentation after=plus_vita_app_presentation(flow->app);
+	if(before.reduced_motion!=after.reduced_motion || before.muted!=after.muted || before.volume!=after.volume) {
+		flow->dirty=true;changed=true;
+		if(after.reduced_motion) flow->transition_active=false;
+	}
 	/* Sleep and context replacement cancel a settled interval even without a screen change. */
 	if(event.kind==PLUS_VITA_EVENT_INTERRUPTED) {
+		flow->transition_active=false;
 		plus_vita_covers_request(flow->covers,NULL,0);flow->preview_valid=false;
 	}
 	return artwork_tick(flow) || changed;
@@ -235,16 +262,14 @@ bool plus_vita_ui_flow_paint(PlusVitaUiFlow *flow, PlusVitaFont *font, uint32_t 
 	view.preview_eligible=flow->preview_eligible;
 	view.touch_pressed=capture_current(flow,&view);
 	view.pressed_index=flow->touch_index;
-	plus_vita_app_paint_with_resources(font, pixels, pitch, &view, flow->covers, flow->branding);
+	unsigned opacity=255;
 	if(flow->transition_active) {
 		uint64_t elapsed=flow->now_us>=flow->transition_started_us ? flow->now_us-flow->transition_started_us : 0;
-		unsigned opacity=elapsed>=MENU_TRANSITION_US ? 255 : (unsigned)(elapsed*255/MENU_TRANSITION_US);
-		for(int y=0;y<544;y++) for(int x=0;x<960;x++) {
-			uint32_t source=pixels[y*pitch+x], blended=0xff000000u;
-			for(unsigned shift=0;shift<24;shift+=8) blended|=(((source>>shift)&255)*opacity/255)<<shift;
-			pixels[y*pitch+x]=blended;
-		}
+		opacity=elapsed>=MENU_TRANSITION_US ? 255 : (unsigned)(elapsed*255/MENU_TRANSITION_US);
 	}
+	PlusVitaPresentation preferences=plus_vita_app_presentation(flow->app);
+	plus_vita_app_paint_frame(font,pixels,pitch,&view,flow->covers,flow->branding,
+		flow->animation_us,flow->foreground && !preferences.reduced_motion,opacity);
 	flow->dirty = false;
 	return true;
 }

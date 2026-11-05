@@ -1,0 +1,18 @@
+Plus Vita - Quiet Blue (original ambient loop)
+
+menu.pcm is synthesized exclusively by tools/prepare-menu-audio.py from sine
+oscillators and circular amplitude envelopes. It contains no recordings,
+third-party samples, Sony media, or transcribed console melody.
+
+To the extent copyright and related rights apply to this newly generated
+waveform and its synthesis recipe, they are dedicated to the public domain
+under CC0 1.0 Universal: https://creativecommons.org/publicdomain/zero/1.0/
+No attribution or royalty is required. No warranty is provided.
+
+Format: PVAUDIO1 magic, little-endian uint32 48000 Hz, uint32 mono sample count,
+then signed little-endian 16-bit PCM. Runtime rejects extra/truncated data and
+limits resources to 32 seconds. This loop is 24 seconds (2,304,016 bytes).
+
+Regenerate: python tools/prepare-menu-audio.py
+Validate exact source reproduction and signal: python tools/prepare-menu-audio.py --check
+Listening review and Vita playback/stream handoff acceptance remain required.

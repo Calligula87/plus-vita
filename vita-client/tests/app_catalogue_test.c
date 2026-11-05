@@ -42,12 +42,14 @@ int main(void) {
  assert(view.screen==PLUS_VITA_APP_DETAILS && strcmp(view.title,"God of War")==0);
  assert(view.actions[0].id==PLUS_VITA_ACTION_PLAY);
  PlusVitaAppEffect play=choose(app,PLUS_VITA_ACTION_PLAY);
+ assert(!plus_vita_app_ambience_allowed(app));
  assert(play.kind==PLUS_VITA_EFFECT_PLAY && strcmp(play.game.id,"FAKECUSA1")==0);
  assert(strcmp(play.store_country,"CH")==0 && strcmp(play.store_language,"de")==0);
  assert(strcmp(play.language,"de-CH")==0);
  plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_PROGRESS,.operation=play.operation,.play_stage=4});
  assert(strstr(plus_vita_app_view(app).body,"Allocating"));
  plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,.operation=play.operation,.status=PLUS_VITA_RESULT_OK});
+ assert(plus_vita_app_ambience_allowed(app));
  view=plus_vita_app_view(app);
  assert(view.screen==PLUS_VITA_APP_CATALOGUE && strcmp(view.actions[0].label,"God of War")==0);
  assert(strstr(view.actions[1].label,"GOD"));

@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "../platform/auth_probe.h"
 #include "../platform/control_layout.h"
+#include "presentation.h"
 
 typedef struct plus_vita_app_t PlusVitaApp;
 typedef enum {
@@ -20,7 +21,7 @@ typedef enum {
 	PLUS_VITA_APP_CLOSED, PLUS_VITA_APP_ACCOUNT, PLUS_VITA_APP_FORGET_CONFIRM, PLUS_VITA_APP_DETAILS,
 	PLUS_VITA_APP_FONT_COMPARISON, PLUS_VITA_APP_SETTINGS, PLUS_VITA_APP_CONTROLS,
 	PLUS_VITA_APP_REPORTING, PLUS_VITA_APP_STREAM_STOPPED,
-	PLUS_VITA_APP_CONTROL_LAYOUT, PLUS_VITA_APP_BINDINGS, PLUS_VITA_APP_BIND_ACTIONS
+	PLUS_VITA_APP_CONTROL_LAYOUT, PLUS_VITA_APP_BINDINGS, PLUS_VITA_APP_BIND_ACTIONS, PLUS_VITA_APP_APPEARANCE
 } PlusVitaAppScreen;
 typedef enum {
 	PLUS_VITA_ACTION_SETUP,
@@ -39,7 +40,9 @@ typedef enum {
 	PLUS_VITA_ACTION_CONTROL_LAYOUT, PLUS_VITA_ACTION_BINDINGS, PLUS_VITA_ACTION_BINDING,
 	PLUS_VITA_ACTION_BIND_ACTION, PLUS_VITA_ACTION_FRONT_MOTION, PLUS_VITA_ACTION_CONTROL_DEFAULTS,
 	PLUS_VITA_ACTION_SAVE_CONTROLS, PLUS_VITA_ACTION_CANCEL_CONTROLS,
-	PLUS_VITA_ACTION_BIND_PREVIOUS, PLUS_VITA_ACTION_BIND_NEXT
+	PLUS_VITA_ACTION_BIND_PREVIOUS, PLUS_VITA_ACTION_BIND_NEXT,
+	PLUS_VITA_ACTION_APPEARANCE, PLUS_VITA_ACTION_REDUCED_MOTION, PLUS_VITA_ACTION_MUSIC_MUTE,
+	PLUS_VITA_ACTION_MUSIC_QUIETER, PLUS_VITA_ACTION_MUSIC_LOUDER
 } PlusVitaAppAction;
 typedef struct {
 	PlusVitaAppAction id;
@@ -81,7 +84,8 @@ typedef enum {
 	PLUS_VITA_EVENT_TOUCH_DOWN, PLUS_VITA_EVENT_TOUCH_MOVE,
 	PLUS_VITA_EVENT_TOUCH_UP, PLUS_VITA_EVENT_TOUCH_CANCEL,
 	PLUS_VITA_EVENT_SCROLL, PLUS_VITA_EVENT_FOCUS,
-	PLUS_VITA_EVENT_CONTROLS_LOADED, PLUS_VITA_EVENT_CONTROLS_SAVED, PLUS_VITA_EVENT_CONTROL_DEVICE
+	PLUS_VITA_EVENT_CONTROLS_LOADED, PLUS_VITA_EVENT_CONTROLS_SAVED, PLUS_VITA_EVENT_CONTROL_DEVICE,
+	PLUS_VITA_EVENT_PRESENTATION_LOADED, PLUS_VITA_EVENT_PRESENTATION_SAVED
 } PlusVitaAppEventKind;
 typedef enum {
 	PLUS_VITA_RESULT_OK, PLUS_VITA_RESULT_STORAGE_ERROR, PLUS_VITA_RESULT_MISSING,
@@ -119,6 +123,7 @@ typedef struct {
 	char account_name[129];
 	PlusVitaControlLayout controls;
 	PlusVitaControlDevice device;
+	PlusVitaPresentation presentation;
 } PlusVitaAppEvent;
 typedef enum {
 	PLUS_VITA_EFFECT_NONE, PLUS_VITA_EFFECT_EXIT, PLUS_VITA_EFFECT_PREPARE_SETUP,
@@ -144,5 +149,8 @@ typedef struct {
 PlusVitaApp *plus_vita_app_create(void);
 void plus_vita_app_destroy(PlusVitaApp *app);
 PlusVitaAppView plus_vita_app_view(const PlusVitaApp *app);
+PlusVitaPresentation plus_vita_app_presentation(const PlusVitaApp *app);
+bool plus_vita_app_presentation_pending(const PlusVitaApp *app);
+bool plus_vita_app_ambience_allowed(const PlusVitaApp *app);
 PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent event);
 #endif

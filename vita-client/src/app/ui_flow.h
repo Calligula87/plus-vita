@@ -22,6 +22,8 @@ typedef struct {
 	uint64_t touch_operation;
 	bool transition_active;
 	uint64_t now_us, transition_started_us;
+	bool foreground;
+	uint64_t animation_us, animation_tick_us;
 	/* Selection identity belongs to the account, never to a visible row or URL alone. */
 	uint64_t artwork_epoch, preview_since;
 	bool artwork_initialized, preview_valid, preview_eligible, preview_requested;
@@ -30,6 +32,7 @@ typedef struct {
 	char preview_id[PLUS_VITA_CATALOG_ID_MAX], preview_name[PLUS_VITA_CATALOG_NAME_MAX], preview_url[512];
 } PlusVitaUiFlow;
 void plus_vita_ui_flow_start(PlusVitaUiFlow *flow,PlusVitaBranding *branding,uint64_t now_us,bool log_available);
+void plus_vita_ui_flow_foreground(PlusVitaUiFlow *flow,bool foreground,uint64_t now_us);
 bool plus_vita_ui_flow_tick(PlusVitaUiFlow *flow,uint64_t now_us);
 bool plus_vita_ui_flow_event(PlusVitaUiFlow *flow, PlusVitaAppEvent event, uint64_t sampled_us);
 PlusVitaAppEffect plus_vita_ui_flow_take(PlusVitaUiFlow *flow);

@@ -26,10 +26,16 @@ int sceTouchPeek(uint32_t port,SceTouchData *out,uint32_t count)
 static PlusVitaAppEffect choose(PlusVitaApp *app,PlusVitaAppAction action,const char *label)
 {
 	PlusVitaAppView view=plus_vita_app_view(app);
-	for(size_t i=0;i<view.action_count;i++) if(view.actions[i].id==action
-		&& (!label || !strcmp(view.actions[i].label,label)))
-		return plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH,
-			.x=view.actions[i].x+10,.y=view.actions[i].y+10});
+	for(size_t page=0;page<=view.list_total;page++) {
+		for(size_t i=0;i<view.action_count;i++) {
+			if(view.actions[i].id==action && (!label || !strcmp(view.actions[i].label,label)))
+				return plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH,
+					.x=view.actions[i].x+10,.y=view.actions[i].y+10});
+		}
+		if(view.list_first+view.list_count>=view.list_total) break;
+		plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_SCROLL,.y=1});
+		view=plus_vita_app_view(app);
+	}
 	assert(!"Expected visible controls action");return (PlusVitaAppEffect){0};
 }
 

@@ -36,7 +36,7 @@ if(PLUS_VITA_DIAGNOSTIC_APP)
   set(PLUS_VITA_ENTRY_SOURCE src/main.c src/app/utf8.c)
 else()
   set(VITA_APP_NAME "Plus Vita")
-  set(PLUS_VITA_ENTRY_SOURCE src/app/main.c src/app/app.c src/app/utf8.c src/app/text.c src/app/font_vita.c src/app/render.c src/app/branding.c src/app/ui_flow.c src/app/attempt_log.c src/app/ui_vita.c src/app/account_vita.c src/app/play_vita.c src/app/covers.c src/platform/cover_image.c src/platform/cover_download.c src/platform/cover_resolve.c)
+  set(PLUS_VITA_ENTRY_SOURCE src/app/main.c src/app/app.c src/app/presentation.c src/app/utf8.c src/app/text.c src/app/font_vita.c src/app/render.c src/app/branding.c src/app/ui_flow.c src/app/attempt_log.c src/app/ui_vita.c src/app/account_vita.c src/app/play_vita.c src/app/covers.c src/platform/cover_image.c src/platform/cover_download.c src/platform/cover_resolve.c)
 endif()
 set(VITA_TITLEID "PLVT00001")
 set(VITA_VERSION "00.01")
@@ -591,6 +591,7 @@ add_executable(${PROJECT_NAME}
   src/platform/latency_stats.c
   src/platform/input_vita.c
   src/platform/control_layout.c
+  src/app/menu_audio.c
   src/platform/controller_vita.c
   src/platform/auth_probe.c
   src/platform/catalog_fetch_guard.c
@@ -720,6 +721,8 @@ list(APPEND PLUS_VITA_VPK_FILES FILE
 if(NOT PLUS_VITA_DIAGNOSTIC_APP)
   list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/assets/branding/icon0.png" "sce_sys/icon0.png")
   list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/assets/branding/menu.pvi" "branding/menu.pvi")
+  list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/assets/audio/menu.pcm" "audio/menu.pcm")
+  list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/assets/audio/NOTICE.txt" "licenses/menu-audio.txt")
   list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/assets/branding/wordmark.pvi" "branding/wordmark.pvi")
   foreach(PLUS_VITA_LIVEAREA_FILE bg.png startup.png template.xml)
     list(APPEND PLUS_VITA_VPK_FILES FILE "${CMAKE_CURRENT_LIST_DIR}/assets/branding/livearea/${PLUS_VITA_LIVEAREA_FILE}" "sce_sys/livearea/contents/${PLUS_VITA_LIVEAREA_FILE}")

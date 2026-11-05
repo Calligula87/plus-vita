@@ -6,6 +6,7 @@
 #include "ui_flow.h"
 #include "play_vita.h"
 #include "attempt_log.h"
+#include "menu_audio.h"
 #if PLUS_VITA_FONT_COMPARISON
 #include "comparison_capture.h"
 #endif
@@ -182,6 +183,9 @@ int plus_vita_app_run(void)
 	bool log_available = plus_vita_diagnostic_persistence_ok();
 	UiDisplay *display = calloc(1, sizeof(*display));
 	PlusVitaApp *app = plus_vita_app_create();
+	PlusVitaPresentation presentation;
+	plus_vita_presentation_load(PLUS_VITA_PRESENTATION_PATH,&presentation);
+	if(app) plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PRESENTATION_LOADED,.presentation=presentation});
 	PlusVitaStreamInput session_input={0};
 	plus_vita_control_layout_defaults(&session_input.layout);
 	plus_vita_control_layout_load(PLUS_VITA_CONTROLS_PATH,&session_input.layout);
@@ -224,6 +228,7 @@ int plus_vita_app_run(void)
 	bool metadata_reported=false;
 	PlusVitaAppScreen reported_screen=PLUS_VITA_APP_CLOSED;
 	plus_vita_ui_flow_start(&flow,display->branding,plus_vita_latency_now_us(),log_available);
+	PlusVitaMenuAudio *menu_audio=plus_vita_menu_audio_create("app0:/audio/menu.pcm");
 	int result = 0;
 	uint64_t previous_poll = 0, last_report = plus_vita_latency_now_us();
 	while(plus_vita_app_view(app).screen != PLUS_VITA_APP_CLOSED)
@@ -243,12 +248,18 @@ int plus_vita_app_run(void)
 		if(interruption==PLUS_VITA_RECOVERY_SLEEP
 			|| (interruption!=PLUS_VITA_RECOVERY_NONE && current.operation)) {
 			plus_vita_diagnostic_event(interruption==PLUS_VITA_RECOVERY_SLEEP ? "recovery.sleep" : "recovery.wifi",0);
+			if(interruption==PLUS_VITA_RECOVERY_SLEEP) {
+				plus_vita_menu_audio_update(menu_audio,plus_vita_app_presentation(app),false);
+				plus_vita_ui_flow_foreground(&flow,false,plus_vita_latency_now_us());
+			}
 			handle_input(&flow,account,play,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_INTERRUPTED,
 				.status=interruption==PLUS_VITA_RECOVERY_SLEEP ? PLUS_VITA_RESULT_SLEEP : PLUS_VITA_RESULT_NETWORK_ERROR});
 			if(flow.cancel_account && workers_idle) plus_vita_diagnostic_ui_end();
 			plus_vita_recovery_acknowledge();
 			current=plus_vita_app_view(app);
 		}
+		if(interruption!=PLUS_VITA_RECOVERY_SLEEP)
+			plus_vita_ui_flow_foreground(&flow,true,plus_vita_latency_now_us());
 		if(current.account_epoch!=artwork_epoch) {
 			artwork_epoch=current.account_epoch; metadata_reported=false;
 			plus_vita_diagnostic_artwork_metadata(current.artwork_metadata);
@@ -329,8 +340,11 @@ int plus_vita_app_run(void)
 				else if(effect.kind == PLUS_VITA_EFFECT_EDIT_LABEL || effect.kind == PLUS_VITA_EFFECT_EDIT_SEARCH)
 				{
 					char label[129]; PlusVitaCredentialImeResult keyboard;
+					plus_vita_menu_audio_update(menu_audio,plus_vita_app_presentation(app),false);
+					plus_vita_ui_flow_foreground(&flow,false,plus_vita_latency_now_us());
 					if(effect.kind==PLUS_VITA_EFFECT_EDIT_SEARCH) plus_vita_catalogue_search_read(label,&keyboard);
 					else plus_vita_account_label_read(label, &keyboard);
+					plus_vita_ui_flow_foreground(&flow,true,plus_vita_latency_now_us());
 					plus_vita_ui_flow_tick(&flow,plus_vita_latency_now_us());
 					PlusVitaAppResult status = !keyboard.initialized ? PLUS_VITA_RESULT_STORAGE_ERROR
 						: !keyboard.accepted ? PLUS_VITA_RESULT_CANCELLED : !keyboard.validated ? PLUS_VITA_RESULT_STORAGE_ERROR : PLUS_VITA_RESULT_OK;
@@ -351,6 +365,7 @@ int plus_vita_app_run(void)
 				}
 				else if(effect.kind==PLUS_VITA_EFFECT_PLAY)
 				{
+					plus_vita_menu_audio_update(menu_audio,plus_vita_app_presentation(app),false);
 					session_input.layout=effect.controls;
 					if(plus_vita_play_busy(play) || !plus_vita_account_idle(account))
 						plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
@@ -403,10 +418,13 @@ int plus_vita_app_run(void)
 					chiaki_log_init(&stream_log,CHIAKI_LOG_INFO | CHIAKI_LOG_WARNING | CHIAKI_LOG_ERROR,
 						plus_vita_diagnostic_chiaki_log,NULL);
 					plus_vita_diagnostic_event("stream_probe.begin",0);
+					plus_vita_menu_audio_update(menu_audio,plus_vita_app_presentation(app),false);
+					plus_vita_ui_flow_foreground(&flow,false,plus_vita_latency_now_us());
 					session_input.controller=menu_controller;
 					stream_error=plus_vita_stream_probe_with_pump(&provision,&stream_log,
 						&user_stopped,play_connect_pump,&session_input.controller,&session_input);
 					menu_controller=session_input.controller;
+					plus_vita_ui_flow_foreground(&flow,true,plus_vita_latency_now_us());
 					plus_vita_diagnostic_event("stream_probe.complete",(int)stream_error);
 				}
 				PlusVitaRecovery stopped=plus_vita_recovery_poll();
@@ -453,8 +471,17 @@ int plus_vita_app_run(void)
 					.log_available = log_available }, 0);
 			}
 		}
+		if(plus_vita_app_presentation_pending(app)) {
+			presentation=plus_vita_app_presentation(app);
+			bool saved=plus_vita_presentation_save(PLUS_VITA_PRESENTATION_PATH,&presentation);
+			plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PRESENTATION_SAVED,
+				.status=saved ? PLUS_VITA_RESULT_OK:PLUS_VITA_RESULT_STORAGE_ERROR},0);
+		}
+		plus_vita_menu_audio_update(menu_audio,plus_vita_app_presentation(app),flow.foreground
+			&& !flow.splash_active && plus_vita_app_ambience_allowed(app));
 		sceDisplayWaitVblankStart();
 	}
+	plus_vita_menu_audio_close(menu_audio);
 	if(restore_touch) sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, previous_touch);
 	if(restore_mode) sceCtrlSetSamplingMode(previous_mode);
 	if(previous_extended_mode>=0) sceCtrlSetSamplingModeExt((SceCtrlPadInputMode)previous_extended_mode);

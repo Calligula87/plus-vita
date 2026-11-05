@@ -14,6 +14,9 @@
 #endif
 
 struct plus_vita_app_t {
+	PlusVitaPresentation presentation;
+	bool presentation_pending;
+	char appearance_status[160], music_label[80];
 	PlusVitaAppView view;
 	size_t welcome_selection;
 	uint64_t next_operation, pending_operation;
@@ -103,10 +106,30 @@ static void settings_view(PlusVitaApp *app)
 			{ PLUS_VITA_ACTION_CONTROLS, "Controls", 64, 350, 832, 44 },
 			{ PLUS_VITA_ACTION_REPORTING, "Report an issue", 64, 400, 832, 44 },
 			{ PLUS_VITA_ACTION_CONTROL_LAYOUT, "Control mapping", 64, 406, 832, 40 },
-			{ PLUS_VITA_ACTION_BACK, "Back", 64, 450, 832, 40 }
-		}, .action_count = 5 };
+			{ PLUS_VITA_ACTION_APPEARANCE, "Appearance & Sound", 64, 450, 832, 40 },
+			{ PLUS_VITA_ACTION_BACK, "Back", 64, 494, 832, 40 }
+		}, .action_count = 6 };
 	for(size_t i=0;i<3;i++) { app->view.actions[i].y=274+(int)i*44;app->view.actions[i].height=40; }
 }
+
+static void appearance_view(PlusVitaApp *app)
+{
+	snprintf(app->music_label,sizeof(app->music_label),"Menu music: %s (%u%%)",app->presentation.muted ? "Muted" : "On",app->presentation.volume);
+	app->view=(PlusVitaAppView){.screen=PLUS_VITA_APP_APPEARANCE,.title="Appearance & Sound.",.subtitle="MAKE YOURSELF AT HOME",
+		.body=app->appearance_status,.hint="D-pad / left stick  Move     X  Select     O  Back",
+		.actions={{PLUS_VITA_ACTION_REDUCED_MOTION,app->presentation.reduced_motion ? "Reduced motion: On" : "Reduced motion: Off",64,260,832,40},
+			{PLUS_VITA_ACTION_MUSIC_MUTE,app->music_label,64,304,832,40},
+			{PLUS_VITA_ACTION_MUSIC_QUIETER,"Music quieter",64,348,832,40},
+			{PLUS_VITA_ACTION_MUSIC_LOUDER,"Music louder",64,392,832,40},
+			{PLUS_VITA_ACTION_BACK,"Back",64,436,832,40}},.action_count=5};
+}
+
+PlusVitaPresentation plus_vita_app_presentation(const PlusVitaApp *app)
+{ return app->presentation; }
+bool plus_vita_app_presentation_pending(const PlusVitaApp *app)
+{ return app->presentation_pending; }
+bool plus_vita_app_ambience_allowed(const PlusVitaApp *app)
+{ return app->view.screen!=PLUS_VITA_APP_CLOSED && app->waiting_for!=PLUS_VITA_EFFECT_PLAY; }
 
 static bool controls_screen(PlusVitaAppScreen screen)
 {
@@ -276,6 +299,7 @@ static void about_view(PlusVitaApp *app)
 PlusVitaApp *plus_vita_app_create(void)
 {
 	PlusVitaApp *app = calloc(1, sizeof(*app));
+	if(app) plus_vita_presentation_defaults(&app->presentation);
 	if(!app) return NULL;
 	app->remember = true;
 	plus_vita_control_layout_defaults(&app->controls);
@@ -744,6 +768,16 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 {
 	PlusVitaAppView *view = &app->view;
 	PlusVitaAppEffect effect = { .kind = PLUS_VITA_EFFECT_NONE };
+	if(event.kind==PLUS_VITA_EVENT_PRESENTATION_LOADED) {
+		if(event.presentation.volume<=100) app->presentation=event.presentation;
+		return effect;
+	}
+	if(event.kind==PLUS_VITA_EVENT_PRESENTATION_SAVED) {
+		app->presentation_pending=false;
+		snprintf(app->appearance_status,sizeof(app->appearance_status),"%s",event.status==PLUS_VITA_RESULT_OK ? "Preferences saved on this Vita." : "Could not save. Changes apply this run. Select a setting to retry.");
+		if(view->screen==PLUS_VITA_APP_APPEARANCE) { size_t selected=view->selected;appearance_view(app);view->selected=selected; }
+		return effect;
+	}
 	if(event.kind==PLUS_VITA_EVENT_CONTROLS_LOADED) {
 		if(plus_vita_control_layout_valid(&event.controls)) app->controls=event.controls;
 		return effect;
@@ -1098,6 +1132,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	}
 	else if(event.kind == PLUS_VITA_EVENT_BACK)
 	{
+		if(view->screen==PLUS_VITA_APP_APPEARANCE) { settings_view(app);return effect; }
 		if(controls_screen(view->screen)) return edit_controls(app,PLUS_VITA_ACTION_BACK);
 #if PLUS_VITA_FONT_COMPARISON
 		if(view->screen==PLUS_VITA_APP_FONT_COMPARISON) {
@@ -1130,6 +1165,16 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	else if(event.kind == PLUS_VITA_EVENT_ACTIVATE && view->action_count)
 	{
 		PlusVitaAppAction action = view->actions[view->selected].id;
+		if(action==PLUS_VITA_ACTION_APPEARANCE) { appearance_view(app);return effect; }
+		if(view->screen==PLUS_VITA_APP_APPEARANCE) {
+			if(action==PLUS_VITA_ACTION_BACK) { settings_view(app);return effect; }
+			size_t selected=view->selected;
+			if(action==PLUS_VITA_ACTION_REDUCED_MOTION) app->presentation.reduced_motion=!app->presentation.reduced_motion;
+			if(action==PLUS_VITA_ACTION_MUSIC_MUTE) app->presentation.muted=!app->presentation.muted;
+			if(action==PLUS_VITA_ACTION_MUSIC_QUIETER && app->presentation.volume>=10) app->presentation.volume-=10;
+			if(action==PLUS_VITA_ACTION_MUSIC_LOUDER && app->presentation.volume<=90) app->presentation.volume+=10;
+			app->presentation_pending=true;app->appearance_status[0]=0;appearance_view(app);view->selected=selected;return effect;
+		}
 		if(action==PLUS_VITA_ACTION_CONTROL_LAYOUT || controls_screen(view->screen)) return edit_controls(app,action);
 #if PLUS_VITA_FONT_COMPARISON
 		if(action==PLUS_VITA_ACTION_FONT_COMPARISON || action==PLUS_VITA_ACTION_FONT_TOGGLE || action==PLUS_VITA_ACTION_FONT_SAMPLE) {
