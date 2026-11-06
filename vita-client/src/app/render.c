@@ -68,26 +68,18 @@ static void wordmark(Canvas *display,const PlusVitaBranding *branding)
 	}
 }
 
-static uint32_t backdrop_pixel(const uint32_t *background,int x,int y,uint64_t animation_us,bool animate)
-{
-	uint32_t color=background ? background[y*WIDTH+x] : RGB(0,25+y/20,70+y/6);
-	if(!animate) return color;
-	unsigned phase=(unsigned)((animation_us/50000u)%1600u);
-	int distance=abs((int)((x+2*y+phase)%1600)-800);
-	unsigned blue=distance<100 ? (unsigned)(100-distance)/10u : 0;
-	distance=abs((int)((2*x+y+phase/2)%2000)-1000);
-	unsigned gold=distance<60 ? (unsigned)(60-distance)/20u : 0;
-	unsigned r=(color&255)+gold,g=((color>>8)&255)+blue/2+gold,b=((color>>16)&255)+blue;
-	return RGB(r>255 ? 255:r,g>255 ? 255:g,b>255 ? 255:b);
-}
-
 void plus_vita_app_paint_frame(PlusVitaFont *font,uint32_t *pixels,int pitch,const PlusVitaAppView *view,const PlusVitaCovers *covers,const PlusVitaBranding *branding,uint64_t animation_us,bool animate,unsigned content_opacity)
 {
 	Canvas canvas = {pixels, pitch, font}; Canvas *display = &canvas;
 	const uint32_t *background=plus_vita_branding_background(branding);
+	const uint32_t *motion=animate ? plus_vita_branding_motion_background(branding) : NULL;
+	/* One bounded crop calculation per frame; all picture rows are bulk copies. */
+	unsigned phase=(unsigned)((animation_us/50000u+32u)%128u);
+	unsigned offset=phase<=64u ? phase : 128u-phase;
+	if(motion) background=motion+16u*1024u+offset;
+	unsigned background_pitch=motion ? 1024u : WIDTH;
 	for(int y = 0; y < HEIGHT; y++) {
-		if(animate) for(int x=0;x<WIDTH;x++) pixels[y*pitch+x]=backdrop_pixel(background,x,y,animation_us,true);
-		else if(background) memcpy(pixels+y*pitch,background+y*WIDTH,WIDTH*sizeof(*pixels));
+		if(background) memcpy(pixels+y*pitch,background+y*background_pitch,WIDTH*sizeof(*pixels));
 		else rectangle(display, 0, y, WIDTH, 1, RGB(0, 25 + y / 20, 70 + y / 6));
 	}
 	rectangle(display, 0, 0, WIDTH, 4, RGB(246, 198, 91));
@@ -150,11 +142,18 @@ void plus_vita_app_paint_frame(PlusVitaFont *font,uint32_t *pixels,int pitch,con
 			selected || pressed ? RGB(9,29,66) : RGB(243,247,252));
 	}
 	text(display, view->hint, 64, 509, TEXT_HINT, 832, 28, false, RGB(195, 211, 239));
-	if(content_opacity<255) for(int y=80;y<HEIGHT;y++) for(int x=0;x<WIDTH;x++) {
-		uint32_t source=pixels[y*pitch+x],base=backdrop_pixel(background,x,y,animation_us,animate),result=0xff000000u;
-		for(unsigned shift=0;shift<24;shift+=8)
-			result|=(((((source>>shift)&255)*content_opacity+((base>>shift)&255)*(255-content_opacity)+127)/255)<<shift);
-		pixels[y*pitch+x]=result;
+	if(content_opacity<255) {
+		/* 8-bit packed blends: no per-pixel time arithmetic or division. */
+		unsigned alpha=(content_opacity*256u+127u)/255u, inverse=256u-alpha;
+		for(int y=80;y<HEIGHT;y++) {
+			const uint32_t *row=background ? background+y*background_pitch : NULL;
+			for(int x=0;x<WIDTH;x++) {
+				uint32_t source=pixels[y*pitch+x],base=row ? row[x] : RGB(0,25+y/20,70+y/6);
+				uint32_t rb=(((source&0x00ff00ffu)*alpha+(base&0x00ff00ffu)*inverse)>>8)&0x00ff00ffu;
+				uint32_t green=(((source&0x0000ff00u)*alpha+(base&0x0000ff00u)*inverse)>>8)&0x0000ff00u;
+				pixels[y*pitch+x]=0xff000000u|rb|green;
+			}
+		}
 	}
 }
 

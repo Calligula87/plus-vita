@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "pvf_fixture.h"
 static uint32_t pixels[1024*544];
 
@@ -111,6 +112,33 @@ static void image_fixture(const char *name,unsigned width,unsigned height,uint32
 	assert(fwrite(header,1,16,file)==16);
 	for(size_t i=0;i<(size_t)width*height;i++) assert(fwrite(&color,sizeof(color),1,file)==1);
 	assert(!fclose(file));
+}
+static void picture_motion_journey(PlusVitaFont *font)
+{
+	image_fixture("menu.pvi",960,544,0xff443322);
+	FILE *file=fopen("menu.pvi","r+b");assert(file && !fseek(file,16,SEEK_SET));
+	for(unsigned y=0;y<544;y++) for(unsigned x=0;x<960;x++) {
+		uint32_t color=0xff000000u|(y<<12)|x;
+		assert(fwrite(&color,4,1,file)==1);
+	}
+	assert(!fclose(file));
+	PlusVitaBranding *branding=plus_vita_branding_load(".");assert(branding);
+	PlusVitaApp *app=plus_vita_app_create();PlusVitaAppView view=plus_vita_app_view(app);
+	clock_t start=clock();
+	for(unsigned i=0;i<60;i++) plus_vita_app_paint_frame(font,pixels,1024,&view,NULL,branding,i*50000u,true,255);
+	printf("animated picture: 60 real frames %.2f ms CPU (host measurement only)\n",1000.0*(clock()-start)/CLOCKS_PER_SEC);
+	fflush(stdout);
+	/* A cropped, enlarged picture must move, with source colors preserved exactly.
+	 * At t=0 the crop is centered; at 1.6 seconds it reaches the rightmost crop. */
+	plus_vita_app_paint_frame(font,pixels,1024,&view,NULL,branding,0,true,255);
+	assert(pixels[500*1024+950]==(0xff000000u|((516u*544u/576u)<<12)|((982u*960u)/1024u)));
+	uint32_t first=pixels[500*1024+950];
+	plus_vita_app_paint_frame(font,pixels,1024,&view,NULL,branding,1600000,true,255);
+	assert(pixels[500*1024+950]!=first);
+	assert(pixels[500*1024+950]==(0xff000000u|((516u*544u/576u)<<12)|((1014u*960u)/1024u)));
+	living_background_journey(font,branding);
+	plus_vita_app_destroy(app);plus_vita_branding_free(branding);
+	image_fixture("menu.pvi",960,544,0xff443322);
 }
 static void splash_journey(PlusVitaFont *font)
 {
@@ -328,7 +356,7 @@ int main(void)
 	PlusVitaBranding *branding=plus_vita_branding_load("."); assert(branding);
 	PlusVitaApp *app=plus_vita_app_create(); assert(app);
 	PlusVitaFont *font=plus_vita_font_create(); assert(font);
-	living_background_journey(font,branding);
+	picture_motion_journey(font);
 	touch_release_journey(font);
 	appearance_journey();
 	cancelled_touch_journey();

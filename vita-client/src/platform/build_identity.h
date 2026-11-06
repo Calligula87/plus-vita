@@ -6,8 +6,8 @@
 #define PLUS_VITA_BUILD_LABEL "v000"
 #define PLUS_VITA_ABOUT_STATUS "v000"
 #else
-#define PLUS_VITA_APP_BUILD "v002-ui-polish-45-46-47-2"
-#define PLUS_VITA_BUILD_LABEL "v002 UI TEST 2"
+#define PLUS_VITA_APP_BUILD "v002-ui-picture-pan-3"
+#define PLUS_VITA_BUILD_LABEL "v002 UI TEST 3"
 #define PLUS_VITA_ABOUT_STATUS "Development build. Not a public release."
 #endif
 #if PLUS_VITA_INPUT_WORKER && PLUS_VITA_DEFERRED_LOG

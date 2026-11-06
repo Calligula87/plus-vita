@@ -7,9 +7,11 @@ hash in SCROLLING_MENUS_TEST.md. Do not publish or replace it.
 
 ## Implemented presentation
 
-- The cached blue scene has restrained blue/gold light bands scheduled at 20 Hz.
-  Idle input still uses the existing menu loop. Long blocking intervals advance
-  decoration by one tick, rather than catching up every missed frame.
+- The cached blue picture pans over a slightly enlarged crop at 20 Hz. The
+  1024x576 overscan cache (2.25 MiB) is prepared once at load; frames use row
+  copies and no per-pixel wave/time calculations. The static original remains
+  available for reduced motion or if the optional cache allocation fails.
+  Long blocking intervals advance by one tick without a catch-up jump.
 - Content fades for approximately 150 ms over the scene. Branding and header
   remain visible. Focus/scroll/cover updates do not restart the screen fade.
 - Settings > Appearance & Sound saves reduced motion, music mute and volume
@@ -31,6 +33,27 @@ hash in SCROLLING_MENUS_TEST.md. Do not publish or replace it.
 ## Software verification
 
 ### Device report and correction, 2026-11-06
+
+#### Visual rework after test 2
+
+The retrieved test-2 log identifies `v002-ui-polish-45-46-47-2` and records
+274 draws totaling 18,802,442 us (68.6 ms average), with a 242,357 us maximum.
+Sampled input-to-present reached 316,993 us. The old effect recomputed time
+division/modulo and light bands across the full screen, twice during fades.
+
+Test 3 removes that light-band effect. A 64-pixel horizontal crop excursion
+moves the existing enlarged picture over a 6.4-second back-and-forth cycle,
+without exposing empty edges. Header/logo and menu coordinates stay fixed.
+Fades blend against the same cached rows using packed 8-bit integer arithmetic.
+This is an animated picture, not a video player. Sound is unchanged in this
+visual-only iteration; the maintainer rejected the existing tonal soundtrack.
+
+The real renderer test first failed against the old implementation because
+source-image pixels were not moving. It now verifies known crop coordinates,
+movement, static reduced motion and restoration, header continuity and fades.
+The same 60-frame instrumented host workload took 406.30 ms with the old
+renderer and 64.61 ms with the rework. Host ratios do not establish Vita frame
+timing: compare the next device log and get visual acceptance before adoption.
 
 The first uploaded test showed Appearance & Sound but no visible effects or
 music. FTP inspection of the presentation record found reduced motion enabled,
