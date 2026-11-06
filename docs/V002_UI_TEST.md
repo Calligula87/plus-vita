@@ -23,12 +23,30 @@ hash in SCROLLING_MENUS_TEST.md. Do not publish or replace it.
   requests, samples or Sony recordings are involved.
 - The music worker owns a separate MAIN output port during menus. It stops
   before Play allocation/connection, pauses for keyboards/sleep, and restarts
-  gently only in eligible foreground menus. The last 480-sample block fades
-  down before drain/release/join. At 48 kHz each output block represents 10 ms;
+  gently only in eligible foreground menus. The last 512-sample block fades
+  down before drain/release/join. At 48 kHz each output block represents 10.67 ms;
   actual backend/scheduler stop latency must be measured on Vita. There is no
   separate fade sleep in the menu thread. Stream playback code/policy is unchanged.
 
 ## Software verification
+
+### Device report and correction, 2026-11-06
+
+The first uploaded test showed Appearance & Sound but no visible effects or
+music. FTP inspection of the presentation record found reduced motion enabled,
+music unmuted and volume 100. Reduced motion intentionally disables both visual
+effects. The installed audio resource was present.
+
+The audio fixture previously accepted a 480-sample output length, whereas the
+VitaSDK contract requires a multiple of 64. Enforcing that contract made the
+actual playback regression fail at port creation. A 512-sample buffer passes
+the same app/audio lifecycle test. A compile-time granularity check prevents
+reintroducing this invalid buffer size. Stream playback is unchanged.
+
+Test 2 clarifies the reduced-motion label with its effect on animations. The
+real UI-flow journey now checks that switching reduced motion off restores
+both timed background updates and transitions. Device listening and visual
+acceptance of the corrected package remain pending.
 
 Use `sh tools/test-host-suite.sh` in the supported WSL environment. The suite
 includes all host shell journeys, strict warnings, ASan/UBSan and deterministic

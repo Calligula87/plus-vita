@@ -9,12 +9,12 @@
 #include <time.h>
 static pthread_mutex_t gate=PTHREAD_MUTEX_INITIALIZER;
 static unsigned opened,released,outputs,nonzero;
-static unsigned active;
+static unsigned active,block_samples;
 static bool stream_owned;
 static int16_t first_peak,last_sample;
 static unsigned run_outputs;
 int sceAudioOutOpenPort(int type,int len,int frequency,int mode)
-{ (void)type;assert(len==480 && frequency==48000 && mode==0);pthread_mutex_lock(&gate);assert(!active && !stream_owned);active=1;opened++;run_outputs=0;first_peak=0;pthread_mutex_unlock(&gate);return 7; }
+{ (void)type;assert(len>=64 && len<=65472 && len%64==0 && frequency==48000 && mode==0);block_samples=(unsigned)len;pthread_mutex_lock(&gate);assert(!active && !stream_owned);active=1;opened++;run_outputs=0;first_peak=0;pthread_mutex_unlock(&gate);return 7; }
 int sceAudioOutSetVolume(int port,int flags,const int *volume)
 { assert(port==7 && flags==3 && volume[0]==32768 && volume[1]==32768);return 0; }
 int sceAudioOutOutput(int port,const void *data)
@@ -22,8 +22,8 @@ int sceAudioOutOutput(int port,const void *data)
 	assert(port==7);pthread_mutex_lock(&gate);assert(active);outputs++;
 	if(data) {
 		const int16_t *pcm=data;
-		for(unsigned i=0;i<480;i++) { if(pcm[i]) nonzero++;if(!run_outputs && pcm[i]>first_peak) first_peak=pcm[i]; }
-		last_sample=pcm[479];run_outputs++;
+		for(unsigned i=0;i<block_samples;i++) { if(pcm[i]) nonzero++;if(!run_outputs && pcm[i]>first_peak) first_peak=pcm[i]; }
+		last_sample=pcm[block_samples-1];run_outputs++;
 	}
 	pthread_mutex_unlock(&gate);struct timespec delay={.tv_nsec=1000000};nanosleep(&delay,NULL);return 0;
 }

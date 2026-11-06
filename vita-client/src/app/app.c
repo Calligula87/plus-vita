@@ -117,7 +117,7 @@ static void appearance_view(PlusVitaApp *app)
 	snprintf(app->music_label,sizeof(app->music_label),"Menu music: %s (%u%%)",app->presentation.muted ? "Muted" : "On",app->presentation.volume);
 	app->view=(PlusVitaAppView){.screen=PLUS_VITA_APP_APPEARANCE,.title="Appearance & Sound.",.subtitle="MAKE YOURSELF AT HOME",
 		.body=app->appearance_status,.hint="D-pad / left stick  Move     X  Select     O  Back",
-		.actions={{PLUS_VITA_ACTION_REDUCED_MOTION,app->presentation.reduced_motion ? "Reduced motion: On" : "Reduced motion: Off",64,260,832,40},
+		.actions={{PLUS_VITA_ACTION_REDUCED_MOTION,app->presentation.reduced_motion ? "Reduced motion: On (animations off)" : "Reduced motion: Off (animations on)",64,260,832,40},
 			{PLUS_VITA_ACTION_MUSIC_MUTE,app->music_label,64,304,832,40},
 			{PLUS_VITA_ACTION_MUSIC_QUIETER,"Music quieter",64,348,832,40},
 			{PLUS_VITA_ACTION_MUSIC_LOUDER,"Music louder",64,392,832,40},

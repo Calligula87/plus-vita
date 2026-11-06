@@ -87,6 +87,19 @@ static void living_background_journey(PlusVitaFont *font,PlusVitaBranding *brand
 	assert(plus_vita_ui_flow_paint(&flow,font,pixels,1024));
 	plus_vita_ui_flow_tick(&flow,9000104);
 	assert(!plus_vita_ui_flow_paint(&flow,font,pixels,1024));
+	/* Re-enabling motion after a saved reduced-motion choice restores both effects. */
+	prefs.reduced_motion=false;
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PRESENTATION_LOADED,.presentation=prefs},0);
+	plus_vita_ui_flow_foreground(&flow,true,9000105);
+	assert(plus_vita_ui_flow_paint(&flow,font,pixels,1024));
+	memcpy(before,pixels+350*1024,sizeof(before));
+	plus_vita_ui_flow_tick(&flow,9050105);
+	assert(plus_vita_ui_flow_paint(&flow,font,pixels,1024));
+	assert(memcmp(before,pixels+350*1024,sizeof(before)));
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK},9050106);
+	assert(flow.transition_active);
+	plus_vita_ui_flow_tick(&flow,9200106);
+	assert(!flow.transition_active);
 	plus_vita_app_destroy(app);
 }
 

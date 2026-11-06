@@ -7,7 +7,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MENU_AUDIO_BLOCK 480u
+#define MENU_AUDIO_BLOCK 512u
+/* sceAudioOutOpenPort rejects lengths that are not multiples of 64. */
+_Static_assert(MENU_AUDIO_BLOCK%64u==0,"Vita audio buffer granularity");
 #define MENU_AUDIO_RATE 48000u
 #define MENU_AUDIO_MAX_SAMPLES (MENU_AUDIO_RATE*32u)
 struct plus_vita_menu_audio_t {
@@ -38,7 +40,7 @@ static void *menu_audio_worker(void *user)
 		int target=stop ? 0 : (int)audio->volume*256;
 		pthread_mutex_unlock(&audio->mutex);
 		int initial=gain;
-		/* Gain changes take about 100ms; shutdown fades within its final 10ms
+		/* Gain changes take about 100ms; shutdown fades within its final 11ms
 		 * output block, without a separate sleep before stream entry. */
 		int next=stop ? 0 : gain+(target-gain)/10;
 		if(!stop && next==gain && target!=gain) next+=target>gain ? 1:-1;
