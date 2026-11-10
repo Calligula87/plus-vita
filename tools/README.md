@@ -3,6 +3,11 @@
 Reproducible analysis and development utilities that do not embed Sony
 binaries, secrets, credentials, or protected material.
 
+## Native PS5 cloud probe
+
+The desktop probe checks the video delivered by Pylux's default PS Cloud
+profile for one eligible native PS5 title. See the [private runbook](../docs/PS5_CLOUD_PROBE.md).
+
 ## Runtime metadata observer
 
 `observe-runtime.ps1` records lifecycle and network endpoint metadata for the
