@@ -5,6 +5,7 @@
 #include "recovery_vita.h"
 #include "request_cancel.h"
 #include "diagnostic_log.h"
+#include "stream_info.h"
 #include "cloudsession_internal.h"
 #include "curl_http.h"
 #include <psp2/power.h>
@@ -15,6 +16,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "pb_utils.h"
+#include "takion.pb.h"
 
 static pthread_mutex_t gate=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t changed=PTHREAD_COND_INITIALIZER;
@@ -116,6 +119,137 @@ static void offline_attempt_log(bool retry)
 	}
 	fclose(file);assert(first && failed);plus_vita_app_destroy(app);
 }
+
+static PlusVitaStreamStartup startup_failure;
+
+static bool encode_resolution(pb_ostream_t *stream, const pb_field_t *field, void *const *arg)
+{
+	return pb_encode_tag_for_field(stream, field)
+		&& pb_encode_submessage(stream, tkproto_ResolutionPayload_fields, *arg);
+}
+
+static void receive_streaminfo(ChiakiLog *log, const char *private_reason)
+{
+	uint8_t other_sps_pps[] = {
+		0,0,0,1,0x67,0x4d,0x40,0x28,0x91,0x8a,0x01,0x40,0x16,0xec,0x05,0xa8,0x08,
+		0x08,0x0a,0x00,0x00,0x0f,0xa4,0x00,0x07,0x53,0x01,0x13,0x43,0xc7,0xc5,0x40,
+		0,0,0,1,0x68,0xee,0x3c,0x81
+	};
+	uint8_t invalid_sps[] = {0,0,0,1,0x67,0x4d};
+	uint8_t audio_bytes[CHIAKI_AUDIO_HEADER_SIZE] = {0};
+	ChiakiPBBuf audio = { .size=sizeof(audio_bytes), .buf=audio_bytes };
+	ChiakiPBBuf video = { .size=sizeof(other_sps_pps), .buf=other_sps_pps };
+	tkproto_ResolutionPayload resolution = { .width=1280, .height=720,
+		.video_header={ .arg=&video, .funcs.encode=chiaki_pb_encode_buf } };
+	tkproto_TakionMessage msg = { .type=tkproto_TakionMessage_PayloadType_STREAMINFO,
+		.has_stream_info_payload=true };
+	msg.stream_info_payload.resolution.arg = &resolution;
+	msg.stream_info_payload.resolution.funcs.encode = encode_resolution;
+	msg.stream_info_payload.audio_header.arg = &audio;
+	msg.stream_info_payload.audio_header.funcs.encode = chiaki_pb_encode_buf;
+	switch(startup_failure) {
+		case PLUS_VITA_STREAM_STARTUP_STREAMINFO_INTERRUPTED:
+			msg = (tkproto_TakionMessage){ .type=tkproto_TakionMessage_PayloadType_DISCONNECT,
+				.has_disconnect_payload=true };
+			msg.disconnect_payload.reason.arg = (void *)private_reason;
+			msg.disconnect_payload.reason.funcs.encode = chiaki_pb_encode_string;
+			break;
+		case PLUS_VITA_STREAM_STARTUP_STREAMINFO_INVALID:
+			audio.size--;
+			break;
+		case PLUS_VITA_STREAM_STARTUP_PROFILE_UNAVAILABLE:
+			resolution.width = 960;
+			resolution.height = 540;
+			break;
+		case PLUS_VITA_STREAM_STARTUP_VIDEO_HEADER_INVALID:
+			video = (ChiakiPBBuf){ .size=sizeof(invalid_sps), .buf=invalid_sps };
+			break;
+		default:
+			assert(startup_failure==PLUS_VITA_STREAM_STARTUP_HEADER_GUARD_REJECTED);
+			break;
+	}
+	uint8_t bytes[128];
+	pb_ostream_t encoded = pb_ostream_from_buffer(bytes, sizeof(bytes));
+	assert(pb_encode(&encoded, tkproto_TakionMessage_fields, &msg));
+	PlusVitaStreamInfo info;
+	bool accepted = plus_vita_stream_info_decode(bytes, encoded.bytes_written, log, &info);
+	if(startup_failure==PLUS_VITA_STREAM_STARTUP_HEADER_GUARD_REJECTED) {
+		assert(accepted);
+		uint8_t patched[PLUS_VITA_STREAM_VIDEO_HEADER_MAX];
+		size_t size;
+		assert(!plus_vita_stream_info_guard_header(&info, log, patched, sizeof(patched), &size));
+	} else {
+		assert(!accepted);
+		assert(info.disconnected==(startup_failure==PLUS_VITA_STREAM_STARTUP_STREAMINFO_INTERRUPTED));
+	}
+}
+
+ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResult *provision,
+	ChiakiLog *log, bool *user_stopped, bool (*connect_pump)(void *), void *pump_user,
+	PlusVitaStreamInput *input)
+{
+	(void)user_stopped;
+	(void)connect_pump;
+	(void)pump_user;
+	(void)input;
+	plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_TRANSPORT);
+	CHIAKI_LOGE(log, "%s\nstream.startup.ready", provision->session_id);
+	plus_vita_diagnostic_event("stream.startup.ready", 0);
+	plus_vita_diagnostic_stream_startup((PlusVitaStreamStartup)-1);
+	plus_vita_diagnostic_stream_startup((PlusVitaStreamStartup)123456789);
+	switch(startup_failure) {
+		case PLUS_VITA_STREAM_STARTUP_TRANSPORT_FAILED:
+		case PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED:
+		case PLUS_VITA_STREAM_STARTUP_DECODER_INIT_FAILED:
+			/* These are supplied by the native transport and decoder on Vita. */
+			plus_vita_diagnostic_stream_startup(startup_failure);
+			break;
+		default:
+			plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_STREAMINFO);
+			receive_streaminfo(log, provision->session_id);
+			break;
+	}
+	return CHIAKI_ERR_INVALID_RESPONSE;
+}
+
+static void play_startup_attempt_log(PlusVitaStreamStartup status, const char *failure)
+{
+	startup_failure=status;
+	PlusVitaApp *app=connected_app();
+	PlusVitaPlay *play=plus_vita_play_create();assert(play);
+	PlusVitaUiFlow flow={.app=app};
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_ACTIVATE},0);
+	assert(plus_vita_attempt_log_prepare(&flow,true));
+	PlusVitaAppEffect effect=plus_vita_ui_flow_take(&flow);
+	assert(effect.kind==PLUS_VITA_EFFECT_PLAY);
+	assert(plus_vita_play_start(play,&effect));
+	plus_vita_credential_clear(&effect.credential);
+	wait_ready(play);
+	ChiakiCloudProvisionResult provision={0};
+	ChiakiErrorCode error;
+	uint64_t operation;
+	assert(plus_vita_play_take(play,&provision,&error,&operation));
+	assert(error==CHIAKI_ERR_SUCCESS && operation==effect.operation);
+	bool user_stopped=false;
+	assert(plus_vita_play_stream(&provision,&user_stopped,NULL,NULL,NULL)==CHIAKI_ERR_INVALID_RESPONSE);
+	plus_vita_diagnostic_ui_end();
+	plus_vita_play_result_clear(&provision);
+	assert(plus_vita_play_close(play));
+	plus_vita_app_destroy(app);
+
+	const char *const expected[]={"code=0 allocation.complete", "code=0 stream_probe.begin",
+		"code=0 stream.startup.transport", failure, "code=16 stream_probe.complete"};
+	FILE *file=fopen("plus-vita-allocation.log","rb");assert(file);
+	char line[2048];
+	size_t next=0;
+	while(fgets(line,sizeof(line),file)) {
+		assert(!strstr(line,"private-session-canary") && !strstr(line,"stream.startup.ready")
+			&& !strstr(line,"123456789"));
+		if(next<sizeof(expected)/sizeof(expected[0]) && strstr(line,expected[next])) next++;
+	}
+	assert(!ferror(file) && next==sizeof(expected)/sizeof(expected[0]));
+	fclose(file);
+}
 int main(void)
 {
 	offline_attempt_log(false);
@@ -169,6 +303,14 @@ int main(void)
 	plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,.operation=operation,.status=PLUS_VITA_RESULT_OK});
 	assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_CATALOGUE);
 	plus_vita_play_result_clear(&result);assert(plus_vita_play_close(play));plus_vita_app_destroy(app);
+	play_startup_attempt_log(PLUS_VITA_STREAM_STARTUP_TRANSPORT_FAILED, "code=5 stream.startup.transport_failed");
+	play_startup_attempt_log(PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED, "code=6 stream.startup.handshake_failed");
+	play_startup_attempt_log(PLUS_VITA_STREAM_STARTUP_STREAMINFO_INTERRUPTED, "code=7 stream.startup.streaminfo_interrupted");
+	play_startup_attempt_log(PLUS_VITA_STREAM_STARTUP_STREAMINFO_INVALID, "code=8 stream.startup.streaminfo_invalid");
+	play_startup_attempt_log(PLUS_VITA_STREAM_STARTUP_PROFILE_UNAVAILABLE, "code=9 stream.startup.profile_unavailable");
+	play_startup_attempt_log(PLUS_VITA_STREAM_STARTUP_VIDEO_HEADER_INVALID, "code=11 stream.startup.video_header_invalid");
+	play_startup_attempt_log(PLUS_VITA_STREAM_STARTUP_HEADER_GUARD_REJECTED, "code=12 stream.startup.header_guard_rejected");
+	play_startup_attempt_log(PLUS_VITA_STREAM_STARTUP_DECODER_INIT_FAILED, "code=13 stream.startup.decoder_init_failed");
 	plus_vita_recovery_fini();
-	puts("recovery: real preflight status mapping, blocked cancellation, stale results and power/Wi-Fi adapter passed");
+	puts("recovery: preflight, cancellation, power/Wi-Fi and persisted Play startup diagnostics passed");
 }

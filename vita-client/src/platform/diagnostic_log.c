@@ -384,6 +384,34 @@ void plus_vita_diagnostic_event(const char *event, int code)
 		}
 }
 
+void plus_vita_diagnostic_stream_startup(PlusVitaStreamStartup status)
+{
+	static const char *const names[] = {
+		[PLUS_VITA_STREAM_STARTUP_TRANSPORT] = "stream.startup.transport",
+		[PLUS_VITA_STREAM_STARTUP_HANDSHAKE] = "stream.startup.handshake",
+		[PLUS_VITA_STREAM_STARTUP_STREAMINFO] = "stream.startup.streaminfo",
+		[PLUS_VITA_STREAM_STARTUP_DECODER] = "stream.startup.decoder",
+		[PLUS_VITA_STREAM_STARTUP_READY] = "stream.startup.ready",
+		[PLUS_VITA_STREAM_STARTUP_TRANSPORT_FAILED] = "stream.startup.transport_failed",
+		[PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED] = "stream.startup.handshake_failed",
+		[PLUS_VITA_STREAM_STARTUP_STREAMINFO_INTERRUPTED] = "stream.startup.streaminfo_interrupted",
+		[PLUS_VITA_STREAM_STARTUP_STREAMINFO_INVALID] = "stream.startup.streaminfo_invalid",
+		[PLUS_VITA_STREAM_STARTUP_PROFILE_UNAVAILABLE] = "stream.startup.profile_unavailable",
+		[PLUS_VITA_STREAM_STARTUP_AUDIO_INIT_FAILED] = "stream.startup.audio_init_failed",
+		[PLUS_VITA_STREAM_STARTUP_VIDEO_HEADER_INVALID] = "stream.startup.video_header_invalid",
+		[PLUS_VITA_STREAM_STARTUP_HEADER_GUARD_REJECTED] = "stream.startup.header_guard_rejected",
+		[PLUS_VITA_STREAM_STARTUP_DECODER_INIT_FAILED] = "stream.startup.decoder_init_failed",
+		[PLUS_VITA_STREAM_STARTUP_STREAMINFO_REPLY_FAILED] = "stream.startup.streaminfo_reply_failed",
+		[PLUS_VITA_STREAM_STARTUP_PROVISION_INVALID] = "stream.startup.provision_invalid",
+		[PLUS_VITA_STREAM_STARTUP_MEDIA_DISCONNECTED] = "stream.startup.media_disconnected",
+		[PLUS_VITA_STREAM_STARTUP_MEDIA_DECRYPT_FAILED] = "stream.startup.media_decrypt_failed",
+		[PLUS_VITA_STREAM_STARTUP_MEDIA_INVALID] = "stream.startup.media_invalid",
+		[PLUS_VITA_STREAM_STARTUP_FIRST_FRAME_TIMEOUT] = "stream.startup.first_frame_timeout",
+	};
+	if((unsigned)status < sizeof(names) / sizeof(names[0]) && names[status])
+		write_line("EVENT", names[status], (int)status);
+}
+
 void plus_vita_diagnostic_progress(const char *stage)
 {
 	(void)stage;
