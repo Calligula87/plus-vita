@@ -20,7 +20,6 @@
 #include "../platform/network.h"
 #include "../platform/request_cancel.h"
 #include "../platform/recovery_vita.h"
-#include "../platform/stream_probe.h"
 #include "../platform/controller_vita.h"
 #include <curl/curl.h>
 #include <psp2/sysmodule.h>
@@ -414,18 +413,13 @@ int plus_vita_app_run(void)
 					plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_PROGRESS,
 						.operation=operation,.play_stage=5},0);
 					if(!draw(display,&flow)) { result=1; plus_vita_play_result_clear(&provision); break; }
-					ChiakiLog stream_log;
-					chiaki_log_init(&stream_log,CHIAKI_LOG_INFO | CHIAKI_LOG_WARNING | CHIAKI_LOG_ERROR,
-						plus_vita_diagnostic_chiaki_log,NULL);
-					plus_vita_diagnostic_event("stream_probe.begin",0);
 					plus_vita_menu_audio_update(menu_audio,plus_vita_app_presentation(app),false);
 					plus_vita_ui_flow_foreground(&flow,false,plus_vita_latency_now_us());
 					session_input.controller=menu_controller;
-					stream_error=plus_vita_stream_probe_with_pump(&provision,&stream_log,
+					stream_error=plus_vita_play_stream(&provision,
 						&user_stopped,play_connect_pump,&session_input.controller,&session_input);
 					menu_controller=session_input.controller;
 					plus_vita_ui_flow_foreground(&flow,true,plus_vita_latency_now_us());
-					plus_vita_diagnostic_event("stream_probe.complete",(int)stream_error);
 				}
 				PlusVitaRecovery stopped=plus_vita_recovery_poll();
 				plus_vita_ui_flow_tick(&flow,plus_vita_latency_now_us());

@@ -573,6 +573,7 @@ add_executable(${PROJECT_NAME}
   src/platform/socket_vita.c
   src/platform/h264_config.c
   src/platform/stream_probe.c
+  src/platform/stream_info.c
   src/platform/video_fec.c
   src/platform/video_reorder.c
   src/platform/audio_playback_vita.c
@@ -649,7 +650,9 @@ set_source_files_properties("${PLUS_VITA_ECDH_SOURCE}" PROPERTIES
 set_source_files_properties("${PLUS_VITA_GKCRYPT_SOURCE}" PROPERTIES
   COMPILE_OPTIONS "-Wno-error=unused-parameter;-Wno-error=unused-variable;-Wno-error=sign-compare"
 )
-set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/src/platform/stream_probe.c" PROPERTIES
+set_source_files_properties(
+  "${CMAKE_CURRENT_LIST_DIR}/src/platform/stream_probe.c"
+  "${CMAKE_CURRENT_LIST_DIR}/src/platform/stream_info.c" PROPERTIES
   COMPILE_OPTIONS "-Wno-error=unused-parameter"
 )
 set_source_files_properties("${PLUS_VITA_CURL_HTTP_SOURCE}" PROPERTIES

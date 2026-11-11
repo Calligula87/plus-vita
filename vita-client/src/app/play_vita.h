@@ -3,7 +3,7 @@
 #define PLUS_VITA_PLAY_VITA_H
 
 #include "app.h"
-#include <chiaki/cloudsession.h>
+#include "../platform/stream_probe.h"
 #include <stdbool.h>
 
 typedef struct plus_vita_play_t PlusVitaPlay;
@@ -16,6 +16,9 @@ unsigned plus_vita_play_stage(PlusVitaPlay *play);
 bool plus_vita_play_ready(PlusVitaPlay *play);
 bool plus_vita_play_take(PlusVitaPlay *play, ChiakiCloudProvisionResult *result,
 	ChiakiErrorCode *error, uint64_t *operation);
+ChiakiErrorCode plus_vita_play_stream(const ChiakiCloudProvisionResult *provision,
+	bool *user_stopped, bool (*connect_pump)(void *), void *pump_user,
+	PlusVitaStreamInput *input);
 void plus_vita_play_result_clear(ChiakiCloudProvisionResult *result);
 bool plus_vita_play_close(PlusVitaPlay *play);
 /* Interpret only fixed upstream categories; never display the remote detail. */

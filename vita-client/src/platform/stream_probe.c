@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 #include "stream_probe.h"
+#include "stream_info.h"
 #include "h264_config.h"
 #include "video_decoder_vita.h"
 #include "video_present_vita.h"
@@ -38,7 +39,6 @@
 #include <string.h>
 
 #define PROBE_TIMEOUT_MS 15000
-#define PROBE_VIDEO_HEADER_MAX 2048
 #define PROBE_VIDEO_UNITS_MAX 512
 #define PROBE_DECODE_ATTEMPTS_MAX 32
 #if PLUS_VITA_DIAGNOSTIC_APP
@@ -121,6 +121,7 @@ typedef struct plus_vita_stream_probe_t
 	ChiakiMutex mutex;
 	ChiakiCond cond;
 	PlusVitaStreamProbeState state;
+	bool closing;
 	uint8_t handshake_key[CHIAKI_HANDSHAKE_KEY_SIZE];
 	const ChiakiCloudProvisionResult *provision;
 	unsigned int video_packets;
@@ -149,9 +150,9 @@ typedef struct plus_vita_stream_probe_t
 	ChiakiBitstream bitstream;
 	bool bitstream_ready;
 	ChiakiCodec video_codec;
-	uint8_t video_header[PROBE_VIDEO_HEADER_MAX];
+	uint8_t video_header[PLUS_VITA_STREAM_VIDEO_HEADER_MAX];
 	size_t video_header_size;
-	uint8_t original_video_header[PROBE_VIDEO_HEADER_MAX];
+	uint8_t original_video_header[PLUS_VITA_STREAM_VIDEO_HEADER_MAX];
 	size_t original_video_header_size;
 	uint32_t video_width;
 	uint32_t video_height;
@@ -263,18 +264,6 @@ static void probe_preview_lock(PlusVitaStreamProbe *probe)
 			sceKernelGetProcessTimeWide());
 }
 
-typedef struct probe_streaminfo_context_t
-{
-	ChiakiLog *log;
-	unsigned int profiles;
-	bool profiles_valid;
-	bool selected_profile_valid;
-	unsigned int selected_profile_index;
-	uint8_t video_header[PROBE_VIDEO_HEADER_MAX];
-	size_t video_header_size;
-	uint32_t video_width;
-	uint32_t video_height;
-} ProbeStreamInfoContext;
 
 static bool encode_zero_key(pb_ostream_t *stream, const pb_field_t *field,
 	void *const *arg)
@@ -286,53 +275,6 @@ static bool encode_zero_key(pb_ostream_t *stream, const pb_field_t *field,
 	return pb_encode_string(stream, zero, sizeof(zero));
 }
 
-static bool probe_decode_resolution(pb_istream_t *stream,
-	const pb_field_t *field, void **arg)
-{
-	(void)field;
-	ProbeStreamInfoContext *ctx = *arg;
-	tkproto_ResolutionPayload resolution = { 0 };
-	uint8_t profile_header[PROBE_VIDEO_HEADER_MAX];
-	ChiakiPBDecodeBuf header = {
-		.max_size = PROBE_VIDEO_HEADER_MAX, .size = 0,
-		.buf = profile_header };
-	resolution.video_header.arg = &header;
-	resolution.video_header.funcs.decode = chiaki_pb_decode_buf;
-	if(!pb_decode(stream, tkproto_ResolutionPayload_fields, &resolution))
-		return false;
-	PlusVitaH264Config h264 = { 0 };
-	bool h264_valid = plus_vita_h264_config(header.buf, header.size, &h264);
-	if(h264_valid)
-		CHIAKI_LOGI(ctx->log,
-			"Stream probe profile[%u]: %ux%u header=%lu H264 profile=%u level=%u coded=%ux%u refs=%u buffered=%u restriction=%d",
-			ctx->profiles, resolution.width, resolution.height,
-			(unsigned long)header.size, h264.profile, h264.level,
-			h264.coded_width, h264.coded_height,
-			h264.max_ref_frames, h264.max_buffered_frames,
-			h264.has_buffer_restriction ? 1 : 0);
-	else
-		CHIAKI_LOGI(ctx->log,
-			"Stream probe profile[%u]: %ux%u header=%lu H264 SPS unavailable",
-			ctx->profiles, resolution.width, resolution.height,
-			(unsigned long)header.size);
-	if(h264_valid && resolution.width && resolution.height
-		&& resolution.width == 1280 && resolution.height == 720
-		&& (!ctx->selected_profile_valid
-			|| resolution.width * resolution.height
-				> ctx->video_width * ctx->video_height))
-	{
-		ctx->selected_profile_valid = true;
-		ctx->selected_profile_index = ctx->profiles;
-		ctx->video_header_size = header.size;
-		ctx->video_width = resolution.width;
-		ctx->video_height = resolution.height;
-		memcpy(ctx->video_header, header.buf, header.size);
-	}
-	ctx->profiles++;
-	if(!resolution.width || !resolution.height || !header.size)
-		ctx->profiles_valid = false;
-	return true;
-}
 
 static void probe_video_assembly_reset(ProbeVideoAssembly *assembly)
 {
@@ -1029,6 +971,31 @@ static void probe_log_disconnect(PlusVitaStreamProbe *probe, uint8_t *buf,
 		reason_buf.size ? reason : "(no reason supplied)");
 }
 
+static void probe_startup_failed(PlusVitaStreamProbe *probe, PlusVitaStreamStartup status)
+{
+	plus_vita_diagnostic_stream_startup(status);
+	probe->state = PROBE_FAILED;
+	chiaki_cond_signal(&probe->cond);
+}
+
+static void probe_log_startup_interrupted(PlusVitaStreamProbeState state)
+{
+	switch(state)
+	{
+		case PROBE_CONNECTING:
+			plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_TRANSPORT_FAILED);
+			break;
+		case PROBE_EXPECT_BANG:
+			plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED);
+			break;
+		case PROBE_EXPECT_STREAMINFO:
+			plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_STREAMINFO_INTERRUPTED);
+			break;
+		default:
+			break;
+	}
+}
+
 static void probe_handle_bang(PlusVitaStreamProbe *probe, uint8_t *buf,
 	size_t buf_size)
 {
@@ -1049,15 +1016,13 @@ static void probe_handle_bang(PlusVitaStreamProbe *probe, uint8_t *buf,
 		CHIAKI_LOGE(probe->log,
 			"Stream probe could not decode server protobuf (%lu bytes)",
 			(unsigned long)buf_size);
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
+		probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED);
 		return;
 	}
 	if(msg.type == tkproto_TakionMessage_PayloadType_DISCONNECT)
 	{
 		probe_log_disconnect(probe, buf, buf_size);
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
+		probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED);
 		return;
 	}
 	if(msg.type != tkproto_TakionMessage_PayloadType_BANG
@@ -1066,8 +1031,7 @@ static void probe_handle_bang(PlusVitaStreamProbe *probe, uint8_t *buf,
 		CHIAKI_LOGE(probe->log,
 			"Stream probe expected BANG but received protobuf type %d",
 			(int)msg.type);
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
+		probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED);
 		return;
 	}
 	if(!msg.bang_payload.version_accepted
@@ -1075,8 +1039,7 @@ static void probe_handle_bang(PlusVitaStreamProbe *probe, uint8_t *buf,
 		|| !remote_key_buf.size || !remote_sig_buf.size)
 	{
 		CHIAKI_LOGE(probe->log, "Stream probe BANG rejected or incomplete");
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
+		probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED);
 		return;
 	}
 	CHIAKI_LOGI(probe->log,
@@ -1090,8 +1053,7 @@ static void probe_handle_bang(PlusVitaStreamProbe *probe, uint8_t *buf,
 			expected_sig) != 0)
 	{
 		CHIAKI_LOGE(probe->log, "Stream probe could not verify BANG signature");
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
+		probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED);
 		return;
 	}
 	unsigned int sig_difference = 0;
@@ -1101,8 +1063,7 @@ static void probe_handle_bang(PlusVitaStreamProbe *probe, uint8_t *buf,
 	if(sig_difference)
 	{
 		CHIAKI_LOGE(probe->log, "Stream probe rejected invalid BANG signature");
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
+		probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED);
 		return;
 	}
 	uint8_t secret[CHIAKI_ECDH_SECRET_SIZE];
@@ -1124,80 +1085,35 @@ static void probe_handle_bang(PlusVitaStreamProbe *probe, uint8_t *buf,
 	if(!probe->crypt_local || !probe->crypt_remote)
 	{
 		CHIAKI_LOGE(probe->log, "Stream probe failed to derive transport crypto");
-		probe->state = PROBE_FAILED;
+		probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED);
+		return;
 	}
-	else
-	{
-		chiaki_takion_set_crypt(&probe->takion, probe->crypt_local,
-			probe->crypt_remote);
-		CHIAKI_LOGI(probe->log,
-			"Stream probe BANG accepted; waiting for STREAMINFO");
-		probe->state = PROBE_EXPECT_STREAMINFO;
-	}
+	chiaki_takion_set_crypt(&probe->takion, probe->crypt_local, probe->crypt_remote);
+	CHIAKI_LOGI(probe->log, "Stream probe BANG accepted; waiting for STREAMINFO");
+	probe->state = PROBE_EXPECT_STREAMINFO;
+	plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_STREAMINFO);
 	chiaki_cond_signal(&probe->cond);
 }
 
 static void probe_handle_streaminfo(PlusVitaStreamProbe *probe, uint8_t *buf,
 	size_t buf_size)
 {
-	uint8_t audio_header[CHIAKI_AUDIO_HEADER_SIZE];
-	ChiakiPBDecodeBuf audio_header_buf = {
-		.max_size = sizeof(audio_header), .size = 0, .buf = audio_header };
-	ProbeStreamInfoContext context = {
-		.log = probe->log, .profiles_valid = true };
-	tkproto_TakionMessage msg = { 0 };
-	msg.stream_info_payload.audio_header.arg = &audio_header_buf;
-	msg.stream_info_payload.audio_header.funcs.decode = chiaki_pb_decode_buf;
-	msg.stream_info_payload.resolution.arg = &context;
-	msg.stream_info_payload.resolution.funcs.decode = probe_decode_resolution;
-	pb_istream_t stream = pb_istream_from_buffer(buf, buf_size);
-	if(!pb_decode(&stream, tkproto_TakionMessage_fields, &msg))
+	PlusVitaStreamInfo context;
+	if(!plus_vita_stream_info_decode(buf, buf_size, probe->log, &context))
 	{
-		CHIAKI_LOGE(probe->log,
-			"Stream probe could not decode STREAMINFO (%lu bytes)",
-			(unsigned long)buf_size);
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
-		return;
-	}
-	if(msg.type == tkproto_TakionMessage_PayloadType_DISCONNECT)
-	{
-		probe_log_disconnect(probe, buf, buf_size);
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
-		return;
-	}
-	if(msg.type != tkproto_TakionMessage_PayloadType_STREAMINFO
-		|| !msg.has_stream_info_payload)
-	{
-		CHIAKI_LOGE(probe->log,
-			"Stream probe expected STREAMINFO but received protobuf type %d",
-			(int)msg.type);
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
-		return;
-	}
-	if(audio_header_buf.size != sizeof(audio_header) || !context.profiles
-		|| !context.profiles_valid || !context.selected_profile_valid
-		|| !context.video_header_size)
-	{
-		CHIAKI_LOGE(probe->log,
-			"Stream probe invalid STREAMINFO: audio=%lu profiles=%u valid=%d candidate_360p=%d",
-			(unsigned long)audio_header_buf.size, context.profiles,
-			context.profiles_valid ? 1 : 0,
-			context.selected_profile_valid ? 1 : 0);
+		if(context.disconnected)
+			probe_log_disconnect(probe, buf, buf_size);
 		probe->state = PROBE_FAILED;
 		chiaki_cond_signal(&probe->cond);
 		return;
 	}
 	ChiakiAudioHeader output_audio;
-	chiaki_audio_header_load(&output_audio, audio_header);
+	chiaki_audio_header_load(&output_audio, context.audio_header);
 	probe->audio_playback = plus_vita_audio_start(&output_audio, probe->log);
 	if(!probe->audio_playback)
 	{
 		CHIAKI_LOGE(probe->log, "Stream probe audio initialization failed or unsupported header");
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
+		probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_AUDIO_INIT_FAILED);
 		return;
 	}
 	probe->video_codec = CHIAKI_CODEC_H264;
@@ -1216,8 +1132,7 @@ static void probe_handle_streaminfo(PlusVitaStreamProbe *probe, uint8_t *buf,
 	{
 		CHIAKI_LOGE(probe->log,
 			"Stream probe could not parse the first video profile header");
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
+		probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_VIDEO_HEADER_INVALID);
 		return;
 	}
 	if(probe->video_codec != CHIAKI_CODEC_H264
@@ -1225,8 +1140,7 @@ static void probe_handle_streaminfo(PlusVitaStreamProbe *probe, uint8_t *buf,
 	{
 		CHIAKI_LOGE(probe->log,
 			"Stream probe Vita hardware decode requires H.264");
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
+		probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_VIDEO_HEADER_INVALID);
 		return;
 	}
 	memcpy(probe->video_header, context.video_header,
@@ -1249,8 +1163,7 @@ static void probe_handle_streaminfo(PlusVitaStreamProbe *probe, uint8_t *buf,
 	{
 		CHIAKI_LOGE(probe->log,
 			"Stream probe rejected malformed or unsupported H.264 SPS");
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
+		probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_VIDEO_HEADER_INVALID);
 		return;
 	}
 	uint32_t decoder_slots = plus_vita_h264_decoder_slots(&h264);
@@ -1261,8 +1174,7 @@ static void probe_handle_streaminfo(PlusVitaStreamProbe *probe, uint8_t *buf,
 			"Stream probe H.264 decoder sizing invalid: coded=%ux%u requested=%ux%u slots=%u",
 			h264.coded_width, h264.coded_height, probe->video_width,
 			probe->video_height, decoder_slots);
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
+		probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_VIDEO_HEADER_INVALID);
 		return;
 	}
 	CHIAKI_LOGI(probe->log,
@@ -1274,12 +1186,11 @@ static void probe_handle_streaminfo(PlusVitaStreamProbe *probe, uint8_t *buf,
 	int decoder_result = 0;
 	if(!PROBE_CAPTURE_ONLY)
 	{
-		uint8_t patched[PROBE_VIDEO_HEADER_MAX];
+		uint8_t patched[PLUS_VITA_STREAM_VIDEO_HEADER_MAX];
 		size_t patched_size = 0;
-		if(!plus_vita_h264_guard_header(probe->video_header, probe->video_header_size,
+		if(!plus_vita_stream_info_guard_header(&context, probe->log,
 			patched, sizeof(patched), &patched_size))
 		{
-			CHIAKI_LOGE(probe->log, "Stream probe LIVE_GUARD_REJECT: parameter sets differ from audited sample");
 			probe->state = PROBE_FAILED;
 			chiaki_cond_signal(&probe->cond);
 			return;
@@ -1287,13 +1198,13 @@ static void probe_handle_streaminfo(PlusVitaStreamProbe *probe, uint8_t *buf,
 		memcpy(probe->video_header, patched, patched_size);
 		probe->video_header_size = patched_size;
 		decoder_slots = 5;
+		plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_DECODER);
 		decoder_result = plus_vita_video_decoder_init(&probe->video_decoder,
 			probe->log, 1280, 720, decoder_slots);
 	}
 	if(decoder_result < 0)
 	{
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
+		probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_DECODER_INIT_FAILED);
 		return;
 	}
 	probe->video_decoder_ready = !PROBE_CAPTURE_ONLY;
@@ -1307,7 +1218,7 @@ static void probe_handle_streaminfo(PlusVitaStreamProbe *probe, uint8_t *buf,
 			h264.max_ref_frames, h264.max_buffered_frames, decoder_slots);
 	CHIAKI_LOGI(probe->log,
 		"Stream probe STREAMINFO validated: audio=%lu profiles=%u video_header=%lu codec=%d dimensions=%ux%u",
-		(unsigned long)audio_header_buf.size, context.profiles,
+		(unsigned long)sizeof(context.audio_header), context.profile_count,
 		(unsigned long)context.video_header_size, (int)probe->video_codec,
 		probe->video_width, probe->video_height);
 	ChiakiErrorCode err = probe_send_streaminfo_ack(probe);
@@ -1327,11 +1238,11 @@ static void probe_handle_streaminfo(PlusVitaStreamProbe *probe, uint8_t *buf,
 	}
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
-		probe->state = PROBE_FAILED;
-		chiaki_cond_signal(&probe->cond);
+		probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_STREAMINFO_REPLY_FAILED);
 		return;
 	}
 	probe->state = PROBE_EXPECT_MEDIA;
+	plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_READY);
 	CHIAKI_LOGI(probe->log,
 		"Stream probe handoff complete; waiting for audio and video packets");
 }
@@ -1349,6 +1260,7 @@ static void probe_takion_cb(ChiakiTakionEvent *event, void *user)
 	{
 		CHIAKI_LOGI(probe->log, "Stream probe Takion connected");
 		probe->state = PROBE_EXPECT_BANG;
+		plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_HANDSHAKE);
 		chiaki_cond_signal(&probe->cond);
 	}
 	else if(event->type == CHIAKI_TAKION_EVENT_TYPE_DISCONNECT)
@@ -1361,6 +1273,13 @@ static void probe_takion_cb(ChiakiTakionEvent *event, void *user)
 			CHIAKI_LOGE(probe->log,
 				"Stream probe Takion socket disconnected while state=%d",
 				(int)probe->state);
+			if(!probe->closing)
+			{
+				if(probe->state == PROBE_EXPECT_MEDIA && !probe->video_decoded_frame)
+					plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_MEDIA_DISCONNECTED);
+				else
+					probe_log_startup_interrupted(probe->state);
+			}
 			probe->state = PROBE_FAILED;
 		}
 		chiaki_cond_signal(&probe->cond);
@@ -1402,6 +1321,8 @@ static void probe_takion_cb(ChiakiTakionEvent *event, void *user)
 		{
 			CHIAKI_LOGE(probe->log,
 				"Stream probe media decrypt failed: %d", (int)media_err);
+			if(!probe->video_decoded_frame)
+				plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_MEDIA_DECRYPT_FAILED);
 			probe->state = PROBE_FAILED;
 			chiaki_cond_signal(&probe->cond);
 			goto callback_done;
@@ -1429,6 +1350,8 @@ static void probe_takion_cb(ChiakiTakionEvent *event, void *user)
 			CHIAKI_LOGE(probe->log,
 				"Stream probe media frame validation failed: %d",
 				(int)media_err);
+			if(!probe->video_decoded_frame)
+				plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_MEDIA_INVALID);
 			probe->state = PROBE_FAILED;
 			chiaki_cond_signal(&probe->cond);
 		}
@@ -1938,6 +1861,13 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 				(unsigned long long)(first_display ? sceKernelGetProcessTimeWide() / 1000u - first_display : 0));
 	}
 	/* Stop accepting media before restoring/freeing display buffers. */
+	if(err == CHIAKI_ERR_TIMEOUT)
+	{
+		if(probe->state == PROBE_EXPECT_MEDIA && !probe->video_decoded_frame)
+			plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_FIRST_FRAME_TIMEOUT);
+		else
+			probe_log_startup_interrupted(probe->state);
+	}
 	if(err != CHIAKI_ERR_SUCCESS)
 		probe->state = PROBE_FAILED;
 	probe->latency_collecting = false;
@@ -2240,9 +2170,17 @@ ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResul
 		return CHIAKI_ERR_FEC_FAILED;
 	}
 	CHIAKI_LOGI(log, "Stream probe FEC self-test passed: two missing source units restored with exact bytes and padding lengths");
-	if(!provision || !provision->handshake_key || !provision->launch_spec
-		|| !provision->session_id || provision->server_port <= 0)
+	if(!provision || !provision->launch_spec || !provision->session_id
+		|| provision->server_port <= 0)
+	{
+		plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_PROVISION_INVALID);
 		return CHIAKI_ERR_INVALID_DATA;
+	}
+	if(!provision->handshake_key)
+	{
+		plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED);
+		return CHIAKI_ERR_INVALID_DATA;
+	}
 	PlusVitaStreamProbe probe = { .log = log, .provision = provision,
 		.state = PROBE_CONNECTING,.input=input };
 	if(input && plus_vita_control_layout_valid(&input->layout)) probe.controls=input->layout;
@@ -2262,7 +2200,10 @@ ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResul
 	ChiakiErrorCode err = chiaki_base64_decode(provision->handshake_key,
 		strlen(provision->handshake_key), probe.handshake_key, &key_size);
 	if(err != CHIAKI_ERR_SUCCESS || key_size != sizeof(probe.handshake_key))
+	{
+		plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED);
 		return CHIAKI_ERR_INVALID_DATA;
+	}
 	if((err = chiaki_mutex_init(&probe.mutex, false)) != CHIAKI_ERR_SUCCESS)
 		goto done_key;
 	if((err = chiaki_cond_init(&probe.cond)) != CHIAKI_ERR_SUCCESS)
@@ -2276,13 +2217,17 @@ ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResul
 	 * secp256k1 here. Both supported curves serialize to 65 bytes, so using
 	 * P-256/secp256r1 only fails later when the server's BANG point is read. */
 	if((err = chiaki_ecdh_init(&probe.ecdh)) != CHIAKI_ERR_SUCCESS)
+	{
+		plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED);
 		goto done_cond;
+	}
 	struct sockaddr_in address = { 0 };
 	address.sin_family = AF_INET;
 	address.sin_port = htons((uint16_t)provision->server_port);
 	if(inet_pton(AF_INET, provision->server_ip, &address.sin_addr) != 1)
 	{
 		err = CHIAKI_ERR_PARSE_ADDR;
+		plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_TRANSPORT_FAILED);
 		goto done_ecdh;
 	}
 	ChiakiTakionConnectInfo info = { 0 };
@@ -2300,9 +2245,13 @@ ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResul
 	info.service_type = CHIAKI_SERVICE_TYPE_PSNOW;
 	info.psn_wrapper_type = provision->psn_wrapper_type;
 	info.is_ping_handshake = false;
+	plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_TRANSPORT);
 	err = chiaki_takion_connect(&probe.takion, &info, NULL);
 	if(err != CHIAKI_ERR_SUCCESS)
+	{
+		plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_TRANSPORT_FAILED);
 		goto done_ecdh;
+	}
 	chiaki_mutex_lock(&probe.mutex);
 	uint64_t connect_started = sceKernelGetProcessTimeWide();
 	while(probe.state == PROBE_CONNECTING)
@@ -2331,6 +2280,8 @@ ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResul
 		CHIAKI_LOGI(log, "Stream probe connected; sending BIG");
 		err = probe_send_big(&probe);
 	}
+	if(err != CHIAKI_ERR_SUCCESS && err != CHIAKI_ERR_CANCELED)
+		probe_log_startup_interrupted(probe.state);
 	if(err == CHIAKI_ERR_SUCCESS)
 		err = PROBE_CAPTURE_ONLY ? probe_capture_wait(&probe)
 			: probe_visible_preview(&probe, user_stopped);
@@ -2354,6 +2305,7 @@ ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResul
 		if(err == CHIAKI_ERR_SUCCESS && disconnect_err != CHIAKI_ERR_SUCCESS)
 			err = disconnect_err;
 	}
+	probe.closing = true;
 	chiaki_mutex_unlock(&probe.mutex);
 	chiaki_takion_close(&probe.takion);
 	if(!PROBE_CAPTURE_ONLY) probe_latency_dump(&probe);

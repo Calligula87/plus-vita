@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "diagnostic_log.h"
+#include "build_identity.h"
 #include <assert.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -160,7 +161,8 @@ int main(void)
 	while(fgets(line,sizeof(line),f)) {
 		bytes+=strlen(line);
 		assert(!strstr(line,"allocation.complete") && !strstr(line,"999999"));
-		if(strstr(line,"build=scrolling-menus-41-42-43-1")) ui_build=true;
+		if(strstr(line," BUILD    code=0 build=" PLUS_VITA_APP_BUILD " profile=" PLUS_VITA_DIAGNOSTIC_PROFILE))
+			ui_build=true;
 		if(strstr(line,"draw count=500")) ui_timing=true;
 		if(strstr(line,"metadata_missing=2 available=3 unsupported=4 rejected=5 loaded=1 dns=1")) artwork_summary=true;
 	}

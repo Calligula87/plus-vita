@@ -25,6 +25,17 @@ Only locally generated records reach the writer:
   event names. Unknown names are dropped. Numeric result codes are limited to
   the native error range `-1..21`; unknown codes map to `-1`. Allocation stages
   are `0..5`; UI stages are the public screen enum `0..17` in `app.h`.
+- Typed `stream.startup.*` events identify the transport, handshake, STREAMINFO
+  and decoder stages, followed by `ready` when the client starts waiting for
+  media. Failure events distinguish invalid provision data, transport or
+  handshake failure, an interrupted STREAMINFO exchange,
+  invalid STREAMINFO, unavailable 720p H.264 profile, invalid video header,
+  audited SPS/PPS rejection, decoder or audio initialization, and reply send
+  failure. An early disconnect, decryption error, media validation failure or
+  first-frame timeout also gets a code before the first decoded picture.
+  These numeric values are startup status codes from
+  `PlusVitaStreamStartup`. The terminal `stream_probe.complete` retains the
+  native error code.
 - Fixed library severity categories (`library.info`, `library.warning`,
   `library.error`). The library callback discards its entire text parameter,
   including purported summaries, addresses and remote disconnect reasons.
@@ -75,3 +86,7 @@ storage, failed thread creation and writer ownership. `tools/test-latency.sh`
 and `tools/test-input-worker.sh` retain the accepted timing/input checks.
 Vita retrieval, sleep/Wi-Fi cleanup and playback comparison remain hardware
 checks in [RECOVERY_DIAGNOSTICS_TEST.md](RECOVERY_DIAGNOSTICS_TEST.md).
+
+The v001 diagnostic VPK for issue #52 uses the `ps3-startup-52` log identity.
+Copy the log after each title before selecting Play again. Compare the affected
+PS3 title with a known-good PS4 title.
