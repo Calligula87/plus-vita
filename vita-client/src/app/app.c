@@ -1026,6 +1026,10 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		app->pending_operation=0; app->waiting_for=PLUS_VITA_EFFECT_NONE;
 		if(event.status==PLUS_VITA_RESULT_REJECTED) return remove_saved(app, false, true);
 		if(event.status==PLUS_VITA_RESULT_OK) catalogue_view(app);
+		else if(event.status==PLUS_VITA_RESULT_SAMPLE_SAVED)
+			detail_view(app,"PS3 sample saved. Reopen FTP to retrieve it.");
+		else if(event.status==PLUS_VITA_RESULT_SAMPLE_INCOMPLETE)
+			detail_view(app,"PS3 sample incomplete. Reopen FTP to retrieve the diagnostic log.");
 		else if(event.status==PLUS_VITA_RESULT_STREAM_STOPPED) stream_stopped_view(app);
 		else if(event.status==PLUS_VITA_RESULT_SERVICE_ERROR)
 			detail_view(app,"The cloud service could not start this session.\nTry Play again later for a fresh attempt.");
@@ -1047,7 +1051,9 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 			"Checking this game's eligibility. Circle cancels.",
 			"Finding a cloud server. Circle cancels.",
 			"Allocating your cloud session. Circle cancels.",
-			"Connecting to cloud video. Hold START + SELECT to stop after play begins."
+			"Connecting to cloud video. Hold START + SELECT to stop after play begins.",
+			[PLUS_VITA_PLAY_STAGE_PS3_SAMPLE] =
+				"Collecting a PS3 stream sample for up to 60 seconds.\nNo gameplay will appear. Circle cancels."
 		};
 		if(event.play_stage < sizeof(stages)/sizeof(stages[0])) view->body=stages[event.play_stage];
 		return effect;

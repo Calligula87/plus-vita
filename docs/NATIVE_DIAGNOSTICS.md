@@ -90,3 +90,20 @@ checks in [RECOVERY_DIAGNOSTICS_TEST.md](RECOVERY_DIAGNOSTICS_TEST.md).
 The v001 diagnostic VPK for issue #52 uses the `ps3-startup-52` log identity.
 Copy the log after each title before selecting Play again. Compare the affected
 PS3 title with a known-good PS4 title.
+
+The PS3 media startup experiment is built with
+`-DPLUS_VITA_PS3_STARTUP_SAMPLE=ON`. It installs as **Plus-Vita PS3 Test**
+(`PLVTPS352`) with log identity `ps3-media-start-52`. Only Play sessions
+resolved by provisioning as PS3 collect video instead of displaying it.
+PS4 sessions use the normal playback path.
+The sample VPK follows the release build's startup path without requiring
+the development replay fixture. The live PS4 SPS/PPS and slice checks still
+run during Play.
+
+The PS3 experiment uses the normal neutral controller feedback sender and
+Pylux's one-second heartbeat after STREAMINFO, with up to 60 seconds to
+receive a sample. It saves the unmodified headers and, if received, up to
+five seconds of contiguous video from an IDR in
+`ux0:data/plus-vita-ps3-52-media-*.h264`. The log records decrypted media
+packet, captured frame, feedback send and heartbeat counts. A partial file can
+contain headers alone. Save the log and sample before another Play attempt.

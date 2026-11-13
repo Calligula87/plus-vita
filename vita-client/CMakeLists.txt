@@ -29,6 +29,7 @@ add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../external/opus-1.6.1" opus)
 include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 
 option(PLUS_VITA_DIAGNOSTIC_APP "Launch the historical diagnostic/test interface" OFF)
+option(PLUS_VITA_PS3_STARTUP_SAMPLE "Collect PS3 stream samples from graphical Play" OFF)
 option(PLUS_VITA_FONT_COMPARISON "Include the synthetic PVF/FreeType comparison screen" OFF)
 option(PLUS_VITA_FONT_DEFAULT_FREETYPE "Use the Vita-tested B font on normal graphical screens" ON)
 if(PLUS_VITA_DIAGNOSTIC_APP)
@@ -45,6 +46,10 @@ if(PLUS_VITA_RELEASE_CANDIDATE)
   set(VITA_APP_NAME "Plus-Vita")
   set(VITA_VERSION "00.11")
   set(PLUS_VITA_PUBLIC_VERSION "v000")
+endif()
+if(PLUS_VITA_PS3_STARTUP_SAMPLE)
+  set(VITA_APP_NAME "Plus-Vita PS3 Test")
+  set(VITA_TITLEID "PLVTPS352")
 endif()
 set(PLUS_VITA_TLS_PROBE_URL "" CACHE STRING
   "Optional controlled HTTPS URL for the physical certificate-rejection test")
@@ -696,6 +701,7 @@ endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
   PLUS_VITA_APP_VERSION="${PLUS_VITA_PUBLIC_VERSION}"
+  PLUS_VITA_PS3_STARTUP_SAMPLE=$<BOOL:${PLUS_VITA_PS3_STARTUP_SAMPLE}>
   PLUS_VITA_RELEASE_CANDIDATE=$<BOOL:${PLUS_VITA_RELEASE_CANDIDATE}>
   PLUS_VITA_FONT_COMPARISON=$<AND:$<BOOL:${PLUS_VITA_FONT_COMPARISON}>,$<NOT:$<BOOL:${PLUS_VITA_DIAGNOSTIC_APP}>>>
   PLUS_VITA_FONT_DEFAULT_FREETYPE=$<AND:$<BOOL:${PLUS_VITA_FONT_DEFAULT_FREETYPE}>,$<NOT:$<BOOL:${PLUS_VITA_DIAGNOSTIC_APP}>>>

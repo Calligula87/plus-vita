@@ -29,6 +29,7 @@ typedef struct {
 #endif
 #define PLUS_VITA_STREAM_PROBE_REPLAY 0
 
+bool plus_vita_stream_probe_collects_sample(const ChiakiCloudProvisionResult *provision);
 ChiakiErrorCode plus_vita_stream_probe(const ChiakiCloudProvisionResult *provision,
 	ChiakiLog *log, bool *user_stopped);
 /* The optional UI pump runs on the caller's thread while Takion connects.

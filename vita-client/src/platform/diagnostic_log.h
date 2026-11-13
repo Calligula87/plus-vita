@@ -38,6 +38,7 @@ typedef enum {
 	PLUS_VITA_STREAM_STARTUP_MEDIA_DECRYPT_FAILED,
 	PLUS_VITA_STREAM_STARTUP_MEDIA_INVALID,
 	PLUS_VITA_STREAM_STARTUP_FIRST_FRAME_TIMEOUT,
+	PLUS_VITA_STREAM_STARTUP_PS3_FEEDBACK,
 } PlusVitaStreamStartup;
 void plus_vita_diagnostic_stream_startup(PlusVitaStreamStartup status);
 void plus_vita_diagnostic_progress(const char *stage);
