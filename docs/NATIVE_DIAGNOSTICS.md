@@ -8,7 +8,8 @@ accepted explicit Play or fresh connection retry, including failed allocation.
 A busy request while an earlier allocation is closing cannot start a new
 attempt. That earlier worker must finish before a new one can own the log.
 There is no archive or automatic upload. The single path is
-`ux0:data/plus-vita-allocation.log`.
+`ux0:data/plus-vita-allocation.log` for normal Play. The offline PS3 replay
+uses its own path so that it preserves existing Play evidence.
 
 The current development identity is `recovery-diagnostics-1`, with the accepted
 720p independent-input/deferred-writer profile. This is an experimental
@@ -107,3 +108,18 @@ five seconds of contiguous video from an IDR in
 `ux0:data/plus-vita-ps3-52-media-*.h264`. The log records decrypted media
 packet, captured frame, feedback send and heartbeat counts. A partial file can
 contain headers alone. Save the log and sample before another Play attempt.
+
+Issue #53 uses `-DPLUS_VITA_PS3_REPLAY=ON` to build **Plus-Vita PS3 Replay**
+(`PLVTPS353`, log identity `ps3-replay-53`). Place the private framed capture
+at `ux0:data/plus-vita-ps3-replay-53.bin` and launch the app. The replay
+checks the file digest, verifies the original PS3 SPS/PPS and checks every
+slice before decoding. It uses a five-slot SPS that changes only the original
+nine reference and buffering declarations. Software decode produced identical
+output across all 300 pictures. The fixture stays in private local storage.
+
+Read `ux0:data/plus-vita-ps3-replay-53.log` after the result screen. A pass
+records `replay.complete` code 0, 300 each in `replay_submitted` and
+`replay_displayed`, and `replay_drain_empty` equal to 1.
+`replay_drained` counts pictures displayed during the drain.
+`tools/test-h264-config.sh` also accepts the private replay file as an
+optional local regression fixture.

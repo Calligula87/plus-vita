@@ -7,6 +7,7 @@
 #include "latency_stats.h"
 #include "artwork_status.h"
 #define PLUS_VITA_DIAGNOSTIC_MAX_BYTES (1024u * 1024u)
+#define PLUS_VITA_PS3_REPLAY_LOG_PATH "ux0:data/plus-vita-ps3-replay-53.log"
 
 #ifdef __cplusplus
 extern "C" {

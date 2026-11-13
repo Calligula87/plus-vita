@@ -64,6 +64,8 @@ jobs:
         run: sh tools/test-app-branding.sh
       - name: Test privacy schema and bounded deferred persistence
         run: sh tools/test-deferred-log.sh
+      - name: Test audited H.264 headers and guarded slices
+        run: sh tools/test-h264-config.sh
       - name: Test bounded asynchronous artwork and HTTP policy
         run: sh tools/test-app-covers.sh
       - name: Test real FreeType output and synthetic comparison journey

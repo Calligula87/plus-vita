@@ -28,6 +28,9 @@ typedef struct {
 #define PLUS_VITA_STREAM_PROBE_MODE "baseline"
 #endif
 #define PLUS_VITA_STREAM_PROBE_REPLAY 0
+#if PLUS_VITA_PS3_REPLAY
+ChiakiErrorCode plus_vita_stream_probe_ps3_replay(ChiakiLog *log);
+#endif
 
 bool plus_vita_stream_probe_collects_sample(const ChiakiCloudProvisionResult *provision);
 ChiakiErrorCode plus_vita_stream_probe(const ChiakiCloudProvisionResult *provision,

@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #ifndef PLUS_VITA_BUILD_IDENTITY_H
 #define PLUS_VITA_BUILD_IDENTITY_H
-#if PLUS_VITA_PS3_STARTUP_SAMPLE
+#if PLUS_VITA_PS3_REPLAY
+#define PLUS_VITA_APP_BUILD "ps3-replay-53"
+#define PLUS_VITA_BUILD_LABEL "PS3 REPLAY #53"
+#define PLUS_VITA_ABOUT_STATUS "Audited offline PS3 decoder replay."
+#elif PLUS_VITA_PS3_STARTUP_SAMPLE
 #define PLUS_VITA_APP_BUILD "ps3-media-start-52"
 #define PLUS_VITA_BUILD_LABEL "PS3 MEDIA START #52"
 #define PLUS_VITA_ABOUT_STATUS "Diagnostic build for PS3 media startup."

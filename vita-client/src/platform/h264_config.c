@@ -204,8 +204,19 @@ static const uint8_t patched_sps[] = {
 	0x67,0x4d,0x40,0x28,0x91,0x98,0x05,0x00,0x5b,0xb0,0x16,0xa0,0x20,
 	0x20,0x28,0x00,0x00,0x3e,0x90,0x00,0x1d,0x4c,0x04,0x4d,0x0f,0x1f,0x34 };
 
-bool plus_vita_h264_guard_header(const uint8_t *data, size_t size,
-	uint8_t *patched, size_t capacity, size_t *patched_size)
+static const uint8_t ps3_sps[] = {
+	0x67,0x64,0x00,0x29,0xac,0xb1,0x40,0x28,0x02,0xdd,0x21,0x06,0x06,0x06,
+	0x40,0x00,0x00,0x03,0x00,0x40,0x00,0x00,0x1e,0x23,0xc6,0x0c,0x8a,0x80 };
+static const uint8_t ps3_pps[] = { 0x68,0xef,0x3c,0xb0 };
+/* Only max_num_ref_frames and max_dec_frame_buffering change from 9 to 5. */
+static const uint8_t ps3_patched_sps[] = {
+	0x67,0x64,0x00,0x29,0xac,0xb3,0x00,0xa0,0x0b,0x74,0x84,0x18,0x18,0x19,
+	0x00,0x00,0x03,0x00,0x01,0x00,0x00,0x03,0x00,0x78,0x8f,0x18,0x32,0x68 };
+
+static bool guard_header(const uint8_t *data, size_t size,
+	uint8_t *patched, size_t capacity, size_t *patched_size,
+	const uint8_t *expected_sps, size_t sps_size, const uint8_t *expected_pps,
+	size_t pps_size, const uint8_t *replacement_sps, size_t replacement_size)
 {
 	if(!data || !patched || !patched_size || size > 2048) return false;
 	bool sps = false, pps = false;
@@ -216,21 +227,40 @@ bool plus_vita_h264_guard_header(const uint8_t *data, size_t size,
 		if(!prefix || pos + prefix >= size) return false;
 		size_t begin = pos + prefix, end = begin + 1;
 		while(end < size && !startcode(data, size, end)) end++;
-		if(!sps && !pps && end - begin == sizeof(audited_sps)
-			&& !memcmp(data + begin, audited_sps, sizeof(audited_sps))) sps = true;
-		else if(sps && !pps && end - begin == sizeof(audited_pps)
-			&& !memcmp(data + begin, audited_pps, sizeof(audited_pps))) pps = true;
+		if(!sps && !pps && end - begin == sps_size
+			&& !memcmp(data + begin, expected_sps, sps_size)) sps = true;
+		else if(sps && !pps && end - begin == pps_size
+			&& !memcmp(data + begin, expected_pps, pps_size)) pps = true;
 		else return false;
 		pos = end;
 	}
-	size_t needed = 8 + sizeof(patched_sps) + sizeof(audited_pps);
+	size_t needed = 8 + replacement_size + pps_size;
 	if(!sps || !pps || capacity < needed) return false;
 	const uint8_t prefix[] = { 0,0,0,1 };
 	memcpy(patched, prefix, 4);
-	memcpy(patched + 4, patched_sps, sizeof(patched_sps));
-	memcpy(patched + 4 + sizeof(patched_sps), prefix, 4);
-	memcpy(patched + 8 + sizeof(patched_sps), audited_pps, sizeof(audited_pps));
+	memcpy(patched + 4, replacement_sps, replacement_size);
+	memcpy(patched + 4 + replacement_size, prefix, 4);
+	memcpy(patched + 8 + replacement_size, expected_pps, pps_size);
 	*patched_size = needed;
+	return true;
+}
+
+bool plus_vita_h264_guard_header(const uint8_t *data, size_t size,
+	uint8_t *patched, size_t capacity, size_t *patched_size)
+{
+	return guard_header(data, size, patched, capacity, patched_size,
+		audited_sps, sizeof(audited_sps), audited_pps, sizeof(audited_pps),
+		patched_sps, sizeof(patched_sps));
+}
+
+bool plus_vita_h264_guard_ps3_header(PlusVitaH264Guard *guard,
+	const uint8_t *data, size_t size, uint8_t *patched, size_t capacity,
+	size_t *patched_size)
+{
+	if(!guard || !guard_header(data, size, patched, capacity, patched_size,
+		ps3_sps, sizeof(ps3_sps), ps3_pps, sizeof(ps3_pps),
+		ps3_patched_sps, sizeof(ps3_patched_sps))) return false;
+	*guard = (PlusVitaH264Guard){ .ps3 = true };
 	return true;
 }
 
@@ -240,12 +270,29 @@ static bool guard_reject(PlusVitaH264Guard *guard, const char *reason)
 	return false;
 }
 
+static bool guard_weight_pair(Bits *b)
+{
+	int64_t weight = se(b), offset = se(b);
+	return b->ok && weight >= -128 && weight <= 127 && offset >= -128 && offset <= 127;
+}
+
+static bool guard_ps3_weights(Bits *b)
+{
+	/* 8-bit 4:2:0 and one list-0 entry, fixed by the audited SPS/PPS
+	 * and by rejecting active-reference override above this table. */
+	if(ue(b) > 7 || ue(b) > 7) return false;
+	if(bits(b, 1) && !guard_weight_pair(b)) return false;
+	if(bits(b, 1) && (!guard_weight_pair(b) || !guard_weight_pair(b))) return false;
+	return b->ok;
+}
+
 bool plus_vita_h264_guard_frame(PlusVitaH264Guard *guard, const uint8_t *data, size_t size)
 {
 	if(!guard || !data || !size || size > 1024u * 1024u) return guard_reject(guard, "INVALID_BOUNDS");
 	guard->reason = "NONE";
 	guard->observed_frame = guard->observed_mb = guard->observed_slice = guard->observed_nal = UINT32_MAX;
 	bool picture = false, idr = false;
+	unsigned frame_num_bits = guard->ps3 ? 4 : 7;
 	uint32_t frame = 0, previous_mb = 0, idr_id = UINT32_MAX;
 	size_t pos = 0;
 	while(pos < size)
@@ -278,7 +325,7 @@ bool plus_vita_h264_guard_frame(PlusVitaH264Guard *guard, const uint8_t *data, s
 			b.data[b.size++] = byte;
 			zeros = byte ? 0 : zeros + 1;
 		}
-		uint32_t mb = ue(&b), slice = ue(&b), pps = ue(&b), number = bits(&b, 7);
+		uint32_t mb = ue(&b), slice = ue(&b), pps = ue(&b), number = bits(&b, frame_num_bits);
 		guard->observed_frame = number; guard->observed_mb = mb; guard->observed_slice = slice;
 		if(!b.ok) return guard_reject(guard, "TRUNCATED_SLICE_HEADER");
 		bool is_idr = type == 5;
@@ -290,7 +337,8 @@ bool plus_vita_h264_guard_frame(PlusVitaH264Guard *guard, const uint8_t *data, s
 			if(mb) return guard_reject(guard, "MISSING_FIRST_SLICE");
 			if(is_idr && number) return guard_reject(guard, "IDR_FRAME_NUM");
 			if(!is_idr && !guard->started) return guard_reject(guard, "IDR_REQUIRED");
-			if(!is_idr && number != (guard->frame_num + 1) % 128) return guard_reject(guard, "FRAME_NUM_GAP");
+			if(!is_idr && number != (guard->frame_num + 1) % (1u << frame_num_bits))
+				return guard_reject(guard, "FRAME_NUM_GAP");
 			picture = true; frame = number; idr = is_idr;
 		}
 		else if(number != frame || is_idr != idr || mb <= previous_mb) return guard_reject(guard, "SLICE_ORDER_OR_PICTURE_MISMATCH");
@@ -308,10 +356,9 @@ bool plus_vita_h264_guard_frame(PlusVitaH264Guard *guard, const uint8_t *data, s
 		{
 			if(bits(&b, 1)) return guard_reject(guard, "ACTIVE_REF_OVERRIDE");
 			if(bits(&b, 1)) return guard_reject(guard, "REF_LIST_MODIFICATION");
+			if(guard->ps3 && !guard_ps3_weights(&b)) return guard_reject(guard, "WEIGHT_TABLE");
 			if(bits(&b, 1)) return guard_reject(guard, "ADAPTIVE_REFERENCE_MARKING");
 		}
-		/* P: no active-count override, list modification, or adaptive marking.
-		 * Audited PPS disables weighted prediction and redundant_pic_cnt. */
 		if(!b.ok) return guard_reject(guard, "TRUNCATED_REFERENCE_HEADER");
 		pos = end;
 	}

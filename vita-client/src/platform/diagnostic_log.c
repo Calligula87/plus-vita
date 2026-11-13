@@ -13,7 +13,9 @@
 #define PLUS_VITA_DEFERRED_LOG 0
 #endif
 
-#ifdef __vita__
+#if defined(__vita__) && PLUS_VITA_PS3_REPLAY
+#define PLUS_VITA_DIAGNOSTIC_PATH PLUS_VITA_PS3_REPLAY_LOG_PATH
+#elif defined(__vita__)
 #define PLUS_VITA_DIAGNOSTIC_PATH "ux0:data/plus-vita-allocation.log"
 #else
 #define PLUS_VITA_DIAGNOSTIC_PATH "plus-vita-allocation.log"
@@ -372,7 +374,8 @@ void plus_vita_diagnostic_event(const char *event, int code)
 {
 	static const char *const names[]={"allocation.begin","allocation.complete","allocation.stage",
 		"allocation.network.init","allocation.network.release","stream_probe.begin","stream_probe.complete",
-		"replay.begin","replay.complete","recovery.wifi","recovery.sleep","app.start","app.stop",
+		"replay.begin","replay.complete","replay.input_validated","replay.decoder_ready",
+		"replay.drain_begin","recovery.wifi","recovery.sleep","app.start","app.stop",
 		"ui.stage","account.complete"};
 	if(!event) return;
 	for(unsigned i=0;i<sizeof(names)/sizeof(names[0]);i++)
@@ -454,6 +457,7 @@ void plus_vita_diagnostic_counter(const char *name, uint64_t count)
 		"feedback_published","feedback_consumed","feedback_coalesced","feedback_send_failures",
 		"feedback_logs_suppressed","input_neutral_consumed","input_neutral_failed","recovery_episodes",
 		"decrypted_video_packets","decrypted_audio_packets","capture_frames","heartbeats_sent",
+		"replay_submitted","replay_displayed","replay_drained","replay_drain_empty",
 		"feedback_state_sends"};
 	const char *fixed=known_name(name,names,sizeof(names)/sizeof(names[0]));
 	if(!fixed) return;

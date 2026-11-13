@@ -77,13 +77,24 @@ static void privacy_entrypoints(void)
 	plus_vita_diagnostic_counter("capture_frames", 0);
 	plus_vita_diagnostic_counter("heartbeats_sent", 59);
 	plus_vita_diagnostic_counter("feedback_state_sends", 299);
+	plus_vita_diagnostic_counter("replay_submitted", 300);
+	plus_vita_diagnostic_counter("replay_displayed", 300);
+	plus_vita_diagnostic_counter("replay_drained", 3);
+	plus_vita_diagnostic_counter("replay_drain_empty", 1);
+	plus_vita_diagnostic_counter("replay_submitted-canary", 123456789);
+	plus_vita_diagnostic_event("replay.input_validated", 0);
+	plus_vita_diagnostic_event("replay.decoder_ready", 0);
+	plus_vita_diagnostic_event("replay.drain_begin", 0);
 	plus_vita_diagnostic_end();
 	FILE *f=fopen("plus-vita-allocation.log","rb"); assert(f);
 	char line[2048]; bool complete=false;
 	const char *const expected[]={
 		"code=20 stream.startup.ps3_feedback_started", "final counter=decrypted_video_packets count=0",
 		"final counter=decrypted_audio_packets count=0", "final counter=capture_frames count=0",
-		"final counter=heartbeats_sent count=59", "final counter=feedback_state_sends count=299"
+		"final counter=heartbeats_sent count=59", "final counter=feedback_state_sends count=299",
+		"final counter=replay_submitted count=300", "final counter=replay_displayed count=300",
+		"final counter=replay_drained count=3", "final counter=replay_drain_empty count=1",
+		"code=0 replay.input_validated", "code=0 replay.decoder_ready", "code=0 replay.drain_begin"
 	};
 	unsigned next=0;
 	while(fgets(line,sizeof(line),f)) {

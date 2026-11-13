@@ -2094,7 +2094,7 @@ static ChiakiErrorCode probe_capture_wait(PlusVitaStreamProbe *probe,
 	return valid ? CHIAKI_ERR_SUCCESS : result == CHIAKI_ERR_SUCCESS ? CHIAKI_ERR_INVALID_DATA : result;
 }
 
-#if !PLUS_VITA_RELEASE_CANDIDATE && !PLUS_VITA_PS3_STARTUP_SAMPLE
+#if PLUS_VITA_PS3_REPLAY || (!PLUS_VITA_RELEASE_CANDIDATE && !PLUS_VITA_PS3_STARTUP_SAMPLE)
 static uint32_t replay_u32(const uint8_t *p)
 {
 	return (uint32_t)p[0] | ((uint32_t)p[1] << 8)
@@ -2104,11 +2104,18 @@ static uint32_t replay_u32(const uint8_t *p)
 /* This experiment accepts only the exact offline-audited sample, never live
  * or arbitrary video. Host software decode proved all 300 frames identical
  * after changing only SPS reference/buffering declarations from nine to five. */
+#if PLUS_VITA_PS3_REPLAY
+ChiakiErrorCode plus_vita_stream_probe_ps3_replay(ChiakiLog *log)
+#else
 static ChiakiErrorCode probe_replay(ChiakiLog *log)
+#endif
 {
+	const bool ps3 = PLUS_VITA_PS3_REPLAY;
+	enum { REPLAY_PICTURES = 300, REPLAY_WIDTH = 1280, REPLAY_HEIGHT = 720, REPLAY_SLOTS = 5 };
 	CHIAKI_LOGI(log, "Stream probe build=%s mode=%s live_transport=NOT_STARTED", PLUS_VITA_STREAM_PROBE_BUILD,
-		PLUS_VITA_STREAM_PROBE_REPLAY ? "OFFLINE_REPLAY" : "LIVE_GUARD_SELFTEST");
-	FILE *file = fopen("ux0:data/plus-vita-replay-720p.bin", "rb");
+		ps3 || PLUS_VITA_STREAM_PROBE_REPLAY ? "OFFLINE_REPLAY" : "LIVE_GUARD_SELFTEST");
+	FILE *file = fopen(ps3 ? "ux0:data/plus-vita-ps3-replay-53.bin"
+		: "ux0:data/plus-vita-replay-720p.bin", "rb");
 	if(!file) { CHIAKI_LOGE(log, "Stream probe replay file missing"); return CHIAKI_ERR_INVALID_DATA; }
 	if(fseek(file, 0, SEEK_END) != 0) { fclose(file); return CHIAKI_ERR_INVALID_DATA; }
 	long length = ftell(file);
@@ -2124,14 +2131,17 @@ static ChiakiErrorCode probe_replay(ChiakiLog *log)
 	const mbedtls_md_info_t *md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
 	if(!loaded || !md || mbedtls_md(md, data, (size_t)length, digest) != 0) goto done;
 	for(unsigned int i = 0; i < 32; i++) snprintf(hex + i * 2, 3, "%02x", digest[i]);
-	if(strcmp(hex, "ea735a32bcc166a8d375830dbebddfff08c58db47fad7b47c6453b043786b802") != 0)
+	const char *expected_digest = ps3
+		? "26ea99f3e9c1e9a7ef923f83476bf6e9572769087f9a07bbeb670617165c748b"
+		: "ea735a32bcc166a8d375830dbebddfff08c58db47fad7b47c6453b043786b802";
+	if(strcmp(hex, expected_digest) != 0)
 	{ CHIAKI_LOGE(log, "Stream probe replay SHA256 mismatch; rejecting unaudited input"); goto done; }
-	if(memcmp(data, "PVREPL01", 8) || replay_u32(data + 8) != 1280
-		|| replay_u32(data + 12) != 720 || replay_u32(data + 16) != 5
-		|| replay_u32(data + 20) != 300) goto done;
+	if(memcmp(data, "PVREPL01", 8) || replay_u32(data + 8) != REPLAY_WIDTH
+		|| replay_u32(data + 12) != REPLAY_HEIGHT || replay_u32(data + 16) != REPLAY_SLOTS
+		|| replay_u32(data + 20) != REPLAY_PICTURES) goto done;
 	/* Validate every record before creating hardware resources. */
 	size_t pos = 28, payload = 0;
-	for(unsigned int i = 0; i < 300; i++)
+	for(unsigned int i = 0; i < REPLAY_PICTURES; i++)
 	{
 		if((size_t)length - pos < 4) goto done;
 		uint32_t size = replay_u32(data + pos); pos += 4;
@@ -2140,11 +2150,12 @@ static ChiakiErrorCode probe_replay(ChiakiLog *log)
 	}
 	if(pos != (size_t)length || payload != replay_u32(data + 24)) goto done;
 	CHIAKI_LOGI(log, "Stream probe replay audit accepted: pictures=300 input=1280x720 slots=5 host_frame_hash_matches=300");
-	/* Run the live slice guard against all audited AUs before any experiment.
-	 * Only the first record's known SPS/PPS are removed for this parser test. */
+	/* Validate all access units before submitting anything to the decoder. */
 	PlusVitaH264Guard guard = { 0 };
+	uint8_t patched_header[PLUS_VITA_STREAM_VIDEO_HEADER_MAX];
+	size_t patched_size = 0, first_slice = 0;
 	pos = 28;
-	for(unsigned int i = 0; i < 300; i++)
+	for(unsigned int i = 0; i < REPLAY_PICTURES; i++)
 	{
 		uint32_t size = replay_u32(data + pos); pos += 4;
 		size_t offset = 0;
@@ -2156,8 +2167,18 @@ static ChiakiErrorCode probe_replay(ChiakiLog *log)
 					&& data[pos + offset + 2] == 1 ? 3 :
 					(data[pos + offset] == 0 && data[pos + offset + 1] == 0
 					&& data[pos + offset + 2] == 0 && data[pos + offset + 3] == 1 ? 4 : 0);
-				if(prefix && (data[pos + offset + prefix] & 31) == 5) break;
+				if(prefix && prefix < size - offset && (data[pos + offset + prefix] & 31) == 5) break;
 				offset++;
+			}
+			if(ps3)
+			{
+				if(!plus_vita_h264_guard_ps3_header(&guard, data + pos, offset,
+					patched_header, sizeof(patched_header), &patched_size))
+				{
+					plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_HEADER_GUARD_REJECTED);
+					goto done;
+				}
+				first_slice = offset;
 			}
 		}
 		PlusVitaH264Guard before = guard;
@@ -2174,28 +2195,33 @@ static ChiakiErrorCode probe_replay(ChiakiLog *log)
 	if(!plus_vita_h264_guard_selftest() || !probe_wire_next(UINT16_MAX, 0)
 		|| probe_wire_next(42, 42) || probe_wire_next(42, 44) || probe_wire_next(42, 41)) goto done;
 	CHIAKI_LOGI(log, "Stream probe guard self-test passed: 300 AUs; validated IDR reset accepted; duplicate P/truncated frames and changed/truncated headers rejected");
-	if(!PLUS_VITA_STREAM_PROBE_REPLAY) { err = CHIAKI_ERR_SUCCESS; goto done; }
+	if(!ps3 && !PLUS_VITA_STREAM_PROBE_REPLAY) { err = CHIAKI_ERR_SUCCESS; goto done; }
+	if(ps3) plus_vita_diagnostic_event("replay.input_validated", 0);
 	PlusVitaVideoPresent present;
 	int native = plus_vita_video_present_init(&present);
 	if(native < 0) { err = CHIAKI_ERR_UNKNOWN; goto done; }
 	PlusVitaVideoDecoder decoder = { .decoder_block = -1 };
-	native = plus_vita_video_decoder_init(&decoder, log, 1280, 720, 5);
-	unsigned int submitted = 0, displayed = 0;
+	native = plus_vita_video_decoder_init(&decoder, log, REPLAY_WIDTH, REPLAY_HEIGHT, REPLAY_SLOTS);
+	if(ps3 && native >= 0) plus_vita_diagnostic_event("replay.decoder_ready", 0);
+	unsigned int submitted = 0, displayed = 0, drained = 0;
 	uint64_t started = sceKernelGetProcessTimeWide(), decode_us = 0, max_us = 0;
 	pos = 28;
 	err = native < 0 ? CHIAKI_ERR_UNKNOWN : CHIAKI_ERR_SUCCESS;
-	while(err == CHIAKI_ERR_SUCCESS && submitted < 300)
+	while(err == CHIAKI_ERR_SUCCESS && submitted < REPLAY_PICTURES)
 	{
 		if(sceKernelGetProcessTimeWide() - started > 15000000u) { err = CHIAKI_ERR_TIMEOUT; break; }
 		uint32_t size = replay_u32(data + pos); pos += 4;
 		bool produced = false;
-		native = plus_vita_video_decoder_decode(&decoder, NULL, 0, data + pos, size,
+		size_t offset = submitted == 0 ? first_slice : 0;
+		native = plus_vita_video_decoder_decode(&decoder, patched_header,
+			submitted == 0 ? patched_size : 0, data + pos + offset, size - offset,
 			plus_vita_video_present_back_buffer(&present), PLUS_VITA_SCREEN_PITCH,
 			PLUS_VITA_SCREEN_WIDTH, PLUS_VITA_SCREEN_HEIGHT, &produced);
-		pos += size; submitted++;
+		pos += size;
 		decode_us += decoder.last_decode_us;
 		if(decoder.last_decode_us > max_us) max_us = decoder.last_decode_us;
 		if(native < 0) { err = CHIAKI_ERR_UNKNOWN; break; }
+		submitted++;
 		if(produced)
 		{
 			native = plus_vita_video_present_frame(&present);
@@ -2206,6 +2232,7 @@ static ChiakiErrorCode probe_replay(ChiakiLog *log)
 	/* Drain with a strict bound, including a final zero-output call. Never
 	 * count buffered frames as displayed until scanout succeeds. */
 	bool drain_complete = false;
+	if(ps3 && err == CHIAKI_ERR_SUCCESS) plus_vita_diagnostic_event("replay.drain_begin", 0);
 	for(unsigned int attempt = 0; err == CHIAKI_ERR_SUCCESS && attempt < 17; attempt++)
 	{
 		if(sceKernelGetProcessTimeWide() - started > 15000000u) { err = CHIAKI_ERR_TIMEOUT; break; }
@@ -2219,8 +2246,17 @@ static ChiakiErrorCode probe_replay(ChiakiLog *log)
 		native = plus_vita_video_present_frame(&present);
 		if(native < 0) { err = CHIAKI_ERR_UNKNOWN; break; }
 		displayed++;
+		drained++;
 	}
-	if(err == CHIAKI_ERR_SUCCESS && (!drain_complete || displayed != 300)) err = CHIAKI_ERR_INVALID_RESPONSE;
+	if(err == CHIAKI_ERR_SUCCESS && (!drain_complete || displayed != REPLAY_PICTURES))
+		err = CHIAKI_ERR_INVALID_RESPONSE;
+	if(ps3)
+	{
+		plus_vita_diagnostic_counter("replay_submitted", submitted);
+		plus_vita_diagnostic_counter("replay_displayed", displayed);
+		plus_vita_diagnostic_counter("replay_drained", drained);
+		plus_vita_diagnostic_counter("replay_drain_empty", drain_complete);
+	}
 	CHIAKI_LOGI(log, "Stream probe replay summary: submitted=%u displayed=%u native=0x%08x decode_total_us=%llu decode_max_us=%llu result=%d",
 		submitted, displayed, native, (unsigned long long)decode_us,
 		(unsigned long long)max_us, (int)err);
@@ -2245,7 +2281,7 @@ ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResul
 	PlusVitaStreamInput *input)
 {
 	if(user_stopped) *user_stopped = false;
-#if !PLUS_VITA_RELEASE_CANDIDATE && !PLUS_VITA_PS3_STARTUP_SAMPLE
+#if !PLUS_VITA_PS3_REPLAY && !PLUS_VITA_RELEASE_CANDIDATE && !PLUS_VITA_PS3_STARTUP_SAMPLE
 	if(PLUS_VITA_STREAM_PROBE_REPLAY) return probe_replay(log);
 	ChiakiErrorCode guard_test = probe_replay(log);
 	if(guard_test != CHIAKI_ERR_SUCCESS) return guard_test;
