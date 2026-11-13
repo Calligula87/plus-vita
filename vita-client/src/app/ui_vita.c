@@ -393,10 +393,12 @@ int plus_vita_app_run(void)
 			plus_vita_play_take(play,&provision,&allocation_error,&operation);
 			if(operation && operation==plus_vita_app_view(app).operation) {
 				bool user_stopped=false;
+				bool collecting_sample=allocation_error==CHIAKI_ERR_SUCCESS
+					&& plus_vita_stream_probe_collects_sample(&provision);
 				ChiakiErrorCode stream_error=allocation_error;
 				if(allocation_error==CHIAKI_ERR_SUCCESS) {
 					plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_PROGRESS,
-						.operation=operation,.play_stage=5},0);
+						.operation=operation,.play_stage=collecting_sample ? PLUS_VITA_PLAY_STAGE_PS3_SAMPLE : 5},0);
 					if(!draw(display,&flow)) { result=1; plus_vita_play_result_clear(&provision); break; }
 					session_input.controller=menu_controller;
 					stream_error=plus_vita_play_stream(&provision,
@@ -414,7 +416,9 @@ int plus_vita_app_run(void)
 					.operation=operation,.status=stream_error==CHIAKI_ERR_SUCCESS && user_stopped
 						? PLUS_VITA_RESULT_OK : stream_error==CHIAKI_ERR_CANCELED
 						? PLUS_VITA_RESULT_CANCELLED : allocation_error!=CHIAKI_ERR_SUCCESS
-						? plus_vita_play_failure(allocation_error,&provision) : PLUS_VITA_RESULT_STREAM_STOPPED},0);
+					? plus_vita_play_failure(allocation_error,&provision) : collecting_sample
+					? (stream_error==CHIAKI_ERR_SUCCESS ? PLUS_VITA_RESULT_SAMPLE_SAVED : PLUS_VITA_RESULT_SAMPLE_INCOMPLETE)
+					: PLUS_VITA_RESULT_STREAM_STOPPED},0);
 				SceCtrlData released={0};
 				menu_read(&menu_controller,&released);
 				plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PAD_RESET,

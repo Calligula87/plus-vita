@@ -71,15 +71,29 @@ static void privacy_entrypoints(void)
 	plus_vita_diagnostic_progress(oversized);
 	plus_vita_diagnostic_chiaki_log(CHIAKI_LOG_WARNING,oversized,NULL);
 	plus_vita_diagnostic_event("allocation.complete",-1);
+	plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_PS3_FEEDBACK);
+	plus_vita_diagnostic_counter("decrypted_video_packets", 0);
+	plus_vita_diagnostic_counter("decrypted_audio_packets", 0);
+	plus_vita_diagnostic_counter("capture_frames", 0);
+	plus_vita_diagnostic_counter("heartbeats_sent", 59);
+	plus_vita_diagnostic_counter("feedback_state_sends", 299);
 	plus_vita_diagnostic_end();
 	FILE *f=fopen("plus-vita-allocation.log","rb"); assert(f);
 	char line[2048]; bool complete=false;
+	const char *const expected[]={
+		"code=20 stream.startup.ps3_feedback_started", "final counter=decrypted_video_packets count=0",
+		"final counter=decrypted_audio_packets count=0", "final counter=capture_frames count=0",
+		"final counter=heartbeats_sent count=59", "final counter=feedback_state_sends count=299"
+	};
+	unsigned next=0;
 	while(fgets(line,sizeof(line),f)) {
 		for(unsigned i=0;i<sizeof(canaries)/sizeof(canaries[0]);i++) assert(!strstr(line,canaries[i]));
 		assert(!strstr(line,"canary") && !strstr(line,"QQQQ") && !strstr(line,"123456789"));
 		if(strstr(line,"allocation.complete")) complete=true;
+		if(next < sizeof(expected)/sizeof(expected[0]) && strstr(line,expected[next])) next++;
 	}
-	assert(!ferror(f)); fclose(f); assert(complete);
+	assert(!ferror(f)); fclose(f);
+	assert(complete && next==sizeof(expected)/sizeof(expected[0]));
 }
 static void bounded_file(void)
 {

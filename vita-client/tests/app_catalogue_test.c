@@ -53,6 +53,16 @@ int main(void) {
  assert(strstr(view.actions[1].label,"GOD"));
  choose(app,PLUS_VITA_ACTION_GAME);
  play=choose(app,PLUS_VITA_ACTION_PLAY);
+ plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_PROGRESS,
+  .operation=play.operation,.play_stage=PLUS_VITA_PLAY_STAGE_PS3_SAMPLE});
+ assert(strstr(plus_vita_app_view(app).body,"No gameplay will appear"));
+ plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,
+  .operation=play.operation,.status=PLUS_VITA_RESULT_SAMPLE_SAVED});
+ view=plus_vita_app_view(app);
+ assert(view.screen==PLUS_VITA_APP_DETAILS && strstr(view.body,"PS3 sample saved"));
+ plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK});
+ choose(app,PLUS_VITA_ACTION_GAME);
+ play=choose(app,PLUS_VITA_ACTION_PLAY);
  plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK});
  plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PLAY_ENDED,.operation=play.operation,.status=PLUS_VITA_RESULT_OK});
  assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_CATALOGUE);

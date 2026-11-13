@@ -407,6 +407,7 @@ void plus_vita_diagnostic_stream_startup(PlusVitaStreamStartup status)
 		[PLUS_VITA_STREAM_STARTUP_MEDIA_DECRYPT_FAILED] = "stream.startup.media_decrypt_failed",
 		[PLUS_VITA_STREAM_STARTUP_MEDIA_INVALID] = "stream.startup.media_invalid",
 		[PLUS_VITA_STREAM_STARTUP_FIRST_FRAME_TIMEOUT] = "stream.startup.first_frame_timeout",
+		[PLUS_VITA_STREAM_STARTUP_PS3_FEEDBACK] = "stream.startup.ps3_feedback_started",
 	};
 	if((unsigned)status < sizeof(names) / sizeof(names[0]) && names[status])
 		write_line("EVENT", names[status], (int)status);
@@ -451,7 +452,9 @@ void plus_vita_diagnostic_counter(const char *name, uint64_t count)
 	static const char *const names[]={"displayed","submitted","audio_frames","fec_repaired",
 		"fec_failed","reorder_late","reorder_missing","input_updates","input_poll_failures",
 		"feedback_published","feedback_consumed","feedback_coalesced","feedback_send_failures",
-		"feedback_logs_suppressed","input_neutral_consumed","input_neutral_failed","recovery_episodes"};
+		"feedback_logs_suppressed","input_neutral_consumed","input_neutral_failed","recovery_episodes",
+		"decrypted_video_packets","decrypted_audio_packets","capture_frames","heartbeats_sent",
+		"feedback_state_sends"};
 	const char *fixed=known_name(name,names,sizeof(names)/sizeof(names[0]));
 	if(!fixed) return;
 	char record[128];
