@@ -374,6 +374,7 @@ void plus_vita_diagnostic_event(const char *event, int code)
 {
 	static const char *const names[]={"allocation.begin","allocation.complete","allocation.stage",
 		"allocation.network.init","allocation.network.release","stream_probe.begin","stream_probe.complete",
+		"stream.video.slice_guard_rejected",
 		"replay.begin","replay.complete","replay.input_validated","replay.decoder_ready",
 		"replay.drain_begin","recovery.wifi","recovery.sleep","app.start","app.stop",
 		"ui.stage","account.complete"};

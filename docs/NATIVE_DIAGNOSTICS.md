@@ -123,3 +123,21 @@ records `replay.complete` code 0, 300 each in `replay_submitted` and
 `replay_drained` counts pictures displayed during the drain.
 `tools/test-h264-config.sh` also accepts the private replay file as an
 optional local regression fixture.
+
+On physical Vita, replay build `ps3-replay-53` submitted and displayed all
+300 pictures, including six displayed during the drain. The final drain was
+empty, the result was code 0 in 5.632 seconds, and all 35 diagnostic records
+persisted. The maintainer confirmed the picture.
+
+Issue #54 uses `-DPLUS_VITA_PS3_LIVE=ON` to build **Plus-Vita PS3 Play**
+(`PLVTPS354`, log identity `ps3-live-54`). In normal catalogue Play, PS3
+sessions use the audited header and slice guard and start controller feedback
+and one-second heartbeats after STREAMINFO. They allow up to 60 seconds for
+the first picture. A rejected slice records `stream.video.slice_guard_rejected`
+with a fixed invalid-data code. Existing packet and heartbeat counters cover
+the PS3 media handoff. PS4 uses its existing decoder and startup policy.
+
+On physical Vita, launch the original PS3 title and verify picture, sound,
+controls, stop and catalogue return. Relaunch it and repeat on a known-good
+PS4 title in the same VPK. Copy `ux0:data/plus-vita-allocation.log` after each
+run, before the next Play or app startup replaces it.

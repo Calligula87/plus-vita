@@ -122,6 +122,33 @@ static void offline_attempt_log(bool retry)
 
 static PlusVitaStreamStartup startup_failure;
 
+static void live_header_guards(ChiakiLog *log)
+{
+	const uint8_t ps3_header[] = {
+		0,0,0,1,0x67,0x64,0x00,0x29,0xac,0xb1,0x40,0x28,0x02,0xdd,0x21,0x06,
+		0x06,0x06,0x40,0x00,0x00,0x03,0x00,0x40,0x00,0x00,0x1e,0x23,0xc6,0x0c,0x8a,0x80,
+		0,0,0,1,0x68,0xef,0x3c,0xb0,
+	};
+	PlusVitaStreamInfo info = { .video_header_size = sizeof(ps3_header) };
+	memcpy(info.video_header, ps3_header, sizeof(ps3_header));
+	PlusVitaH264Guard guard = { 0 };
+	uint8_t patched[64];
+	size_t size;
+	assert(plus_vita_stream_info_guard_header(&info, log, true, &guard, patched, sizeof(patched), &size));
+	assert(guard.ps3);
+	assert(!plus_vita_stream_info_guard_header(&info, log, false, &guard, patched, sizeof(patched), &size));
+	const uint8_t ps4_header[] = {
+		0,0,0,1,0x67,0x4d,0x40,0x28,0x91,0x8a,0x01,0x40,0x16,0xec,0x05,0xa8,0x08,
+		0x08,0x0a,0x00,0x00,0x0f,0xa4,0x00,0x07,0x53,0x01,0x13,0x43,0xc7,0xc5,0x40,
+		0,0,0,1,0x68,0xee,0x3c,0x80,
+	};
+	memcpy(info.video_header, ps4_header, sizeof(ps4_header));
+	info.video_header_size = sizeof(ps4_header);
+	assert(plus_vita_stream_info_guard_header(&info, log, false, &guard, patched, sizeof(patched), &size));
+	assert(!guard.ps3);
+	assert(!plus_vita_stream_info_guard_header(&info, log, true, &guard, patched, sizeof(patched), &size));
+}
+
 static bool encode_resolution(pb_ostream_t *stream, const pb_field_t *field, void *const *arg)
 {
 	return pb_encode_tag_for_field(stream, field)
@@ -177,7 +204,8 @@ static void receive_streaminfo(ChiakiLog *log, const char *private_reason)
 		assert(accepted);
 		uint8_t patched[PLUS_VITA_STREAM_VIDEO_HEADER_MAX];
 		size_t size;
-		assert(!plus_vita_stream_info_guard_header(&info, log, patched, sizeof(patched), &size));
+		PlusVitaH264Guard guard = { 0 };
+		assert(!plus_vita_stream_info_guard_header(&info, log, false, &guard, patched, sizeof(patched), &size));
 	} else {
 		assert(!accepted);
 		assert(info.disconnected==(startup_failure==PLUS_VITA_STREAM_STARTUP_STREAMINFO_INTERRUPTED));
@@ -252,6 +280,8 @@ static void play_startup_attempt_log(PlusVitaStreamStartup status, const char *f
 }
 int main(void)
 {
+	ChiakiLog log = { 0 };
+	live_header_guards(&log);
 	offline_attempt_log(false);
 	offline_attempt_log(true);
 	/* Match the real adapter order: input, recovery poll, pending local effect,

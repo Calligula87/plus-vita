@@ -31,6 +31,7 @@ include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 option(PLUS_VITA_DIAGNOSTIC_APP "Launch the historical diagnostic/test interface" OFF)
 option(PLUS_VITA_PS3_STARTUP_SAMPLE "Collect PS3 stream samples from graphical Play" OFF)
 option(PLUS_VITA_PS3_REPLAY "Replay the private audited PS3 sample on Vita" OFF)
+option(PLUS_VITA_PS3_LIVE "Build the v001 graphical PS3 playback candidate" OFF)
 option(PLUS_VITA_FONT_COMPARISON "Include the synthetic PVF/FreeType comparison screen" OFF)
 option(PLUS_VITA_FONT_DEFAULT_FREETYPE "Use the Vita-tested B font on normal graphical screens" ON)
 if(PLUS_VITA_DIAGNOSTIC_APP)
@@ -59,6 +60,14 @@ if(PLUS_VITA_PS3_REPLAY)
   set(VITA_APP_NAME "Plus-Vita PS3 Replay")
   set(VITA_TITLEID "PLVTPS353")
   set(PLUS_VITA_ENTRY_SOURCE src/app/replay_main.c)
+endif()
+if(PLUS_VITA_PS3_LIVE)
+  if(PLUS_VITA_PS3_STARTUP_SAMPLE OR PLUS_VITA_PS3_REPLAY OR PLUS_VITA_DIAGNOSTIC_APP)
+    message(FATAL_ERROR "The PS3 playback candidate requires the graphical app")
+  endif()
+  set(VITA_APP_NAME "Plus-Vita PS3 Play")
+  set(VITA_TITLEID "PLVTPS354")
+  set(PLUS_VITA_PUBLIC_VERSION "v001")
 endif()
 set(PLUS_VITA_TLS_PROBE_URL "" CACHE STRING
   "Optional controlled HTTPS URL for the physical certificate-rejection test")
@@ -711,6 +720,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
   PLUS_VITA_APP_VERSION="${PLUS_VITA_PUBLIC_VERSION}"
   PLUS_VITA_PS3_STARTUP_SAMPLE=$<BOOL:${PLUS_VITA_PS3_STARTUP_SAMPLE}>
   PLUS_VITA_PS3_REPLAY=$<BOOL:${PLUS_VITA_PS3_REPLAY}>
+  PLUS_VITA_PS3_LIVE=$<BOOL:${PLUS_VITA_PS3_LIVE}>
   PLUS_VITA_RELEASE_CANDIDATE=$<BOOL:${PLUS_VITA_RELEASE_CANDIDATE}>
   PLUS_VITA_FONT_COMPARISON=$<AND:$<BOOL:${PLUS_VITA_FONT_COMPARISON}>,$<NOT:$<BOOL:${PLUS_VITA_DIAGNOSTIC_APP}>>>
   PLUS_VITA_FONT_DEFAULT_FREETYPE=$<AND:$<BOOL:${PLUS_VITA_FONT_DEFAULT_FREETYPE}>,$<NOT:$<BOOL:${PLUS_VITA_DIAGNOSTIC_APP}>>>

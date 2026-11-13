@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #ifndef PLUS_VITA_BUILD_IDENTITY_H
 #define PLUS_VITA_BUILD_IDENTITY_H
-#if PLUS_VITA_PS3_REPLAY
+#if PLUS_VITA_PS3_LIVE
+#define PLUS_VITA_APP_BUILD "ps3-live-54"
+#define PLUS_VITA_BUILD_LABEL "PS3 PLAYBACK #54"
+#define PLUS_VITA_ABOUT_STATUS "v001 PS3 playback candidate."
+#elif PLUS_VITA_PS3_REPLAY
 #define PLUS_VITA_APP_BUILD "ps3-replay-53"
 #define PLUS_VITA_BUILD_LABEL "PS3 REPLAY #53"
 #define PLUS_VITA_ABOUT_STATUS "Audited offline PS3 decoder replay."

@@ -4,6 +4,7 @@
 
 #include <chiaki/audio.h>
 #include <chiaki/log.h>
+#include "h264_config.h"
 
 #define PLUS_VITA_STREAM_VIDEO_HEADER_MAX 2048
 
@@ -21,6 +22,6 @@ typedef struct {
 bool plus_vita_stream_info_decode(const uint8_t *buf, size_t size, ChiakiLog *log,
 	PlusVitaStreamInfo *info);
 bool plus_vita_stream_info_guard_header(const PlusVitaStreamInfo *info, ChiakiLog *log,
-	uint8_t *patched, size_t capacity, size_t *patched_size);
+	bool ps3, PlusVitaH264Guard *guard, uint8_t *patched, size_t capacity, size_t *patched_size);
 
 #endif

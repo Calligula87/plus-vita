@@ -85,6 +85,8 @@ static void privacy_entrypoints(void)
 	plus_vita_diagnostic_event("replay.input_validated", 0);
 	plus_vita_diagnostic_event("replay.decoder_ready", 0);
 	plus_vita_diagnostic_event("replay.drain_begin", 0);
+	plus_vita_diagnostic_event("stream.video.slice_guard_rejected", CHIAKI_ERR_INVALID_DATA);
+	plus_vita_diagnostic_event("stream.video.slice_guard_rejected-canary", 0);
 	plus_vita_diagnostic_end();
 	FILE *f=fopen("plus-vita-allocation.log","rb"); assert(f);
 	char line[2048]; bool complete=false;
@@ -94,7 +96,8 @@ static void privacy_entrypoints(void)
 		"final counter=heartbeats_sent count=59", "final counter=feedback_state_sends count=299",
 		"final counter=replay_submitted count=300", "final counter=replay_displayed count=300",
 		"final counter=replay_drained count=3", "final counter=replay_drain_empty count=1",
-		"code=0 replay.input_validated", "code=0 replay.decoder_ready", "code=0 replay.drain_begin"
+		"code=0 replay.input_validated", "code=0 replay.decoder_ready", "code=0 replay.drain_begin",
+		"code=11 stream.video.slice_guard_rejected"
 	};
 	unsigned next=0;
 	while(fgets(line,sizeof(line),f)) {

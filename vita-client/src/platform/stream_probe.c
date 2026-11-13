@@ -126,6 +126,7 @@ typedef struct plus_vita_stream_probe_t
 	PlusVitaStreamProbeState state;
 	bool closing;
 	bool capture_only;
+	bool ps3_live;
 	uint8_t handshake_key[CHIAKI_HANDSHAKE_KEY_SIZE];
 	const ChiakiCloudProvisionResult *provision;
 	unsigned int video_packets;
@@ -675,6 +676,7 @@ static ChiakiErrorCode probe_video_submit(PlusVitaStreamProbe *probe,
 		probe_video_assembly_reset(assembly);
 		return CHIAKI_ERR_SUCCESS;
 	}
+	bool guarded_idr = false;
 	if(!probe->capture_only)
 	{
 		if(!probe->reference_guard.started && !probe_has_nal(frame, frame_size, 5))
@@ -738,6 +740,8 @@ static ChiakiErrorCode probe_video_submit(PlusVitaStreamProbe *probe,
 		uint32_t idr_before = probe->reference_guard.idr_count;
 		if(!plus_vita_h264_guard_frame(&probe->reference_guard, frame, frame_size))
 		{
+			if(probe->ps3_live)
+				plus_vita_diagnostic_event("stream.video.slice_guard_rejected", CHIAKI_ERR_INVALID_DATA);
 			CHIAKI_LOGE(probe->log,
 				"Stream probe LIVE_GUARD_REJECT reason=%s wire_frame=%u previous_frame_num=%u observed_frame_num=%u nal=%u slice=%u mb=%u bytes=%lu incomplete=%u; AU not submitted",
 				probe->reference_guard.reason, (unsigned int)assembly->frame_index,
@@ -747,7 +751,8 @@ static ChiakiErrorCode probe_video_submit(PlusVitaStreamProbe *probe,
 			free(frame);
 			return CHIAKI_ERR_INVALID_DATA;
 		}
-		if(probe->reference_guard.idr_count != idr_before)
+		guarded_idr = probe->reference_guard.idr_count != idr_before;
+		if(guarded_idr)
 			CHIAKI_LOGI(probe->log, "Stream probe validated IDR reset count=%u wire_frame=%u frame_num=0 long_term=0",
 				probe->reference_guard.idr_count, (unsigned int)assembly->frame_index);
 		if(probe->awaiting_recovery_idr)
@@ -764,8 +769,16 @@ static ChiakiErrorCode probe_video_submit(PlusVitaStreamProbe *probe,
 	else
 		probe_capture_frame(probe, frame, frame_size, assembly->frame_index);
 	ChiakiBitstreamSlice slice = { 0 };
-	bool parsed = probe->bitstream_ready && chiaki_bitstream_slice(
-		&probe->bitstream, frame, (unsigned int)frame_size, &slice);
+	bool parsed;
+	if(probe->ps3_live)
+	{
+		/* The audited guard has already classified all VCL NALs in this AU. */
+		slice.slice_type = guarded_idr ? CHIAKI_BITSTREAM_SLICE_I : CHIAKI_BITSTREAM_SLICE_P;
+		parsed = true;
+	}
+	else
+		parsed = probe->bitstream_ready && chiaki_bitstream_slice(
+			&probe->bitstream, frame, (unsigned int)frame_size, &slice);
 	if(!probe->capture_only && !parsed)
 	{
 		CHIAKI_LOGE(probe->log, "Stream probe LIVE_GUARD_REJECT: transport slice parser disagrees; AU not submitted");
@@ -864,6 +877,21 @@ static ChiakiErrorCode probe_send_streaminfo_ack(PlusVitaStreamProbe *probe)
 	tkproto_TakionMessage msg = { 0 };
 	msg.type = tkproto_TakionMessage_PayloadType_STREAMINFOACK;
 	return probe_send_protobuf(probe, &msg, 9);
+}
+
+static ChiakiErrorCode probe_send_heartbeat_if_due(PlusVitaStreamProbe *probe,
+	uint64_t now, uint64_t *last_sent)
+{
+	if(probe->state != PROBE_EXPECT_MEDIA || now - *last_sent < 1000)
+		return CHIAKI_ERR_SUCCESS;
+	tkproto_TakionMessage heartbeat = { .type = tkproto_TakionMessage_PayloadType_HEARTBEAT };
+	ChiakiErrorCode err = probe_send_protobuf(probe, &heartbeat, 1);
+	if(err == CHIAKI_ERR_SUCCESS)
+	{
+		*last_sent = now;
+		probe->heartbeats_sent++;
+	}
+	return err;
 }
 
 static ChiakiErrorCode probe_send_controller(PlusVitaStreamProbe *probe)
@@ -1200,7 +1228,7 @@ static void probe_handle_streaminfo(PlusVitaStreamProbe *probe, uint8_t *buf,
 		uint8_t patched[PLUS_VITA_STREAM_VIDEO_HEADER_MAX];
 		size_t patched_size = 0;
 		if(!plus_vita_stream_info_guard_header(&context, probe->log,
-			patched, sizeof(patched), &patched_size))
+			probe->ps3_live, &probe->reference_guard, patched, sizeof(patched), &patched_size))
 		{
 			probe->state = PROBE_FAILED;
 			chiaki_cond_signal(&probe->cond);
@@ -1309,8 +1337,17 @@ static void probe_takion_cb(ChiakiTakionEvent *event, void *user)
 			pb_istream_t stream = pb_istream_from_buffer(event->data.buf,
 				event->data.buf_size);
 			bool decoded = pb_decode(&stream, tkproto_TakionMessage_fields, &msg);
-			if(decoded && probe->capture_only && msg.type == tkproto_TakionMessage_PayloadType_DISCONNECT)
-				probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_MEDIA_DISCONNECTED);
+			if(decoded && (probe->capture_only || probe->ps3_live)
+				&& msg.type == tkproto_TakionMessage_PayloadType_DISCONNECT)
+			{
+				if(probe->capture_only || !probe->video_decoded_frame)
+					probe_startup_failed(probe, PLUS_VITA_STREAM_STARTUP_MEDIA_DISCONNECTED);
+				else
+				{
+					probe->state = PROBE_FAILED;
+					chiaki_cond_signal(&probe->cond);
+				}
+			}
 			else if(decoded && msg.type == tkproto_TakionMessage_PayloadType_CONNECTIONQUALITY
 				&& msg.has_connection_quality_payload)
 			{
@@ -1522,6 +1559,8 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 	uint64_t stop_chord_since = 0;
 #endif
 	uint64_t last_feedback = started;
+	uint64_t last_heartbeat = started;
+	const uint64_t first_frame_timeout = probe->ps3_live ? PS3_MEDIA_START_TIMEOUT_MS : PROBE_TIMEOUT_MS;
 	uint64_t first_display = 0, last_display = 0;
 	unsigned int displayed = 0;
 	unsigned int decoded = 0, presentation_skips = 0;
@@ -1556,6 +1595,8 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 					break;
 				}
 				controller_feedback_ready = true;
+				if(probe->ps3_live)
+					plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_PS3_FEEDBACK);
 				CHIAKI_LOGI(probe->log, "Stream probe Vita gameplay input enabled rear_L2_R2_L3_R3=%d front_touchpad=%d",
 					rear_ready ? 1 : 0, front_ready ? 1 : 0);
 #if PLUS_VITA_INPUT_WORKER
@@ -1682,6 +1723,11 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 			err = CHIAKI_ERR_INVALID_RESPONSE;
 			break;
 		}
+		if(probe->ps3_live)
+		{
+			err = probe_send_heartbeat_if_due(probe, now, &last_heartbeat);
+			if(err != CHIAKI_ERR_SUCCESS) break;
+		}
 		if(probe->state == PROBE_EXPECT_MEDIA && now - last_feedback >= 200)
 		{
 			probe_reception_flush(probe, false);
@@ -1759,7 +1805,7 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 			output_deadline_base = probe->recovery_resumed_ms;
 		uint64_t output_idle_ms = now >= output_deadline_base
 			? now - output_deadline_base : 0;
-		if((!first_display && now - started >= PROBE_TIMEOUT_MS)
+		if((!first_display && now - started >= first_frame_timeout)
 			|| (first_display && !probe->awaiting_recovery_idr && output_idle_ms >= 3000))
 		{
 			CHIAKI_LOGE(probe->log,
@@ -2033,14 +2079,8 @@ static ChiakiErrorCode probe_capture_wait(PlusVitaStreamProbe *probe,
 			sender_ready = true;
 			plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_PS3_FEEDBACK);
 		}
-		if(probe->state == PROBE_EXPECT_MEDIA && now - last_heartbeat >= 1000)
-		{
-			tkproto_TakionMessage heartbeat = { .type = tkproto_TakionMessage_PayloadType_HEARTBEAT };
-			result = probe_send_protobuf(probe, &heartbeat, 1);
-			if(result != CHIAKI_ERR_SUCCESS) break;
-			last_heartbeat = now;
-			probe->heartbeats_sent++;
-		}
+		result = probe_send_heartbeat_if_due(probe, now, &last_heartbeat);
+		if(result != CHIAKI_ERR_SUCCESS) break;
 		if(probe->state == PROBE_EXPECT_MEDIA)
 		{
 			result = probe_video_drain(probe, false);
@@ -2094,7 +2134,7 @@ static ChiakiErrorCode probe_capture_wait(PlusVitaStreamProbe *probe,
 	return valid ? CHIAKI_ERR_SUCCESS : result == CHIAKI_ERR_SUCCESS ? CHIAKI_ERR_INVALID_DATA : result;
 }
 
-#if PLUS_VITA_PS3_REPLAY || (!PLUS_VITA_RELEASE_CANDIDATE && !PLUS_VITA_PS3_STARTUP_SAMPLE)
+#if PLUS_VITA_PS3_REPLAY || (!PLUS_VITA_RELEASE_CANDIDATE && !PLUS_VITA_PS3_STARTUP_SAMPLE && !PLUS_VITA_PS3_LIVE)
 static uint32_t replay_u32(const uint8_t *p)
 {
 	return (uint32_t)p[0] | ((uint32_t)p[1] << 8)
@@ -2281,7 +2321,7 @@ ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResul
 	PlusVitaStreamInput *input)
 {
 	if(user_stopped) *user_stopped = false;
-#if !PLUS_VITA_PS3_REPLAY && !PLUS_VITA_RELEASE_CANDIDATE && !PLUS_VITA_PS3_STARTUP_SAMPLE
+#if !PLUS_VITA_PS3_REPLAY && !PLUS_VITA_RELEASE_CANDIDATE && !PLUS_VITA_PS3_STARTUP_SAMPLE && !PLUS_VITA_PS3_LIVE
 	if(PLUS_VITA_STREAM_PROBE_REPLAY) return probe_replay(log);
 	ChiakiErrorCode guard_test = probe_replay(log);
 	if(guard_test != CHIAKI_ERR_SUCCESS) return guard_test;
@@ -2305,6 +2345,7 @@ ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResul
 	}
 	PlusVitaStreamProbe probe = { .log = log, .provision = provision,
 		.state = PROBE_CONNECTING, .input = input,
+		.ps3_live = PLUS_VITA_PS3_LIVE && !strcmp(provision->platform, "ps3"),
 		.capture_only = plus_vita_stream_probe_collects_sample(provision) };
 	if(input && plus_vita_control_layout_valid(&input->layout)) probe.controls=input->layout;
 	else plus_vita_control_layout_defaults(&probe.controls);
@@ -2432,12 +2473,15 @@ ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResul
 	chiaki_mutex_unlock(&probe.mutex);
 	chiaki_takion_close(&probe.takion);
 	if(!probe.capture_only) probe_latency_dump(&probe);
-	else
+	if(probe.ps3_live || probe.capture_only)
 	{
 		plus_vita_diagnostic_counter("decrypted_video_packets", probe.video_packets);
 		plus_vita_diagnostic_counter("decrypted_audio_packets", probe.audio_packets);
-		plus_vita_diagnostic_counter("capture_frames", probe.capture_frames);
 		plus_vita_diagnostic_counter("heartbeats_sent", probe.heartbeats_sent);
+	}
+	if(probe.capture_only)
+	{
+		plus_vita_diagnostic_counter("capture_frames", probe.capture_frames);
 #if PLUS_VITA_INPUT_WORKER
 		plus_vita_diagnostic_counter("feedback_send_failures", probe.latency.feedback.send_failures);
 		plus_vita_diagnostic_counter("feedback_state_sends", probe.latency.feedback.state_send_call.count);

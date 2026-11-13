@@ -103,11 +103,18 @@ bool plus_vita_stream_info_decode(const uint8_t *buf, size_t size, ChiakiLog *lo
 }
 
 bool plus_vita_stream_info_guard_header(const PlusVitaStreamInfo *info, ChiakiLog *log,
-	uint8_t *patched, size_t capacity, size_t *patched_size)
+	bool ps3, PlusVitaH264Guard *guard, uint8_t *patched, size_t capacity, size_t *patched_size)
 {
-	if(plus_vita_h264_guard_header(info->video_header, info->video_header_size,
-		patched, capacity, patched_size))
+	bool accepted = ps3
+		? plus_vita_h264_guard_ps3_header(guard, info->video_header, info->video_header_size,
+			patched, capacity, patched_size)
+		: guard && plus_vita_h264_guard_header(info->video_header, info->video_header_size,
+			patched, capacity, patched_size);
+	if(accepted)
+	{
+		if(!ps3) *guard = (PlusVitaH264Guard){ 0 };
 		return true;
+	}
 	CHIAKI_LOGE(log, "Stream probe LIVE_GUARD_REJECT: parameter sets differ from audited sample");
 	plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_HEADER_GUARD_REJECTED);
 	return false;
