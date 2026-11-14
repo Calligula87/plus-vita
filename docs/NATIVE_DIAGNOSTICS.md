@@ -142,3 +142,11 @@ On physical Vita, launch the original PS3 title and verify picture, sound,
 controls, stop and catalogue return. Relaunch it and repeat on a known-good
 PS4 title in the same VPK. Copy `ux0:data/plus-vita-allocation.log` after each
 run, before the next Play or app startup replaces it.
+
+The maintainer reported that both the original PS3 title and the known-good
+PS4 title passed the playback, stop, catalogue return and relaunch checks on
+`ps3-live-54-2` (commit `77afd68`, package version `00.02`). The PS4 result
+agrees with the accepted public v001 playback baseline by tester observation.
+The earlier `ps3-live-54` PS3 run displayed 9,162 pictures and processed
+16,368 audio frames before a slice guard rejection ended the session.
+The updated build's run lengths and final counters were unavailable over FTP.
