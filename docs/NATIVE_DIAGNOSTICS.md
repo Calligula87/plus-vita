@@ -149,4 +149,10 @@ PS4 title passed the playback, stop, catalogue return and relaunch checks on
 agrees with the accepted public v001 playback baseline by tester observation.
 The earlier `ps3-live-54` PS3 run displayed 9,162 pictures and processed
 16,368 audio frames before a slice guard rejection ended the session.
-The updated build's run lengths and final counters were unavailable over FTP.
+The maintainer supplied one `ps3-live-54-2` log. Its startup and final
+counters indicate the PS4 path because the PS3 feedback event and heartbeat
+counter are absent and all 1,509 records persisted without drops. The run
+displayed 7,632 pictures and processed 16,305 audio frames in 2 minutes
+43 seconds from stream probe start to completion. It consumed neutral input
+on exit, recorded zero feedback send failures and completed with code 0.
+The updated PS3 run remains supported by the maintainer's report.
