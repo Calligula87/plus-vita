@@ -431,6 +431,24 @@ static const char *known_name(const char *name, const char *const *names, unsign
 	return NULL;
 }
 
+void plus_vita_diagnostic_slice_guard_rejected(const char *reason)
+{
+	static const char *const reasons[] = {
+		"INVALID_BOUNDS", "ANNEXB_PREFIX", "FORBIDDEN_NAL_BIT",
+		"UNSUPPORTED_OR_INBAND_PARAMETER_NAL", "NAL_REF_IDC", "EMULATION_PREVENTION",
+		"TRUNCATED_SLICE_HEADER", "PPS_ID", "MACROBLOCK_BOUNDS", "SLICE_TYPE",
+		"MISSING_FIRST_SLICE", "IDR_FRAME_NUM", "IDR_REQUIRED", "FRAME_NUM_GAP",
+		"SLICE_ORDER_OR_PICTURE_MISMATCH", "IDR_PICTURE_ID_MISMATCH", "LONG_TERM_IDR",
+		"ACTIVE_REF_OVERRIDE", "REF_LIST_MODIFICATION", "WEIGHT_TABLE",
+		"ADAPTIVE_REFERENCE_MARKING", "TRUNCATED_REFERENCE_HEADER", "NO_VCL_PICTURE",
+	};
+	const char *fixed = known_name(reason, reasons, sizeof(reasons) / sizeof(reasons[0]));
+	char record[96];
+	snprintf(record, sizeof(record), "stream.video.slice_guard_rejected reason=%s",
+		fixed ? fixed : "UNKNOWN");
+	write_line("EVENT", record, CHIAKI_ERR_INVALID_DATA);
+}
+
 void plus_vita_diagnostic_metric(const char *name, const PlusVitaLatencyStats *stats)
 {
 	static const char *const names[]={"input_poll_gap","input_publish_call","main_mutex_wait",

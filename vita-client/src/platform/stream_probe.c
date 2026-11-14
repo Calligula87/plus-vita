@@ -741,7 +741,7 @@ static ChiakiErrorCode probe_video_submit(PlusVitaStreamProbe *probe,
 		if(!plus_vita_h264_guard_frame(&probe->reference_guard, frame, frame_size))
 		{
 			if(probe->ps3_live)
-				plus_vita_diagnostic_event("stream.video.slice_guard_rejected", CHIAKI_ERR_INVALID_DATA);
+				plus_vita_diagnostic_slice_guard_rejected(probe->reference_guard.reason);
 			CHIAKI_LOGE(probe->log,
 				"Stream probe LIVE_GUARD_REJECT reason=%s wire_frame=%u previous_frame_num=%u observed_frame_num=%u nal=%u slice=%u mb=%u bytes=%lu incomplete=%u; AU not submitted",
 				probe->reference_guard.reason, (unsigned int)assembly->frame_index,

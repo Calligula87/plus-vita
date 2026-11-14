@@ -130,11 +130,12 @@ empty, the result was code 0 in 5.632 seconds, and all 35 diagnostic records
 persisted. The maintainer confirmed the picture.
 
 Issue #54 uses `-DPLUS_VITA_PS3_LIVE=ON` to build **Plus-Vita PS3 Play**
-(`PLVTPS354`, log identity `ps3-live-54`). In normal catalogue Play, PS3
+(`PLVTPS354`, log identity `ps3-live-54-2`). In normal catalogue Play, PS3
 sessions use the audited header and slice guard and start controller feedback
 and one-second heartbeats after STREAMINFO. They allow up to 60 seconds for
 the first picture. A rejected slice records `stream.video.slice_guard_rejected`
-with a fixed invalid-data code. Existing packet and heartbeat counters cover
+with a fixed invalid-data code and an allowlisted parser reason. The original
+`ps3-live-54` build recorded the event without a reason. Existing packet and heartbeat counters cover
 the PS3 media handoff. PS4 uses its existing decoder and startup policy.
 
 On physical Vita, launch the original PS3 title and verify picture, sound,

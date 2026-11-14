@@ -17,6 +17,8 @@ extern "C" {
  * until that worker has opened and initialized storage successfully. */
 bool plus_vita_diagnostic_begin(void);
 void plus_vita_diagnostic_event(const char *event, int code);
+/* Only fixed parser reasons can be persisted. */
+void plus_vita_diagnostic_slice_guard_rejected(const char *reason);
 /* These values are persisted as startup status codes. Append new values. */
 typedef enum {
 	PLUS_VITA_STREAM_STARTUP_TRANSPORT = 0,
