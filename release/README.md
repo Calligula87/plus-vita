@@ -1,9 +1,9 @@
 # Anonymous v000 build and publication gate
 
-The next planned version is [v001, currently unreleased](../docs/V001.md).
-The maintainer has requested a hold on pushes and new VPK releases. This document
-still describes published v000; acceptance of the newer local development
-baseline does not authorize a new build, tag, release or publication.
+The latest public version is [v002](https://github.com/Calligula87/plus-vita/releases/tag/v002).
+Use `--version v002` with the committed-source builder and package checks below
+to reproduce the v002 packaging profile. The commands and acceptance records
+below describe the original v000 publication.
 
 Issue #22 prepares a candidate; it does not authorize public publication.
 The maintainer accepted the final v000 hardware checks on 2026-10-27 and then

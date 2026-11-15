@@ -11,7 +11,7 @@ PlayStation Vita**. You need your own Sony account and
 **a PlayStation Plus subscription tier that includes cloud streaming in your
 region**. 
 
-[**Download Plus-Vita**](https://github.com/Calligula87/plus-vita/releases/tag/v000)
+[**Download Plus-Vita v002**](https://github.com/Calligula87/plus-vita/releases/tag/v002)
 
 This is an unofficial homebrew project, not affiliated with Sony Interactive
 Entertainment. No PC relay is needed during play; initial sign-in uses a phone
@@ -28,7 +28,7 @@ or PC browser.
 
 ## Setup
 
-1. Download **plus-vita.vpk**, copy it to your Vita and install it using
+1. Download **plus-vita-v002.vpk**, copy it to your Vita and install it using
    VitaShell. Existing Plus-Vita installations are updated using the same app ID.
 2. On your phone or PC, sign in to your own account at
    [PlayStation](https://www.playstation.com/). Complete Sony's verification or
@@ -66,7 +66,7 @@ and firmware compatibility guidance. Wi-Fi Turbo is not required to use Plus-Vit
 ## Report an issue
 
 If you encounter a problem, [submit a GitHub ticket](https://github.com/Calligula87/plus-vita/issues/new/choose).
-Include **v000** (or the corresponding version ), the steps to reproduce it, what you expected and what happened.
+Include the app version, the steps to reproduce it, what you expected and what happened.
 
 **A session log is needed for priority investigation. Reports without a log will
 not be treated as priority.** To provide one:
@@ -84,15 +84,12 @@ See the [reporting guide](docs/REPORTING_ISSUES.md).
 
 ## Controls
 
-The table below describes the released **v000** package. Current development
-source adds D-pad menus, touch-release feedback, saved gameplay mappings and
-experimental PS TV DualShock 3/4 input. See the [development control guide](docs/CONTROLS.md)
-and [hardware validation plan](docs/FEEDBACK_CONTROLS_TEST.md); these changes have
-not yet been accepted on hardware.
+These are the default Vita controls. See the [control guide](docs/CONTROLS.md)
+for saved gameplay mappings and experimental PS TV DualShock 3/4 input.
 
 | Action | Control |
 | --- | --- |
-| Move through menus | Left stick or touch |
+| Move through menus | D-pad, left stick, or touch |
 | Select / go back | Cross / Circle |
 | Search catalogue | Triangle or Search button |
 | In-game buttons and sticks | Corresponding PlayStation controls |
@@ -102,10 +99,9 @@ not yet been accepted on hardware.
 | Stop streaming and return | Hold **START + SELECT for two seconds** |
 | Skip opening splash | Cross or touch |
 
-The D-pad works in games; it does not navigate app menus. **Settings and help**
-contains the controller guide, account controls, app version and log status.
-The interface is English, supports one account and uses a fixed 720p stream
-profile. Stream-quality tuning and controller remapping are not included.
+**Settings and help** contains gameplay control mapping, account controls,
+the app version, and log status. The interface is English, supports one
+account, and uses a fixed 720p stream profile.
 
 ---
 
