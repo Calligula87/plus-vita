@@ -69,6 +69,7 @@ def main():
     parser.add_argument('--cmake', default='cmake')
     parser.add_argument('--ninja', default='ninja')
     parser.add_argument('--export-only', action='store_true')
+    parser.add_argument('--version', choices=('v000', 'v002'), default='v000')
     args = parser.parse_args()
     if not args.export_only:
         for name in ('cmake', 'ninja'):
@@ -128,6 +129,7 @@ def main():
     configure = [args.cmake,'-S',str(source/'vita-client'),'-B',str(build),'-G','Ninja',
                  '-DCMAKE_MAKE_PROGRAM='+str(Path(args.ninja).resolve()),'-DCMAKE_BUILD_TYPE=Release',
                  '-DPLUS_VITA_RELEASE_CANDIDATE=ON','-DPLUS_VITA_DIAGNOSTIC_APP=OFF',
+                 '-DPLUS_VITA_RELEASE_VERSION='+args.version,
                  '-DPLUS_VITA_FONT_COMPARISON=OFF','-DPLUS_VITA_INPUT_WORKER=ON',
                  '-DPLUS_VITA_DEFERRED_LOG=ON','-DPLUS_VITA_FONT_DEFAULT_FREETYPE=ON',
                  '-DPLUS_VITA_TLS_PROBE_URL=','-DPLUS_VITA_TLS_TRUSTED_CA_FILE=',
@@ -137,7 +139,7 @@ def main():
         for command in (configure,[args.cmake,'--build',str(build),'--parallel','4']):
             subprocess.run(command,env=environment,stdout=log,stderr=log,check=True)
     original = build / 'plus_vita_smoke.vpk'
-    artifact = output / 'plus-vita-v000.vpk'
+    artifact = output / f'plus-vita-{args.version}.vpk'
     # Package timestamps and host file attributes are not release inputs.
     with zipfile.ZipFile(original) as package, zipfile.ZipFile(artifact,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as clean:
         for name in sorted(package.namelist()):
@@ -146,7 +148,8 @@ def main():
             clean.writestr(entry,package.read(name),compresslevel=9)
     identity.update({'artifact':artifact.name,'sha256':hashlib.sha256(artifact.read_bytes()).hexdigest().upper(),
                      'size_bytes':artifact.stat().st_size,'profile':'720p-input-worker-deferred-log',
-                     'public_version':'v000','hardware_gate':'pending_23'})
+                     'public_version':args.version,
+                     'hardware_gate':'pending_54' if args.version == 'v002' else 'pending_23'})
     (output/'candidate-identity.json').write_text(json.dumps(identity,indent=2)+'\n')
     print(json.dumps(identity,indent=2))
 

@@ -5,6 +5,14 @@
 
 #include <chiaki/cloudsession.h>
 #include <chiaki/log.h>
+#include "controller_vita.h"
+
+/* Layout is a session-start snapshot. Controller state is transferred between
+ * menu, connection pump and input worker only while their owners are stopped. */
+typedef struct {
+	PlusVitaControlLayout layout;
+	PlusVitaController controller;
+} PlusVitaStreamInput;
 
 #if PLUS_VITA_INPUT_WORKER && PLUS_VITA_DEFERRED_LOG
 #define PLUS_VITA_STREAM_PROBE_BUILD "live-720p-refs5-input-worker-deferred-log-1"
@@ -20,12 +28,17 @@
 #define PLUS_VITA_STREAM_PROBE_MODE "baseline"
 #endif
 #define PLUS_VITA_STREAM_PROBE_REPLAY 0
+#if PLUS_VITA_PS3_REPLAY
+ChiakiErrorCode plus_vita_stream_probe_ps3_replay(ChiakiLog *log);
+#endif
 
+bool plus_vita_stream_probe_collects_sample(const ChiakiCloudProvisionResult *provision);
 ChiakiErrorCode plus_vita_stream_probe(const ChiakiCloudProvisionResult *provision,
 	ChiakiLog *log, bool *user_stopped);
 /* The optional UI pump runs on the caller's thread while Takion connects.
  * Return false to cancel before video presentation takes over the display. */
 ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResult *provision,
-	ChiakiLog *log, bool *user_stopped, bool (*connect_pump)(void *), void *pump_user);
+	ChiakiLog *log, bool *user_stopped, bool (*connect_pump)(void *), void *pump_user,
+	PlusVitaStreamInput *input);
 
 #endif

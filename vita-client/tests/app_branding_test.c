@@ -75,6 +75,149 @@ static void splash_dismissal(PlusVitaFont *font)
 	plus_vita_branding_free(branding);plus_vita_app_destroy(app);
 	assert(remove("menu.pvi")==0 && remove("splash.pvi")==0 && remove("wordmark.pvi")==0);
 }
+static void cancelled_touch_journey(void)
+{
+	PlusVitaApp *app=plus_vita_app_create();PlusVitaUiFlow flow={.app=app};
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_DOWN,.x=2,.y=2},100);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_MOVE,.x=80,.y=420},200);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_UP,.x=80,.y=420},300);
+	assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_WELCOME);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_DOWN,.x=80,.y=420},310);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_INTERRUPTED,.status=PLUS_VITA_RESULT_SLEEP},320);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_UP,.x=80,.y=420},330);
+	assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_WELCOME);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_DOWN,.x=80,.y=420},400);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_START},500);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_UP,.x=80,.y=460},600);
+	assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_AUTHORIZING);
+	assert(plus_vita_ui_flow_take(&flow).kind==PLUS_VITA_EFFECT_LOAD_ACCOUNT);
+	plus_vita_app_destroy(app);
+}
+
+static bool flow_action(PlusVitaUiFlow *flow,PlusVitaAppAction action,uint64_t *clock)
+{
+	*clock+=150000;plus_vita_ui_flow_tick(flow,*clock);
+	PlusVitaAppView view=plus_vita_app_view(flow->app);
+	for(size_t i=0;i<view.action_count;i++) if(view.actions[i].id==action) {
+		plus_vita_ui_flow_event(flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_DOWN,.x=view.actions[i].x+10,.y=view.actions[i].y+10},*clock);
+		return plus_vita_ui_flow_event(flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_UP,.x=view.actions[i].x+10,.y=view.actions[i].y+10},++*clock);
+	}
+	assert(!"Expected visible flow action");return false;
+}
+
+static void bindings_page_journey(PlusVitaFont *font)
+{
+	PlusVitaApp *app=plus_vita_app_create();PlusVitaUiFlow flow={.app=app};uint64_t clock=100;
+	assert(flow_action(&flow,PLUS_VITA_ACTION_SETTINGS,&clock));
+	assert(flow_action(&flow,PLUS_VITA_ACTION_CONTROL_LAYOUT,&clock));
+	assert(flow_action(&flow,PLUS_VITA_ACTION_BINDINGS,&clock));
+	PlusVitaAppView view=plus_vita_app_view(app);
+	assert(view.list_total==PLUS_VITA_INPUT_COUNT && view.list_first==0);
+	assert(view.list_count==5 && view.focus==0);
+	for(unsigned i=0;i<100;i++) {
+		plus_vita_ui_flow_tick(&flow,clock+=150000);
+		plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_DOWN},clock);
+	}
+	view=plus_vita_app_view(app);
+	assert(view.focus==PLUS_VITA_INPUT_COUNT-1 && view.list_first+view.list_count==view.list_total);
+	assert(plus_vita_ui_flow_paint(&flow,font,pixels,1024));
+	assert(pixels[(view.list_y+view.list_height-2)*1024+view.list_x+view.list_width+9]==0xff5bc6f6);
+	plus_vita_ui_flow_tick(&flow,clock+=150000);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_DOWN,.x=80,.y=280},++clock);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_MOVE,.x=80,.y=430},++clock);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_UP,.x=80,.y=430},++clock);
+	view=plus_vita_app_view(app);
+	assert(view.screen==PLUS_VITA_APP_BINDINGS && view.list_first+view.list_count<view.list_total);
+	assert(view.focus>=view.list_first && view.focus<view.list_first+view.list_count);
+	size_t retained_first=view.list_first, retained_focus=view.focus;
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_ACTIVATE},++clock);
+	assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_BIND_ACTIONS);
+	plus_vita_ui_flow_tick(&flow,clock+=150000);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_BACK},++clock);
+	view=plus_vita_app_view(app);
+	assert(view.screen==PLUS_VITA_APP_BINDINGS && view.focus==retained_focus && view.list_first==retained_first);
+	plus_vita_app_destroy(app);
+}
+
+static void ordinary_menu_journey(PlusVitaFont *font)
+{
+	PlusVitaApp *app=plus_vita_app_create();PlusVitaUiFlow flow={.app=app};uint64_t clock=100;
+	flow_action(&flow,PLUS_VITA_ACTION_SETTINGS,&clock);
+	plus_vita_ui_flow_tick(&flow,clock+=150000);
+	PlusVitaAppView view=plus_vita_app_view(app);
+	assert(view.list_total==5 && view.list_count==5 && view.list_first==0);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_UP},++clock);
+	assert(plus_vita_app_view(app).focus==0);
+	/* Combined D-pad/stick samples make one decision at the accepted repeat cadence. */
+	PlusVitaAppPad pad={.buttons=PLUS_VITA_MENU_DOWN,.left_x=128,.left_y=255,.time_us=clock};
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PAD,.pad=pad},clock);
+	assert(plus_vita_app_view(app).focus==1);
+	pad.time_us=clock+399999;plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PAD,.pad=pad},pad.time_us);
+	assert(plus_vita_app_view(app).focus==1);
+	pad.time_us=clock+400000;plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PAD,.pad=pad},pad.time_us);
+	assert(plus_vita_app_view(app).focus==2);
+	pad.time_us+=159999;plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PAD,.pad=pad},pad.time_us);
+	assert(plus_vita_app_view(app).focus==2);
+	pad.time_us++;plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_PAD,.pad=pad},pad.time_us);
+	assert(plus_vita_app_view(app).focus==3);
+	for(unsigned i=0;i<20;i++) plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_DOWN},++pad.time_us);
+	view=plus_vita_app_view(app);assert(view.focus==4);
+	assert(plus_vita_ui_flow_paint(&flow,font,pixels,1024));
+	assert(pixels[(view.list_y+10)*1024+905]!=0xff5bc6f6);
+	clock=pad.time_us+1;
+	PlusVitaAppButton row=view.actions[0];
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_DOWN,.x=row.x+30,.y=row.y+10},++clock);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_MOVE,.x=row.x+60,.y=row.y+10},++clock);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_UP,.x=row.x+60,.y=row.y+10},++clock);
+	assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_SETTINGS);
+	/* A second contact cancels the first, including a release over its target. */
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_DOWN,.x=row.x+30,.y=row.y+10},++clock);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_DOWN,.x=row.x+30,.y=row.y+10},++clock);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_UP,.x=row.x+30,.y=row.y+10},++clock);
+	assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_SETTINGS);
+	plus_vita_app_destroy(app);
+}
+
+static void touch_release_journey(PlusVitaFont *font)
+{
+	PlusVitaApp *app=plus_vita_app_create();
+	PlusVitaUiFlow flow={.app=app,.dirty=true};
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_DOWN,.x=80,.y=420},100);
+	assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_WELCOME);
+	assert(plus_vita_ui_flow_paint(&flow,font,pixels,1024));
+	assert(pixels[410*1024+70]==0xfff4b44d); /* Visible pressed state, before release. */
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_UP,.x=80,.y=420},200);
+	assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_ABOUT);
+	/* The same release cannot activate the destination screen. */
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_UP,.x=80,.y=460},300);
+	assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_ABOUT);
+	assert(plus_vita_ui_flow_paint(&flow,font,pixels,1024));
+	uint32_t initial=pixels[0];
+	assert(initial!=0xff5bc6f6); /* Transition is visible, not an instant replacement. */
+	plus_vita_ui_flow_tick(&flow,60200);
+	assert(plus_vita_ui_flow_paint(&flow,font,pixels,1024));
+	assert(pixels[0]!=initial && pixels[0]!=0xff5bc6f6);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_DOWN,.x=80,.y=460},60300);
+	plus_vita_ui_flow_tick(&flow,120200);
+	assert(plus_vita_ui_flow_paint(&flow,font,pixels,1024) && pixels[0]==0xff5bc6f6);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_UP,.x=80,.y=460},120300);
+	assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_ABOUT);
+	/* Leaving and returning to the original target keeps the gesture cancelled. */
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_DOWN,.x=80,.y=460},120400);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_MOVE,.x=2,.y=2},120500);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_MOVE,.x=80,.y=460},120600);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_UP,.x=80,.y=460},120700);
+	assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_ABOUT);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_DOWN,.x=80,.y=460},120800);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_CANCEL},120900);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_UP,.x=80,.y=460},121000);
+	assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_ABOUT);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_DOWN,.x=80,.y=460},121100);
+	plus_vita_ui_flow_event(&flow,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_TOUCH_UP,.x=80,.y=460},121200);
+	assert(plus_vita_app_view(app).screen==PLUS_VITA_APP_WELCOME);
+	plus_vita_app_destroy(app);
+}
+
 int main(void)
 {
 	memset(bitmap,255,sizeof(bitmap));
@@ -88,6 +231,10 @@ int main(void)
 	PlusVitaBranding *branding=plus_vita_branding_load("."); assert(branding);
 	PlusVitaApp *app=plus_vita_app_create(); assert(app);
 	PlusVitaFont *font=plus_vita_font_create(); assert(font);
+	touch_release_journey(font);
+	cancelled_touch_journey();
+	bindings_page_journey(font);
+	ordinary_menu_journey(font);
 	PlusVitaAppView view=plus_vita_app_view(app);
 	assert(!strcmp(view.title,"Plus-Vita"));
 	plus_vita_app_paint_with_resources(font,pixels,1024,&view,NULL,branding);

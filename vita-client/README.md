@@ -20,7 +20,7 @@ git submodule update --init --recursive
 
 ## Current graphical client
 
-New builds open a blue/gold graphical app with joystick/touch menu navigation,
+New builds open a blue/gold graphical app with D-pad/joystick/touch menu navigation,
 retained-JSON automatic sign-in and an initial catalogue.
 Circle/back retains the runtime account; the JSON stays in place and later
 launches revalidate it while Sony accepts it. Account controls include label,
@@ -38,6 +38,13 @@ The graphical app's Settings and help screen shows its build version, controller
 guide and current-session log availability. The
 [issue-reporting guide](../docs/REPORTING_ISSUES.md) explains how to copy and
 review the log before attaching it manually to GitHub.
+
+Current development source includes the #37/#38/#39 control changes: touch
+activation on release, short menu transitions, one saved gameplay layout and
+experimental DualShock 3/4 input on PS TV. See the [control guide](../docs/CONTROLS.md)
+and [hardware checks](../docs/FEEDBACK_CONTROLS_TEST.md). The accepted v000 package
+is the comparison reference; host tests and packaging do not establish hardware
+acceptance of these changes.
 
 ## Historical diagnostic target
 

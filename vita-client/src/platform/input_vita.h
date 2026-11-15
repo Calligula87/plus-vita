@@ -3,6 +3,8 @@
 #define PLUS_VITA_INPUT_VITA_H
 
 #include "input_worker.h"
+#include "control_layout.h"
+#include "controller_vita.h"
 #include <psp2/ctrl.h>
 #include <psp2/touch.h>
 
@@ -10,6 +12,9 @@ typedef struct {
 	bool rear_ready, front_ready;
 	int rear_mid_x, rear_mid_y;
 	SceTouchPanelInfo front_info;
+	PlusVitaControlLayout layout;
+	bool layout_ready;
+	PlusVitaController controller;
 } PlusVitaInputVita;
 
 /* Shared by the original main-loop path and the independent sampler. */

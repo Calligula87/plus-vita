@@ -12,12 +12,17 @@ fi
 test -f "$source" || { echo 'Configure the Vita build first to generate the production preflight' >&2; exit 1; }
 cc -D_POSIX_C_SOURCE=200809L -DPLUS_VITA_DEFERRED_LOG=1 -std=c11 -g -O1 -Wall -Wextra -Werror -Wno-error=sign-compare \
  -fsanitize=address,undefined -fno-omit-frame-pointer -ffunction-sections -fdata-sections -pthread \
- -Ivita-client/src/app -Ivita-client/src/platform -Ivita-client/tests/recovery_stubs \
- -Iexternal/pylux/lib/include -Iexternal/pylux/lib/src -Iexternal/pylux/third-party/curl/include \
- -Iexternal/json-c -I"$dir" vita-client/src/app/app.c vita-client/src/app/branding.c vita-client/src/app/utf8.c \
- vita-client/src/app/play_vita.c vita-client/src/app/ui_flow.c vita-client/src/platform/credential.c \
+ -Ivita-client/tests/cover_stubs -Iexternal/pylux/third-party/curl/include -Ivita-client/tests/vita_font_stubs -Ivita-client/tests/vita-stubs -Ivita-client/src/app -Ivita-client/src/platform -Ivita-client/tests/recovery_stubs \
+ -Iexternal/pylux/lib/include -isystem external/pylux/lib/src -Iexternal/pylux/third-party/curl/include \
+ -Iexternal/pylux/third-party/nanopb -Ivita-client/generated \
+ -Iexternal/json-c -I"$dir" vita-client/src/app/app.c vita-client/src/platform/control_layout.c vita-client/src/app/branding.c vita-client/src/app/utf8.c \
+ vita-client/src/app/play_vita.c vita-client/src/app/ui_flow.c vita-client/src/app/covers.c vita-client/src/platform/credential.c \
  vita-client/src/app/attempt_log.c vita-client/src/platform/diagnostic_log.c vita-client/src/platform/latency_stats.c \
+ vita-client/src/platform/stream_info.c vita-client/src/platform/h264_config.c vita-client/generated/takion.pb.c \
+ external/pylux/third-party/nanopb/pb_common.c external/pylux/third-party/nanopb/pb_decode.c external/pylux/third-party/nanopb/pb_encode.c \
  vita-client/src/platform/recovery_vita.c vita-client/src/platform/request_cancel.c \
  "$source" external/pylux/lib/src/log.c vita-client/tests/app_recovery_test.c \
+ vita-client/src/platform/cover_download.c vita-client/src/platform/cover_resolve.c \
+ vita-client/src/platform/cover_image.c vita-client/tests/cover_transport_fixture.c \
  -Wl,--gc-sections -l:libjson-c.so.5 -o "$dir/test"
 (cd "$dir"; ./test)

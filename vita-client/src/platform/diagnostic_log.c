@@ -13,7 +13,9 @@
 #define PLUS_VITA_DEFERRED_LOG 0
 #endif
 
-#ifdef __vita__
+#if defined(__vita__) && PLUS_VITA_PS3_REPLAY
+#define PLUS_VITA_DIAGNOSTIC_PATH PLUS_VITA_PS3_REPLAY_LOG_PATH
+#elif defined(__vita__)
 #define PLUS_VITA_DIAGNOSTIC_PATH "ux0:data/plus-vita-allocation.log"
 #else
 #define PLUS_VITA_DIAGNOSTIC_PATH "plus-vita-allocation.log"
@@ -372,7 +374,9 @@ void plus_vita_diagnostic_event(const char *event, int code)
 {
 	static const char *const names[]={"allocation.begin","allocation.complete","allocation.stage",
 		"allocation.network.init","allocation.network.release","stream_probe.begin","stream_probe.complete",
-		"replay.begin","replay.complete","recovery.wifi","recovery.sleep","app.start","app.stop",
+		"stream.video.slice_guard_rejected",
+		"replay.begin","replay.complete","replay.input_validated","replay.decoder_ready",
+		"replay.drain_begin","recovery.wifi","recovery.sleep","app.start","app.stop",
 		"ui.stage","account.complete"};
 	if(!event) return;
 	for(unsigned i=0;i<sizeof(names)/sizeof(names[0]);i++)
@@ -382,6 +386,35 @@ void plus_vita_diagnostic_event(const char *event, int code)
 			else code=code>=-1 && code<=21 ? code : -1;
 			write_line("EVENT",names[i],code); return;
 		}
+}
+
+void plus_vita_diagnostic_stream_startup(PlusVitaStreamStartup status)
+{
+	static const char *const names[] = {
+		[PLUS_VITA_STREAM_STARTUP_TRANSPORT] = "stream.startup.transport",
+		[PLUS_VITA_STREAM_STARTUP_HANDSHAKE] = "stream.startup.handshake",
+		[PLUS_VITA_STREAM_STARTUP_STREAMINFO] = "stream.startup.streaminfo",
+		[PLUS_VITA_STREAM_STARTUP_DECODER] = "stream.startup.decoder",
+		[PLUS_VITA_STREAM_STARTUP_READY] = "stream.startup.ready",
+		[PLUS_VITA_STREAM_STARTUP_TRANSPORT_FAILED] = "stream.startup.transport_failed",
+		[PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED] = "stream.startup.handshake_failed",
+		[PLUS_VITA_STREAM_STARTUP_STREAMINFO_INTERRUPTED] = "stream.startup.streaminfo_interrupted",
+		[PLUS_VITA_STREAM_STARTUP_STREAMINFO_INVALID] = "stream.startup.streaminfo_invalid",
+		[PLUS_VITA_STREAM_STARTUP_PROFILE_UNAVAILABLE] = "stream.startup.profile_unavailable",
+		[PLUS_VITA_STREAM_STARTUP_AUDIO_INIT_FAILED] = "stream.startup.audio_init_failed",
+		[PLUS_VITA_STREAM_STARTUP_VIDEO_HEADER_INVALID] = "stream.startup.video_header_invalid",
+		[PLUS_VITA_STREAM_STARTUP_HEADER_GUARD_REJECTED] = "stream.startup.header_guard_rejected",
+		[PLUS_VITA_STREAM_STARTUP_DECODER_INIT_FAILED] = "stream.startup.decoder_init_failed",
+		[PLUS_VITA_STREAM_STARTUP_STREAMINFO_REPLY_FAILED] = "stream.startup.streaminfo_reply_failed",
+		[PLUS_VITA_STREAM_STARTUP_PROVISION_INVALID] = "stream.startup.provision_invalid",
+		[PLUS_VITA_STREAM_STARTUP_MEDIA_DISCONNECTED] = "stream.startup.media_disconnected",
+		[PLUS_VITA_STREAM_STARTUP_MEDIA_DECRYPT_FAILED] = "stream.startup.media_decrypt_failed",
+		[PLUS_VITA_STREAM_STARTUP_MEDIA_INVALID] = "stream.startup.media_invalid",
+		[PLUS_VITA_STREAM_STARTUP_FIRST_FRAME_TIMEOUT] = "stream.startup.first_frame_timeout",
+		[PLUS_VITA_STREAM_STARTUP_PS3_FEEDBACK] = "stream.startup.ps3_feedback_started",
+	};
+	if((unsigned)status < sizeof(names) / sizeof(names[0]) && names[status])
+		write_line("EVENT", names[status], (int)status);
 }
 
 void plus_vita_diagnostic_progress(const char *stage)
@@ -396,6 +429,24 @@ static const char *known_name(const char *name, const char *const *names, unsign
 	for(unsigned i=0;i<count;i++)
 		if(strncmp(name,names[i],strlen(names[i])+1)==0) return names[i];
 	return NULL;
+}
+
+void plus_vita_diagnostic_slice_guard_rejected(const char *reason)
+{
+	static const char *const reasons[] = {
+		"INVALID_BOUNDS", "ANNEXB_PREFIX", "FORBIDDEN_NAL_BIT",
+		"UNSUPPORTED_OR_INBAND_PARAMETER_NAL", "NAL_REF_IDC", "EMULATION_PREVENTION",
+		"TRUNCATED_SLICE_HEADER", "PPS_ID", "MACROBLOCK_BOUNDS", "SLICE_TYPE",
+		"MISSING_FIRST_SLICE", "IDR_FRAME_NUM", "IDR_REQUIRED", "FRAME_NUM_GAP",
+		"SLICE_ORDER_OR_PICTURE_MISMATCH", "IDR_PICTURE_ID_MISMATCH", "LONG_TERM_IDR",
+		"ACTIVE_REF_OVERRIDE", "REF_LIST_MODIFICATION", "WEIGHT_TABLE",
+		"ADAPTIVE_REFERENCE_MARKING", "TRUNCATED_REFERENCE_HEADER", "NO_VCL_PICTURE",
+	};
+	const char *fixed = known_name(reason, reasons, sizeof(reasons) / sizeof(reasons[0]));
+	char record[96];
+	snprintf(record, sizeof(record), "stream.video.slice_guard_rejected reason=%s",
+		fixed ? fixed : "UNKNOWN");
+	write_line("EVENT", record, CHIAKI_ERR_INVALID_DATA);
 }
 
 void plus_vita_diagnostic_metric(const char *name, const PlusVitaLatencyStats *stats)
@@ -423,7 +474,10 @@ void plus_vita_diagnostic_counter(const char *name, uint64_t count)
 	static const char *const names[]={"displayed","submitted","audio_frames","fec_repaired",
 		"fec_failed","reorder_late","reorder_missing","input_updates","input_poll_failures",
 		"feedback_published","feedback_consumed","feedback_coalesced","feedback_send_failures",
-		"feedback_logs_suppressed","input_neutral_consumed","input_neutral_failed","recovery_episodes"};
+		"feedback_logs_suppressed","input_neutral_consumed","input_neutral_failed","recovery_episodes",
+		"decrypted_video_packets","decrypted_audio_packets","capture_frames","heartbeats_sent",
+		"replay_submitted","replay_displayed","replay_drained","replay_drain_empty",
+		"feedback_state_sends"};
 	const char *fixed=known_name(name,names,sizeof(names)/sizeof(names[0]));
 	if(!fixed) return;
 	char record[128];

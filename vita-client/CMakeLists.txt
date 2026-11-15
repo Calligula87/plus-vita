@@ -9,7 +9,11 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 
 project(plus_vita_smoke C)
-option(PLUS_VITA_RELEASE_CANDIDATE "Build the anonymous v000 distribution profile" OFF)
+option(PLUS_VITA_RELEASE_CANDIDATE "Build the anonymous distribution profile" OFF)
+set(PLUS_VITA_RELEASE_VERSION "v000" CACHE STRING "Distribution version (v000 or v002)")
+if(NOT PLUS_VITA_RELEASE_VERSION MATCHES "^(v000|v002)$")
+  message(FATAL_ERROR "Unsupported Plus-Vita distribution version")
+endif()
 if(PLUS_VITA_RELEASE_CANDIDATE)
   get_filename_component(PLUS_VITA_SOURCE_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
   file(TO_CMAKE_PATH "$ENV{VITASDK}" PLUS_VITA_PUBLIC_SDK_ROOT)
@@ -29,6 +33,9 @@ add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../external/opus-1.6.1" opus)
 include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 
 option(PLUS_VITA_DIAGNOSTIC_APP "Launch the historical diagnostic/test interface" OFF)
+option(PLUS_VITA_PS3_STARTUP_SAMPLE "Collect PS3 stream samples from graphical Play" OFF)
+option(PLUS_VITA_PS3_REPLAY "Replay the private audited PS3 sample on Vita" OFF)
+option(PLUS_VITA_PS3_LIVE "Build the v001 graphical PS3 playback candidate" OFF)
 option(PLUS_VITA_FONT_COMPARISON "Include the synthetic PVF/FreeType comparison screen" OFF)
 option(PLUS_VITA_FONT_DEFAULT_FREETYPE "Use the Vita-tested B font on normal graphical screens" ON)
 if(PLUS_VITA_DIAGNOSTIC_APP)
@@ -44,7 +51,32 @@ set(PLUS_VITA_PUBLIC_VERSION "00.01")
 if(PLUS_VITA_RELEASE_CANDIDATE)
   set(VITA_APP_NAME "Plus-Vita")
   set(VITA_VERSION "00.11")
-  set(PLUS_VITA_PUBLIC_VERSION "v000")
+  set(PLUS_VITA_PUBLIC_VERSION "${PLUS_VITA_RELEASE_VERSION}")
+  if(PLUS_VITA_RELEASE_VERSION STREQUAL "v002")
+    set(VITA_VERSION "00.13")
+    set(PLUS_VITA_RELEASE_PS3 ON)
+  endif()
+endif()
+if(PLUS_VITA_PS3_STARTUP_SAMPLE)
+  set(VITA_APP_NAME "Plus-Vita PS3 Test")
+  set(VITA_TITLEID "PLVTPS352")
+endif()
+if(PLUS_VITA_PS3_REPLAY)
+  if(PLUS_VITA_PS3_STARTUP_SAMPLE)
+    message(FATAL_ERROR "Choose one PS3 test mode")
+  endif()
+  set(VITA_APP_NAME "Plus-Vita PS3 Replay")
+  set(VITA_TITLEID "PLVTPS353")
+  set(PLUS_VITA_ENTRY_SOURCE src/app/replay_main.c)
+endif()
+if(PLUS_VITA_PS3_LIVE)
+  if(PLUS_VITA_PS3_STARTUP_SAMPLE OR PLUS_VITA_PS3_REPLAY OR PLUS_VITA_DIAGNOSTIC_APP)
+    message(FATAL_ERROR "The PS3 playback candidate requires the graphical app")
+  endif()
+  set(VITA_APP_NAME "Plus-Vita PS3 Play")
+  set(VITA_TITLEID "PLVTPS354")
+  set(VITA_VERSION "00.02")
+  set(PLUS_VITA_PUBLIC_VERSION "v001")
 endif()
 set(PLUS_VITA_TLS_PROBE_URL "" CACHE STRING
   "Optional controlled HTTPS URL for the physical certificate-rejection test")
@@ -573,6 +605,7 @@ add_executable(${PROJECT_NAME}
   src/platform/socket_vita.c
   src/platform/h264_config.c
   src/platform/stream_probe.c
+  src/platform/stream_info.c
   src/platform/video_fec.c
   src/platform/video_reorder.c
   src/platform/audio_playback_vita.c
@@ -590,6 +623,8 @@ add_executable(${PROJECT_NAME}
   src/platform/diagnostic_log.c
   src/platform/latency_stats.c
   src/platform/input_vita.c
+  src/platform/control_layout.c
+  src/platform/controller_vita.c
   src/platform/auth_probe.c
   src/platform/catalog_fetch_guard.c
   src/platform/credential.c
@@ -646,7 +681,9 @@ set_source_files_properties("${PLUS_VITA_ECDH_SOURCE}" PROPERTIES
 set_source_files_properties("${PLUS_VITA_GKCRYPT_SOURCE}" PROPERTIES
   COMPILE_OPTIONS "-Wno-error=unused-parameter;-Wno-error=unused-variable;-Wno-error=sign-compare"
 )
-set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/src/platform/stream_probe.c" PROPERTIES
+set_source_files_properties(
+  "${CMAKE_CURRENT_LIST_DIR}/src/platform/stream_probe.c"
+  "${CMAKE_CURRENT_LIST_DIR}/src/platform/stream_info.c" PROPERTIES
   COMPILE_OPTIONS "-Wno-error=unused-parameter"
 )
 set_source_files_properties("${PLUS_VITA_CURL_HTTP_SOURCE}" PROPERTIES
@@ -690,7 +727,11 @@ endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
   PLUS_VITA_APP_VERSION="${PLUS_VITA_PUBLIC_VERSION}"
+  PLUS_VITA_PS3_STARTUP_SAMPLE=$<BOOL:${PLUS_VITA_PS3_STARTUP_SAMPLE}>
+  PLUS_VITA_PS3_REPLAY=$<BOOL:${PLUS_VITA_PS3_REPLAY}>
+  PLUS_VITA_PS3_LIVE=$<BOOL:${PLUS_VITA_PS3_LIVE}>
   PLUS_VITA_RELEASE_CANDIDATE=$<BOOL:${PLUS_VITA_RELEASE_CANDIDATE}>
+  PLUS_VITA_RELEASE_PS3=$<BOOL:${PLUS_VITA_RELEASE_PS3}>
   PLUS_VITA_FONT_COMPARISON=$<AND:$<BOOL:${PLUS_VITA_FONT_COMPARISON}>,$<NOT:$<BOOL:${PLUS_VITA_DIAGNOSTIC_APP}>>>
   PLUS_VITA_FONT_DEFAULT_FREETYPE=$<AND:$<BOOL:${PLUS_VITA_FONT_DEFAULT_FREETYPE}>,$<NOT:$<BOOL:${PLUS_VITA_DIAGNOSTIC_APP}>>>
   PLUS_VITA_INPUT_WORKER=$<BOOL:${PLUS_VITA_INPUT_WORKER}>

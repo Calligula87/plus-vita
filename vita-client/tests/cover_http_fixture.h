@@ -1,4 +1,5 @@
 #include "cover_fixture.h"
+#include <time.h>
 typedef size_t (*Receiver)(void *, size_t, size_t, void *);
 static Receiver receive;
 static curl_xferinfo_callback progress;
@@ -6,8 +7,10 @@ static void *destination;
 static const atomic_bool *progress_data;
 static long peer, host, redirects, timeout, connect_timeout, status=200;
 static const char *ca;
-static unsigned cover_requests, cover_mode;
+static atomic_uint cover_requests, cover_mode;
 static int handle;
+static atomic_bool cover_block, cover_late;
+static char cover_url[512];
 CURL *curl_easy_init(void) { return (CURL *)&handle; }
 void curl_easy_cleanup(CURL *curl) { assert(curl == (CURL *)&handle); }
 void curl_slist_free_all(struct curl_slist *list) { if(list) { free(list->data); free(list); } }
@@ -34,7 +37,7 @@ CURLcode curl_easy_setopt(CURL *curl,CURLoption option,...)
 {
  (void)curl; va_list args; va_start(args,option);
  switch(option) {
- case CURLOPT_URL: (void)va_arg(args,const char *); break;
+ case CURLOPT_URL: snprintf(cover_url,sizeof(cover_url),"%s",va_arg(args,const char *)); break;
  case CURLOPT_IPRESOLVE: assert(va_arg(args,long)==CURL_IPRESOLVE_V4); break;
  case CURLOPT_RESOLVE: assert(va_arg(args,struct curl_slist *)); break;
  case CURLOPT_CAINFO: ca=va_arg(args,const char *); break;
@@ -60,6 +63,10 @@ CURLcode curl_easy_getinfo(CURL *curl,CURLINFO info,...)
 CURLcode curl_easy_perform(CURL *curl)
 {
  (void)curl; cover_requests++;
+ while(atomic_load(&cover_block)) {
+  if(!atomic_load(&cover_late) && progress((void *)progress_data,0,0,0,0)) return CURLE_ABORTED_BY_CALLBACK;
+  const struct timespec delay={.tv_nsec=1000000};nanosleep(&delay,NULL);
+ }
  assert(peer==1 && host==2 && redirects==0 && timeout==10000 && connect_timeout==5000);
  assert(strcmp(ca,"app0:/cacert.pem")==0);
  if(cover_mode==6) return receive((void *)cover_png,1,sizeof(cover_png),destination)==sizeof(cover_png) ? CURLE_OK : CURLE_WRITE_ERROR;

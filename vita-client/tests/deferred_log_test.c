@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 #include "diagnostic_log.h"
+#include "build_identity.h"
 #include <assert.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -70,15 +71,47 @@ static void privacy_entrypoints(void)
 	plus_vita_diagnostic_progress(oversized);
 	plus_vita_diagnostic_chiaki_log(CHIAKI_LOG_WARNING,oversized,NULL);
 	plus_vita_diagnostic_event("allocation.complete",-1);
+	plus_vita_diagnostic_stream_startup(PLUS_VITA_STREAM_STARTUP_PS3_FEEDBACK);
+	plus_vita_diagnostic_counter("decrypted_video_packets", 0);
+	plus_vita_diagnostic_counter("decrypted_audio_packets", 0);
+	plus_vita_diagnostic_counter("capture_frames", 0);
+	plus_vita_diagnostic_counter("heartbeats_sent", 59);
+	plus_vita_diagnostic_counter("feedback_state_sends", 299);
+	plus_vita_diagnostic_counter("replay_submitted", 300);
+	plus_vita_diagnostic_counter("replay_displayed", 300);
+	plus_vita_diagnostic_counter("replay_drained", 3);
+	plus_vita_diagnostic_counter("replay_drain_empty", 1);
+	plus_vita_diagnostic_counter("replay_submitted-canary", 123456789);
+	plus_vita_diagnostic_event("replay.input_validated", 0);
+	plus_vita_diagnostic_event("replay.decoder_ready", 0);
+	plus_vita_diagnostic_event("replay.drain_begin", 0);
+	plus_vita_diagnostic_event("stream.video.slice_guard_rejected", CHIAKI_ERR_INVALID_DATA);
+	plus_vita_diagnostic_event("stream.video.slice_guard_rejected-canary", 0);
+	plus_vita_diagnostic_slice_guard_rejected("FRAME_NUM_GAP");
+	plus_vita_diagnostic_slice_guard_rejected("FRAME_NUM_GAP\nNPSSO=synthetic-token-canary");
 	plus_vita_diagnostic_end();
 	FILE *f=fopen("plus-vita-allocation.log","rb"); assert(f);
 	char line[2048]; bool complete=false;
+	const char *const expected[]={
+		"code=20 stream.startup.ps3_feedback_started", "final counter=decrypted_video_packets count=0",
+		"final counter=decrypted_audio_packets count=0", "final counter=capture_frames count=0",
+		"final counter=heartbeats_sent count=59", "final counter=feedback_state_sends count=299",
+		"final counter=replay_submitted count=300", "final counter=replay_displayed count=300",
+		"final counter=replay_drained count=3", "final counter=replay_drain_empty count=1",
+		"code=0 replay.input_validated", "code=0 replay.decoder_ready", "code=0 replay.drain_begin",
+		"code=11 stream.video.slice_guard_rejected\n",
+		"code=11 stream.video.slice_guard_rejected reason=FRAME_NUM_GAP\n",
+		"code=11 stream.video.slice_guard_rejected reason=UNKNOWN\n"
+	};
+	unsigned next=0;
 	while(fgets(line,sizeof(line),f)) {
 		for(unsigned i=0;i<sizeof(canaries)/sizeof(canaries[0]);i++) assert(!strstr(line,canaries[i]));
 		assert(!strstr(line,"canary") && !strstr(line,"QQQQ") && !strstr(line,"123456789"));
 		if(strstr(line,"allocation.complete")) complete=true;
+		if(next < sizeof(expected)/sizeof(expected[0]) && strstr(line,expected[next])) next++;
 	}
-	assert(!ferror(f)); fclose(f); assert(complete);
+	assert(!ferror(f)); fclose(f);
+	assert(complete && next==sizeof(expected)/sizeof(expected[0]));
 }
 static void bounded_file(void)
 {
@@ -160,7 +193,8 @@ int main(void)
 	while(fgets(line,sizeof(line),f)) {
 		bytes+=strlen(line);
 		assert(!strstr(line,"allocation.complete") && !strstr(line,"999999"));
-		if(strstr(line,"build=recovery-diagnostics-1")) ui_build=true;
+		if(strstr(line," BUILD    code=0 build=" PLUS_VITA_APP_BUILD " profile=" PLUS_VITA_DIAGNOSTIC_PROFILE))
+			ui_build=true;
 		if(strstr(line,"draw count=500")) ui_timing=true;
 		if(strstr(line,"metadata_missing=2 available=3 unsupported=4 rejected=5 loaded=1 dns=1")) artwork_summary=true;
 	}

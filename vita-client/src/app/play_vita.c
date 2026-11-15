@@ -182,6 +182,20 @@ bool plus_vita_play_take(PlusVitaPlay *play,ChiakiCloudProvisionResult *result,
 	return true;
 }
 
+ChiakiErrorCode plus_vita_play_stream(const ChiakiCloudProvisionResult *provision,
+	bool *user_stopped, bool (*connect_pump)(void *), void *pump_user,
+	PlusVitaStreamInput *input)
+{
+	ChiakiLog log;
+	chiaki_log_init(&log, CHIAKI_LOG_INFO | CHIAKI_LOG_WARNING | CHIAKI_LOG_ERROR,
+		plus_vita_diagnostic_chiaki_log, NULL);
+	plus_vita_diagnostic_event("stream_probe.begin", 0);
+	ChiakiErrorCode error = plus_vita_stream_probe_with_pump(provision, &log, user_stopped,
+		connect_pump, pump_user, input);
+	plus_vita_diagnostic_event("stream_probe.complete", (int)error);
+	return error;
+}
+
 bool plus_vita_play_close(PlusVitaPlay *play)
 {
 	if(!play) return true;

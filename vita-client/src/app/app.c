@@ -39,6 +39,12 @@ struct plus_vita_app_t {
 	uint32_t previous_buttons;
 	int previous_direction;
 	uint64_t repeat_at;
+	PlusVitaControlLayout controls, controls_draft;
+	PlusVitaControlDevice control_device;
+	unsigned binding_input;
+	size_t binding_focus, binding_first, action_focus, action_first, catalogue_first;
+	char controls_status[256], binding_labels[5][160];
+	char controls_help[1024];
 };
 
 static void welcome(PlusVitaApp *app)
@@ -96,22 +102,147 @@ static void settings_view(PlusVitaApp *app)
 				app->connected || app->saved ? "Account and Remember" : "Account setup", 64, 300, 832, 44 },
 			{ PLUS_VITA_ACTION_CONTROLS, "Controls", 64, 350, 832, 44 },
 			{ PLUS_VITA_ACTION_REPORTING, "Report an issue", 64, 400, 832, 44 },
-			{ PLUS_VITA_ACTION_BACK, "Back", 64, 450, 832, 44 }
-		}, .action_count = 4 };
+			{ PLUS_VITA_ACTION_CONTROL_LAYOUT, "Control mapping", 64, 406, 832, 40 },
+			{ PLUS_VITA_ACTION_BACK, "Back", 64, 450, 832, 40 }
+		}, .action_count = 5 };
+	for(size_t i=0;i<3;i++) { app->view.actions[i].y=274+(int)i*44;app->view.actions[i].height=40; }
+}
+
+static bool controls_screen(PlusVitaAppScreen screen)
+{
+	return screen==PLUS_VITA_APP_CONTROL_LAYOUT || screen==PLUS_VITA_APP_BINDINGS
+		|| screen==PLUS_VITA_APP_BIND_ACTIONS;
+}
+
+static void layout_view(PlusVitaApp *app)
+{
+	app->view=(PlusVitaAppView){.screen=PLUS_VITA_APP_CONTROL_LAYOUT,.title="Control mapping.",
+		.subtitle="GAMEPLAY LAYOUT",.body=app->controls_status,.hint="D-pad / left stick  Move     X  Select     O  Cancel",
+		.actions={{PLUS_VITA_ACTION_BINDINGS,"Edit input bindings",64,260,832,40},
+			{PLUS_VITA_ACTION_FRONT_MOTION,app->controls_draft.front_motion ? "Front-touch movement: On" : "Front-touch movement: Off",64,304,832,40},
+			{PLUS_VITA_ACTION_CONTROL_DEFAULTS,"Restore defaults",64,348,832,40},
+			{PLUS_VITA_ACTION_SAVE_CONTROLS,"Save for next session",64,392,832,40},
+			{PLUS_VITA_ACTION_CANCEL_CONTROLS,"Cancel",64,436,832,40}},.action_count=5};
+}
+
+/* Lists prepare only visible rows. The same viewport rule serves mappings and games. */
+static void list_viewport(size_t total,size_t capacity,size_t focus,size_t *first)
+{
+	if(total<=capacity) *first=0;
+	else {
+		if(*first>total-capacity) *first=total-capacity;
+		if(focus<*first) *first=focus;
+		if(focus>=*first+capacity) *first=focus-capacity+1;
+	}
+}
+static void move_list(size_t total,size_t visible,size_t *focus,size_t *first,PlusVitaAppEvent event)
+{
+	if(!total) return;
+	if(event.kind==PLUS_VITA_EVENT_SCROLL) {
+		int next=(int)*first+event.y, maximum=(int)total-(int)visible;
+		*first=(size_t)(next<0 ? 0 : next>maximum ? maximum : next);
+		if(*focus<*first) *focus=*first;
+		if(*focus>=*first+visible) *focus=*first+visible-1;
+	} else if(event.kind==PLUS_VITA_EVENT_FOCUS) {
+		if(event.y>=0 && (size_t)event.y<total) *focus=(size_t)event.y;
+	} else if(event.kind==PLUS_VITA_EVENT_DOWN && *focus+1<total) ++*focus;
+	else if(event.kind==PLUS_VITA_EVENT_UP && *focus) --*focus;
+	list_viewport(total,visible,*focus,first);
+}
+
+static void bindings_view(PlusVitaApp *app,bool destinations)
+{
+	size_t count=destinations ? PLUS_VITA_CONTROL_COUNT : PLUS_VITA_INPUT_COUNT;
+	size_t focus=destinations ? app->action_focus : app->binding_focus;
+	size_t *first=destinations ? &app->action_first : &app->binding_first;
+	list_viewport(count,5,focus,first);
+	app->view=(PlusVitaAppView){.screen=destinations ? PLUS_VITA_APP_BIND_ACTIONS : PLUS_VITA_APP_BINDINGS,
+		.control_device=app->control_device,.list_total=count,.list_first=*first,.focus=focus,
+		.list_x=64,.list_y=248,.list_width=812,.list_height=220,.row_step=44,
+		.title=destinations ? plus_vita_control_input_name(app->binding_input,app->control_device) : "Choose an input.",
+		.subtitle=destinations ? "CHOOSE GAME ACTION" : "GAMEPLAY BINDINGS",
+		.body=destinations ? "One action per input. Several inputs may share an action."
+			: app->control_device==PLUS_VITA_DEVICE_VITA
+			? "Vita rear touch: top L2/R2; bottom L3/R3 by default."
+			: app->control_device==PLUS_VITA_DEVICE_DISCONNECTED
+			? "No controller connected. All bindings remain editable."
+			: "PS TV buttons and Vita rear-touch zones are separate inputs.",
+		.hint="D-pad / left stick  Move     X  Select     O  Back",.selected=focus-*first};
+	for(unsigned row=0;row<5 && *first+row<count;row++) {
+		unsigned index=(unsigned)*first+row;
+		if(destinations) snprintf(app->binding_labels[row],sizeof(app->binding_labels[row]),"%s",plus_vita_control_action_name(index));
+		else snprintf(app->binding_labels[row],sizeof(app->binding_labels[row]),"%s: %s%s",
+			plus_vita_control_input_name(index,app->control_device),plus_vita_control_action_name(app->controls_draft.bindings[index]),
+			plus_vita_control_input_available(index,app->control_device) ? ""
+			: app->control_device==PLUS_VITA_DEVICE_VITA ? " (PS TV only)"
+			: app->control_device==PLUS_VITA_DEVICE_DISCONNECTED ? " (no controller)" : " (Vita only)");
+		app->view.actions[app->view.action_count++]=(PlusVitaAppButton){
+			destinations ? PLUS_VITA_ACTION_BIND_ACTION : PLUS_VITA_ACTION_BINDING,
+			app->binding_labels[row],64,248+(int)row*44,812,40};
+	}
+	app->view.list_count=app->view.action_count;
+	app->view.actions[app->view.action_count++]=(PlusVitaAppButton){PLUS_VITA_ACTION_BACK,"Back",64,470,812,32};
+}
+
+static PlusVitaAppEffect edit_controls(PlusVitaApp *app,PlusVitaAppAction action)
+{
+	bool destinations=app->view.screen==PLUS_VITA_APP_BIND_ACTIONS;
+	if(action==PLUS_VITA_ACTION_CONTROL_LAYOUT) {
+		app->controls_draft=app->controls;app->binding_focus=app->binding_first=0;
+		snprintf(app->controls_status,sizeof(app->controls_status),"Save for next session. Menu controls and exit stay fixed.");
+		layout_view(app);
+	} else if(action==PLUS_VITA_ACTION_BINDINGS) bindings_view(app,false);
+	else if(action==PLUS_VITA_ACTION_BINDING) {
+		app->binding_input=(unsigned)app->binding_focus;
+		app->action_focus=app->action_first=0;bindings_view(app,true);
+	} else if(action==PLUS_VITA_ACTION_BIND_ACTION) {
+		app->controls_draft.bindings[app->binding_input]=(uint8_t)app->action_focus;
+		bindings_view(app,false);
+	} else if(action==PLUS_VITA_ACTION_FRONT_MOTION) {
+		app->controls_draft.front_motion=!app->controls_draft.front_motion;layout_view(app);app->view.selected=1;
+	} else if(action==PLUS_VITA_ACTION_CONTROL_DEFAULTS) {
+		plus_vita_control_layout_defaults(&app->controls_draft);layout_view(app);app->view.selected=2;
+	} else if(action==PLUS_VITA_ACTION_SAVE_CONTROLS) {
+		app->pending_operation=++app->next_operation;app->waiting_for=PLUS_VITA_EFFECT_SAVE_CONTROLS;
+		app->view.operation=app->pending_operation;
+		return (PlusVitaAppEffect){.kind=PLUS_VITA_EFFECT_SAVE_CONTROLS,.operation=app->pending_operation,.controls=app->controls_draft};
+	} else if(action==PLUS_VITA_ACTION_CANCEL_CONTROLS) settings_view(app);
+	else if(action==PLUS_VITA_ACTION_BACK) {
+		if(destinations) bindings_view(app,false);
+		else if(app->view.screen==PLUS_VITA_APP_BINDINGS) layout_view(app);
+		else settings_view(app);
+	}
+	return (PlusVitaAppEffect){0};
 }
 
 static void controls_view(PlusVitaApp *app)
 {
-	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_CONTROLS,
+	app->view = (PlusVitaAppView){ .screen = PLUS_VITA_APP_CONTROLS,.control_device=app->control_device,
 		.title = "Controls.", .subtitle = "SETTINGS AND HELP",
-		.body = "Menus: left stick, Cross to select, Circle to go back, or touch.\n"
-			"D-pad does not move menu focus.\n"
+		.body = "Menus: D-pad or left stick; Cross selects, Circle goes back.\n"
+			"Touch: lift inside a button; slide away to cancel.\n"
 			"In a game: Vita buttons and sticks map to PlayStation controls.\n"
 			"Rear top corners: L2/R2; lower corners: L3/R3.\n"
 			"Front touch moves the touchpad; two touches press it.\n"
+			"Settings > Control mapping: Save applies next session.\n"
 			"Hold START + SELECT for 2 seconds to stop a stream.",
 		.hint = "X  Select     O  Back",
 		.actions = {{ PLUS_VITA_ACTION_BACK, "Back to settings", 64, 444, 832, 52 }}, .action_count = 1 };
+	if(app->control_device==PLUS_VITA_DEVICE_DS3 || app->control_device==PLUS_VITA_DEVICE_DS4) {
+		bool ds4=app->control_device==PLUS_VITA_DEVICE_DS4;
+		snprintf(app->controls_help,sizeof(app->controls_help),
+			"%s: pair in PS TV system settings using USB + PS.\n"
+			"Menus: D-pad/stick, Cross selects, Circle goes back.\n"
+			"Physical buttons, sticks, L1/R1, L2/R2 and L3/R3 work in games.\n"
+			"Control mapping: assign a button to cloud touchpad click.\n"
+			"Touchpad movement, motion and rumble are unavailable.\n"
+			"Hold %s for 2 seconds to stop.\n"
+			"Reconnect, then release all controls before playing.",
+			ds4 ? "DualShock 4" : "DualShock 3",ds4 ? "OPTIONS + SHARE" : "START + SELECT");
+		app->view.body=app->controls_help;
+	}
+	else if(app->control_device==PLUS_VITA_DEVICE_DISCONNECTED)
+		app->view.body="No supported controller connected.\nPair DualShock 3 or DualShock 4 in PS TV system settings\nusing USB, then press PS. Release controls after connecting.\nControl mapping can assign a button to cloud touchpad click.";
 }
 
 static void reporting_view(PlusVitaApp *app)
@@ -147,6 +278,7 @@ PlusVitaApp *plus_vita_app_create(void)
 	PlusVitaApp *app = calloc(1, sizeof(*app));
 	if(!app) return NULL;
 	app->remember = true;
+	plus_vita_control_layout_defaults(&app->controls);
 	welcome(app);
 	return app;
 }
@@ -161,7 +293,28 @@ void plus_vita_app_destroy(PlusVitaApp *app)
 PlusVitaAppView plus_vita_app_view(const PlusVitaApp *app) {
 	PlusVitaAppView view=app->view; view.account_epoch=app->account_epoch;
 	memcpy(view.artwork_metadata,app->artwork_metadata,sizeof(view.artwork_metadata));
-	view.account_connected=app->connected; return view;
+	view.account_connected=app->connected;
+	if(!view.list_total && view.action_count) {
+		view.list_total=view.action_count;view.focus=view.selected;
+		view.list_x=view.actions[0].x;view.list_y=view.actions[0].y;
+		view.list_width=view.actions[0].width;view.row_step=view.actions[0].height+6;
+		size_t capacity=(size_t)((502-view.list_y+6)/view.row_step);
+		if(!capacity) capacity=1;
+		/* The diagnostic font comparison is a horizontal sample toolbar. */
+		if(view.screen==PLUS_VITA_APP_FONT_COMPARISON) capacity=view.action_count;
+		view.list_count=capacity<view.list_total ? capacity : view.list_total;
+		list_viewport(view.list_total,view.list_count,view.focus,&view.list_first);
+		if(view.list_count<view.list_total) {
+			for(size_t i=0;i<view.list_count;i++) {
+				view.actions[i]=app->view.actions[view.list_first+i];
+				view.actions[i].y=view.list_y+(int)i*view.row_step;
+			}
+			view.action_count=view.list_count;view.selected=view.focus-view.list_first;
+		}
+		const PlusVitaAppButton *last=&view.actions[view.action_count-1];
+		view.list_height=last->y+last->height-view.list_y;
+	}
+	return view;
 }
 
 static void setup_view(PlusVitaApp *app)
@@ -416,7 +569,7 @@ static void clear_runtime(PlusVitaApp *app)
 	plus_vita_credential_clear(&app->credential);
 	free(app->catalogue);
 	app->catalogue = NULL;
-	app->catalogue_count = app->catalogue_selection = 0;
+	app->catalogue_count = app->catalogue_selection = 0; app->catalogue_first=0;
 	memset(app->label, 0, sizeof(app->label));
 	memset(app->online_id, 0, sizeof(app->online_id));
 	memset(app->store_country, 0, sizeof(app->store_country));
@@ -453,6 +606,14 @@ static bool title_matches(const char *title, const char *query)
 
 static int menu_direction(const PlusVitaApp *app, PlusVitaAppPad pad)
 {
+	uint32_t directions = pad.buttons & (PLUS_VITA_MENU_UP | PLUS_VITA_MENU_DOWN);
+	if(app->view.screen == PLUS_VITA_APP_CATALOGUE)
+		directions |= pad.buttons & (PLUS_VITA_MENU_LEFT | PLUS_VITA_MENU_RIGHT);
+	if(directions) {
+		bool forward = (directions & (PLUS_VITA_MENU_DOWN | PLUS_VITA_MENU_RIGHT)) != 0;
+		bool backward = (directions & (PLUS_VITA_MENU_UP | PLUS_VITA_MENU_LEFT)) != 0;
+		return forward == backward ? 0 : forward ? 1 : -1;
+	}
 	int axis = pad.left_y;
 	if(app->view.screen == PLUS_VITA_APP_CATALOGUE
 		&& abs((int)pad.left_x - 128) > abs(axis - 128)) axis = pad.left_x;
@@ -463,7 +624,7 @@ static void filter_catalogue(PlusVitaApp *app)
 {
 	app->matches_count = 0;
 	for(size_t i=0;i<app->catalogue_count;i++) if(title_matches(app->catalogue[i].name,app->search)) app->matches[app->matches_count++]=i;
-	app->catalogue_selection = 0;
+	app->catalogue_selection = 0; app->catalogue_first=0;
 }
 
 static void catalogue_view(PlusVitaApp *app)
@@ -492,23 +653,22 @@ static void catalogue_view(PlusVitaApp *app)
 	}
 	else
 	{
-		size_t first = app->catalogue_selection / 3 * 3;
-		for(size_t i = first; i < app->matches_count && i < first + 3; i++) {
+		list_viewport(app->matches_count,7,app->catalogue_selection,&app->catalogue_first);
+		size_t first=app->catalogue_first;
+		view.list_total=app->matches_count;view.list_first=first;view.focus=app->catalogue_selection;
+		view.list_x=64;view.list_y=228;view.list_width=624;view.list_height=252;view.row_step=36;
+		for(size_t i=first;i<app->matches_count && i<first+7;i++) {
 			const PlusVitaCatalogEntry *game=&app->catalogue[app->matches[i]];
 			view.games[view.action_count]=game;
-			view.actions[view.action_count++] = (PlusVitaAppButton){
-				PLUS_VITA_ACTION_GAME, game->name, 64 + (int)(i-first)*286, 282, 260, 204 };
+			view.actions[view.action_count++]=(PlusVitaAppButton){PLUS_VITA_ACTION_GAME,game->name,64,228+(int)(i-first)*36,624,32};
 		}
+		view.list_count=view.action_count;
+		view.detail=&app->catalogue[app->matches[app->catalogue_selection]];
 		snprintf(app->search_button,sizeof(app->search_button),"Search: %s",app->search[0] ? app->search : "All games");
-		size_t search_index = view.action_count;
-		view.actions[view.action_count++] = (PlusVitaAppButton){PLUS_VITA_ACTION_SEARCH,app->search_button,64,228,832,42};
-		if(app->matches_count > 3) {
-			view.actions[view.action_count-1].width = 548;
-			view.actions[view.action_count++] = (PlusVitaAppButton){PLUS_VITA_ACTION_PREVIOUS_PAGE,"Prev",624,228,128,42};
-			view.actions[view.action_count++] = (PlusVitaAppButton){PLUS_VITA_ACTION_NEXT_PAGE,"Next",764,228,132,42};
-		}
-		view.selected = app->catalogue_selection - first;
-		if(app->search_focus) view.selected = search_index;
+		size_t search_index=view.action_count;
+		view.actions[view.action_count++]=(PlusVitaAppButton){PLUS_VITA_ACTION_SEARCH,app->search_button,64,186,624,32};
+		view.actions[view.action_count++]=(PlusVitaAppButton){PLUS_VITA_ACTION_BACK,"Back",744,448,152,32};
+		view.selected=app->search_focus ? search_index : app->catalogue_selection-first;
 	}
 	app->view = view;
 }
@@ -516,7 +676,7 @@ static void catalogue_view(PlusVitaApp *app)
 static void detail_view(PlusVitaApp *app, const char *notice)
 {
 	const PlusVitaCatalogEntry *game=&app->catalogue[app->matches[app->catalogue_selection]];
-	snprintf(app->detail_status,sizeof(app->detail_status),"Platform: %s\n%s",game->platform[0] ? game->platform : "Not specified",
+	snprintf(app->detail_status,sizeof(app->detail_status),"%s\nPlatform: %s\n%s",game->name,game->platform[0] ? game->platform : "Not specified",
 		notice ? notice : game->launch_id_valid ? "Cloud catalogue title. Streaming eligibility is checked at launch." : "Play unavailable: required launch information is missing.");
 	app->view=(PlusVitaAppView){.screen=PLUS_VITA_APP_DETAILS,.title=game->name,.subtitle="GAME DETAILS",.body=app->detail_status,.hint="X  Select     O  Back",.detail=game,
 		.actions={{game->launch_id_valid ? PLUS_VITA_ACTION_PLAY : PLUS_VITA_ACTION_DISABLED,game->launch_id_valid ? "Play" : "Play unavailable",64,380,832,52},{PLUS_VITA_ACTION_BACK,"Back",64,444,832,52}},.action_count=2};
@@ -584,6 +744,31 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 {
 	PlusVitaAppView *view = &app->view;
 	PlusVitaAppEffect effect = { .kind = PLUS_VITA_EFFECT_NONE };
+	if(event.kind==PLUS_VITA_EVENT_CONTROLS_LOADED) {
+		if(plus_vita_control_layout_valid(&event.controls)) app->controls=event.controls;
+		return effect;
+	}
+	if(event.kind==PLUS_VITA_EVENT_CONTROLS_SAVED) {
+		if(app->waiting_for!=PLUS_VITA_EFFECT_SAVE_CONTROLS || !event.operation || event.operation!=app->pending_operation) return effect;
+		app->pending_operation=0;app->waiting_for=PLUS_VITA_EFFECT_NONE;
+		if(event.status==PLUS_VITA_RESULT_OK) {
+			app->controls=app->controls_draft;settings_view(app);
+			view->body="Controls saved. Your next gaming session will use this layout.";
+		} else {
+			snprintf(app->controls_status,sizeof(app->controls_status),"Save failed. Previous layout kept. Retry Save or Cancel.");
+			layout_view(app);
+		}
+		return effect;
+	}
+	if(event.kind==PLUS_VITA_EVENT_CONTROL_DEVICE) {
+		if(app->control_device==event.device) return effect;
+		app->control_device=event.device;
+		if(view->screen==PLUS_VITA_APP_BINDINGS || view->screen==PLUS_VITA_APP_BIND_ACTIONS)
+			bindings_view(app,view->screen==PLUS_VITA_APP_BIND_ACTIONS);
+		else if(view->screen==PLUS_VITA_APP_CONTROLS) controls_view(app);
+		return effect;
+	}
+	if(app->waiting_for==PLUS_VITA_EFFECT_SAVE_CONTROLS) return effect;
 	if(view->screen == PLUS_VITA_APP_CLOSED) return effect;
 	if(event.kind == PLUS_VITA_EVENT_START)
 	{
@@ -807,6 +992,10 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		app->pending_operation=0; app->waiting_for=PLUS_VITA_EFFECT_NONE;
 		if(event.status==PLUS_VITA_RESULT_REJECTED) return remove_saved(app, false, true);
 		if(event.status==PLUS_VITA_RESULT_OK) catalogue_view(app);
+		else if(event.status==PLUS_VITA_RESULT_SAMPLE_SAVED)
+			detail_view(app,"PS3 sample saved. Reopen FTP to retrieve it.");
+		else if(event.status==PLUS_VITA_RESULT_SAMPLE_INCOMPLETE)
+			detail_view(app,"PS3 sample incomplete. Reopen FTP to retrieve the diagnostic log.");
 		else if(event.status==PLUS_VITA_RESULT_STREAM_STOPPED) stream_stopped_view(app);
 		else if(event.status==PLUS_VITA_RESULT_SERVICE_ERROR)
 			detail_view(app,"The cloud service could not start this session.\nTry Play again later for a fresh attempt.");
@@ -828,7 +1017,9 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 			"Checking this game's eligibility. Circle cancels.",
 			"Finding a cloud server. Circle cancels.",
 			"Allocating your cloud session. Circle cancels.",
-			"Connecting to cloud video. Hold START + SELECT to stop after play begins."
+			"Connecting to cloud video. Hold START + SELECT to stop after play begins.",
+			[PLUS_VITA_PLAY_STAGE_PS3_SAMPLE] =
+				"Collecting a PS3 stream sample for up to 60 seconds.\nNo gameplay will appear. Circle cancels."
 		};
 		if(event.play_stage < sizeof(stages)/sizeof(stages[0])) view->body=stages[event.play_stage];
 		return effect;
@@ -866,37 +1057,54 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 		}
 		return effect;
 	}
+	if((view->screen==PLUS_VITA_APP_BINDINGS || view->screen==PLUS_VITA_APP_BIND_ACTIONS)
+		&& (event.kind==PLUS_VITA_EVENT_DOWN || event.kind==PLUS_VITA_EVENT_UP
+		|| event.kind==PLUS_VITA_EVENT_SCROLL || event.kind==PLUS_VITA_EVENT_FOCUS)) {
+		bool destinations=view->screen==PLUS_VITA_APP_BIND_ACTIONS;
+		size_t *focus=destinations ? &app->action_focus : &app->binding_focus;
+		size_t *first=destinations ? &app->action_first : &app->binding_first;
+		move_list(view->list_total,view->list_count,focus,first,event);
+		bindings_view(app,destinations);return effect;
+	}
 	if(event.kind == PLUS_VITA_EVENT_TOUCH)
 	{
-		for(size_t i = 0; i < view->action_count; i++)
+		PlusVitaAppView visible=plus_vita_app_view(app);
+		for(size_t i=0;i<visible.action_count;i++)
 		{
-			const PlusVitaAppButton *button = &view->actions[i];
+			const PlusVitaAppButton *button=&visible.actions[i];
 			if(event.x >= button->x && event.x < button->x + button->width
 				&& event.y >= button->y && event.y < button->y + button->height)
 			{
-				view->selected = i;
+				view->selected = view->list_total ? i : visible.list_first+i;
+				if(view->screen==PLUS_VITA_APP_BINDINGS && i<view->list_count) app->binding_focus=view->list_first+i;
+				if(view->screen==PLUS_VITA_APP_BIND_ACTIONS && i<view->list_count) app->action_focus=view->list_first+i;
 				if(view->screen == PLUS_VITA_APP_CATALOGUE && button->id == PLUS_VITA_ACTION_GAME)
-				{ app->catalogue_selection = app->catalogue_selection / 3 * 3 + i; app->search_focus=false; }
+				{
+					bool retained=!app->search_focus && app->catalogue_selection==view->list_first+i;
+					app->catalogue_selection=view->list_first+i;app->search_focus=false;catalogue_view(app);
+					if(!retained) return effect;
+				}
 				return plus_vita_app_dispatch(app,
 					(PlusVitaAppEvent){ .kind = PLUS_VITA_EVENT_ACTIVATE });
 			}
 		}
 		return effect;
 	}
-	if(view->screen == PLUS_VITA_APP_CATALOGUE && app->matches_count
-		&& (event.kind == PLUS_VITA_EVENT_DOWN || event.kind == PLUS_VITA_EVENT_UP))
-	{
-		if(app->search_focus) { app->search_focus=false; app->catalogue_selection=event.kind==PLUS_VITA_EVENT_DOWN ? 0 : app->matches_count-1; }
-		else if(event.kind==PLUS_VITA_EVENT_DOWN) { if(app->catalogue_selection+1==app->matches_count) app->search_focus=true; else app->catalogue_selection++; }
-		else { if(!app->catalogue_selection) app->search_focus=true; else app->catalogue_selection--; }
-		catalogue_view(app);
+	if(view->screen==PLUS_VITA_APP_CATALOGUE && app->matches_count
+		&& (event.kind==PLUS_VITA_EVENT_DOWN || event.kind==PLUS_VITA_EVENT_UP
+		|| event.kind==PLUS_VITA_EVENT_SCROLL || event.kind==PLUS_VITA_EVENT_FOCUS)) {
+		if(!app->search_focus || event.kind==PLUS_VITA_EVENT_SCROLL || event.kind==PLUS_VITA_EVENT_FOCUS)
+			move_list(app->matches_count,view->list_count,&app->catalogue_selection,&app->catalogue_first,event);
+		app->search_focus=false;catalogue_view(app);
 	}
-	else if(event.kind == PLUS_VITA_EVENT_DOWN && view->action_count)
-		view->selected = (view->selected + 1) % view->action_count;
-	else if(event.kind == PLUS_VITA_EVENT_UP && view->action_count)
-		view->selected = (view->selected + view->action_count - 1) % view->action_count;
+	else if((event.kind==PLUS_VITA_EVENT_DOWN || event.kind==PLUS_VITA_EVENT_UP
+		|| event.kind==PLUS_VITA_EVENT_SCROLL) && view->action_count) {
+		PlusVitaAppView visible=plus_vita_app_view(app);
+		move_list(visible.list_total,visible.list_count,&view->selected,&view->list_first,event);
+	}
 	else if(event.kind == PLUS_VITA_EVENT_BACK)
 	{
+		if(controls_screen(view->screen)) return edit_controls(app,PLUS_VITA_ACTION_BACK);
 #if PLUS_VITA_FONT_COMPARISON
 		if(view->screen==PLUS_VITA_APP_FONT_COMPARISON) {
 			about_view(app); return effect;
@@ -928,6 +1136,7 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 	else if(event.kind == PLUS_VITA_EVENT_ACTIVATE && view->action_count)
 	{
 		PlusVitaAppAction action = view->actions[view->selected].id;
+		if(action==PLUS_VITA_ACTION_CONTROL_LAYOUT || controls_screen(view->screen)) return edit_controls(app,action);
 #if PLUS_VITA_FONT_COMPARISON
 		if(action==PLUS_VITA_ACTION_FONT_COMPARISON || action==PLUS_VITA_ACTION_FONT_TOGGLE || action==PLUS_VITA_ACTION_FONT_SAMPLE) {
 			if(action==PLUS_VITA_ACTION_FONT_TOGGLE) app->alternative_font=!app->alternative_font;
@@ -935,20 +1144,15 @@ PlusVitaAppEffect plus_vita_app_dispatch(PlusVitaApp *app, PlusVitaAppEvent even
 			font_comparison(app); return effect;
 		}
 #endif
-		if((action==PLUS_VITA_ACTION_PREVIOUS_PAGE || action==PLUS_VITA_ACTION_NEXT_PAGE)
-			&& view->screen==PLUS_VITA_APP_CATALOGUE && app->matches_count) {
-			size_t page = app->catalogue_selection / 3, pages = (app->matches_count + 2) / 3;
-			page = action==PLUS_VITA_ACTION_NEXT_PAGE ? (page+1)%pages : (page+pages-1)%pages;
-			app->catalogue_selection = page * 3; app->search_focus = false;
-			catalogue_view(app);
-		}
-		else if(action==PLUS_VITA_ACTION_SEARCH) return plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_SEARCH});
+
+		if(action==PLUS_VITA_ACTION_SEARCH) return plus_vita_app_dispatch(app,(PlusVitaAppEvent){.kind=PLUS_VITA_EVENT_SEARCH});
 		else if(action==PLUS_VITA_ACTION_CLEAR_SEARCH) { app->search[0]=0; filter_catalogue(app); app->search_focus=false; catalogue_view(app); }
 		else if(action==PLUS_VITA_ACTION_GAME && view->screen==PLUS_VITA_APP_CATALOGUE) detail_view(app,NULL);
 		else if(action==PLUS_VITA_ACTION_PLAY && (view->screen==PLUS_VITA_APP_DETAILS
 			|| view->screen==PLUS_VITA_APP_STREAM_STOPPED)) {
 			PlusVitaCatalogEntry game=*view->detail;
-			effect=operation(app,PLUS_VITA_EFFECT_PLAY,"Preparing a cloud session. Circle cancels.",true); effect.game=game; return effect;
+			effect=operation(app,PLUS_VITA_EFFECT_PLAY,"Preparing a cloud session. Circle cancels.",true);
+			effect.game=game;effect.controls=app->controls;return effect;
 		}
 		else if(action == PLUS_VITA_ACTION_CATALOGUE)
 		{

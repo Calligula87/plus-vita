@@ -1,5 +1,10 @@
 # Anonymous v000 build and publication gate
 
+The next planned version is [v001, currently unreleased](../docs/V001.md).
+The maintainer has requested a hold on pushes and new VPK releases. This document
+still describes published v000; acceptance of the newer local development
+baseline does not authorize a new build, tag, release or publication.
+
 Issue #22 prepares a candidate; it does not authorize public publication.
 The maintainer accepted the final v000 hardware checks on 2026-10-27 and then
 authorized publishing the project and identified VPK while excluding personal

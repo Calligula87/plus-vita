@@ -17,6 +17,7 @@ bool plus_vita_h264_config(const uint8_t *annexb, size_t size, PlusVitaH264Confi
 uint32_t plus_vita_h264_decoder_slots(const PlusVitaH264Config *config);
 typedef struct {
 	bool started;
+	bool ps3;
 	uint32_t frame_num;
 	uint32_t idr_count;
 	const char *reason;
@@ -25,6 +26,10 @@ typedef struct {
 /* Narrow experiment: exact audited parameter sets, then every slice checked. */
 bool plus_vita_h264_guard_header(const uint8_t *data, size_t size,
 	uint8_t *patched, size_t capacity, size_t *patched_size);
+/* Initialize the guard only after matching the audited PS3 parameter sets. */
+bool plus_vita_h264_guard_ps3_header(PlusVitaH264Guard *guard,
+	const uint8_t *data, size_t size, uint8_t *patched, size_t capacity,
+	size_t *patched_size);
 bool plus_vita_h264_guard_frame(PlusVitaH264Guard *guard,
 	const uint8_t *data, size_t size);
 bool plus_vita_h264_guard_selftest(void);

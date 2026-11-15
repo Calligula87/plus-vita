@@ -7,6 +7,7 @@
 #include "latency_stats.h"
 #include "artwork_status.h"
 #define PLUS_VITA_DIAGNOSTIC_MAX_BYTES (1024u * 1024u)
+#define PLUS_VITA_PS3_REPLAY_LOG_PATH "ux0:data/plus-vita-ps3-replay-53.log"
 
 #ifdef __cplusplus
 extern "C" {
@@ -16,6 +17,33 @@ extern "C" {
  * until that worker has opened and initialized storage successfully. */
 bool plus_vita_diagnostic_begin(void);
 void plus_vita_diagnostic_event(const char *event, int code);
+/* Only fixed parser reasons can be persisted. */
+void plus_vita_diagnostic_slice_guard_rejected(const char *reason);
+/* These values are persisted as startup status codes. Append new values. */
+typedef enum {
+	PLUS_VITA_STREAM_STARTUP_TRANSPORT = 0,
+	PLUS_VITA_STREAM_STARTUP_HANDSHAKE,
+	PLUS_VITA_STREAM_STARTUP_STREAMINFO,
+	PLUS_VITA_STREAM_STARTUP_DECODER,
+	PLUS_VITA_STREAM_STARTUP_READY,
+	PLUS_VITA_STREAM_STARTUP_TRANSPORT_FAILED,
+	PLUS_VITA_STREAM_STARTUP_HANDSHAKE_FAILED,
+	PLUS_VITA_STREAM_STARTUP_STREAMINFO_INTERRUPTED,
+	PLUS_VITA_STREAM_STARTUP_STREAMINFO_INVALID,
+	PLUS_VITA_STREAM_STARTUP_PROFILE_UNAVAILABLE,
+	PLUS_VITA_STREAM_STARTUP_AUDIO_INIT_FAILED,
+	PLUS_VITA_STREAM_STARTUP_VIDEO_HEADER_INVALID,
+	PLUS_VITA_STREAM_STARTUP_HEADER_GUARD_REJECTED,
+	PLUS_VITA_STREAM_STARTUP_DECODER_INIT_FAILED,
+	PLUS_VITA_STREAM_STARTUP_STREAMINFO_REPLY_FAILED,
+	PLUS_VITA_STREAM_STARTUP_PROVISION_INVALID,
+	PLUS_VITA_STREAM_STARTUP_MEDIA_DISCONNECTED,
+	PLUS_VITA_STREAM_STARTUP_MEDIA_DECRYPT_FAILED,
+	PLUS_VITA_STREAM_STARTUP_MEDIA_INVALID,
+	PLUS_VITA_STREAM_STARTUP_FIRST_FRAME_TIMEOUT,
+	PLUS_VITA_STREAM_STARTUP_PS3_FEEDBACK,
+} PlusVitaStreamStartup;
+void plus_vita_diagnostic_stream_startup(PlusVitaStreamStartup status);
 void plus_vita_diagnostic_progress(const char *stage);
 void plus_vita_diagnostic_chiaki_log(ChiakiLogLevel level,
 	const char *message, void *user);

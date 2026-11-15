@@ -84,6 +84,12 @@ See the [reporting guide](docs/REPORTING_ISSUES.md).
 
 ## Controls
 
+The table below describes the released **v000** package. Current development
+source adds D-pad menus, touch-release feedback, saved gameplay mappings and
+experimental PS TV DualShock 3/4 input. See the [development control guide](docs/CONTROLS.md)
+and [hardware validation plan](docs/FEEDBACK_CONTROLS_TEST.md); these changes have
+not yet been accepted on hardware.
+
 | Action | Control |
 | --- | --- |
 | Move through menus | Left stick or touch |

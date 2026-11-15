@@ -44,8 +44,9 @@ the credential or written to diagnostics.
 ## Account controls and recovery
 
 - Circle returns to connected home. Open catalogue, About and cancelled Exit
-  retain the runtime account without rereading the file. Use the left joystick,
-  Cross/Circle or touch; the D-pad does not navigate app menus.
+  retain the runtime account without rereading the file. Development builds use
+  D-pad/left stick, Cross/Circle or touch. The released v000 uses left-stick/touch
+  menus. See the [development control guide](CONTROLS.md).
 - Account → Remember Off removes the app-managed saved copy and pauses automatic
   sign-in, including reuse of the retained JSON. The current runtime account
   remains usable. Remember On resumes persistence; the JSON stays in place.
