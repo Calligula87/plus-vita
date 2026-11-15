@@ -12,6 +12,7 @@ import zlib
 
 parser = argparse.ArgumentParser()
 parser.add_argument('vpk', type=Path)
+parser.add_argument('--version', choices=('v000', 'v002'), default='v000')
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 gate = root / 'tools/publication_gate.py'
@@ -21,7 +22,7 @@ canary = b'PV_PRIVATE_' + b'CANARY_fixture'
 def run(vpk=None, repo=root):
     command = [sys.executable, str(gate), '--repo', str(repo)]
     if vpk:
-        command += ['--package-only', '--vpk', str(vpk)]
+        command += ['--package-only', '--vpk', str(vpk), '--version', args.version]
     result = subprocess.run(command, capture_output=True)
     assert canary not in result.stdout + result.stderr, 'Gate must never print findings containing fixture data'
     return result.returncode, json.loads(result.stdout)

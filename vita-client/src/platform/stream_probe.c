@@ -2345,7 +2345,8 @@ ChiakiErrorCode plus_vita_stream_probe_with_pump(const ChiakiCloudProvisionResul
 	}
 	PlusVitaStreamProbe probe = { .log = log, .provision = provision,
 		.state = PROBE_CONNECTING, .input = input,
-		.ps3_live = PLUS_VITA_PS3_LIVE && !strcmp(provision->platform, "ps3"),
+		.ps3_live = (PLUS_VITA_PS3_LIVE || PLUS_VITA_RELEASE_PS3)
+			&& !strcmp(provision->platform, "ps3"),
 		.capture_only = plus_vita_stream_probe_collects_sample(provision) };
 	if(input && plus_vita_control_layout_valid(&input->layout)) probe.controls=input->layout;
 	else plus_vita_control_layout_defaults(&probe.controls);

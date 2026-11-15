@@ -100,7 +100,10 @@ def self_segments(data):
         yield segment
 
 
-def package_findings(vpk, root):
+RELEASE_APP_VERSIONS = {'v000': b'00.11', 'v002': b'00.13'}
+
+
+def package_findings(vpk, root, version='v000'):
     errors = collections.Counter()
     with zipfile.ZipFile(vpk) as package:
         if package.comment:
@@ -154,7 +157,7 @@ def package_findings(vpk, root):
                         raise ValueError('invalid_app_identity')
                     name=data[keys+key:data.index(b'\0',keys+key)]
                     identity[name]=data[values+offset:values+offset+length].rstrip(b'\0')
-                if identity.get(b'APP_VER')!=b'00.11' or identity.get(b'TITLE_ID')!=b'PLVT00001' or identity.get(b'TITLE')!=b'Plus-Vita':
+                if identity.get(b'APP_VER')!=RELEASE_APP_VERSIONS[version] or identity.get(b'TITLE_ID')!=b'PLVT00001' or identity.get(b'TITLE')!=b'Plus-Vita':
                     errors['package.app_identity'] += 1
     return errors
 
@@ -218,6 +221,7 @@ def repository_findings(root, reviewed):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--vpk', type=Path)
+    parser.add_argument('--version', choices=RELEASE_APP_VERSIONS, default='v000')
     parser.add_argument('--repo', type=Path, default=Path('.'))
     parser.add_argument('--package-only', action='store_true')
     parser.add_argument('--report', type=Path)
@@ -232,7 +236,7 @@ def main():
             source_errors, source_stats = repository_findings(args.repo, reviewed)
             errors.update(source_errors); stats.update(source_stats); checks += ['source', 'history']
         if args.vpk:
-            errors.update(package_findings(args.vpk, args.repo)); checks.append('actual_vpk_and_executable')
+            errors.update(package_findings(args.vpk, args.repo, args.version)); checks.append('actual_vpk_and_executable')
         for material in args.materials:
             for category in findings(material.read_bytes(), artifact=True):
                 errors['public_material.'+category] += 1
@@ -243,7 +247,8 @@ def main():
     except (OSError, ValueError, KeyError, struct.error, zlib.error, zipfile.BadZipFile, subprocess.CalledProcessError):
         errors['gate.unreadable_or_unsupported_input'] += 1
     report = {'software_privacy_pass': not errors, 'checks': checks,
-              'findings': dict(errors), 'counts': dict(stats), 'hardware_release_gate': 'pending_23',
+              'findings': dict(errors), 'counts': dict(stats),
+              'hardware_release_gate': 'pending_54' if args.version == 'v002' else 'pending_23',
               'publication_authorized': False}
     encoded = json.dumps(report, indent=2) + '\n'
     if args.report:
