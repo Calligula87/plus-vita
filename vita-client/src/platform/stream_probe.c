@@ -54,6 +54,8 @@
 #define PROBE_FRAME_BYTES_MAX (1024u * 1024u)
 #define PROBE_CAPTURE_BYTES_MAX (8u * 1024u * 1024u)
 #define PROBE_CAPTURE_MS 5000u
+#define PROBE_RECOVERY_TIMEOUT_MS 5000u
+#define PROBE_RECOVERY_RETRY_MS 500u
 #define PS3_MEDIA_START_TIMEOUT_MS 60000u
 #ifndef PLUS_VITA_PS3_STARTUP_SAMPLE
 #define PLUS_VITA_PS3_STARTUP_SAMPLE 0
@@ -636,6 +638,52 @@ static ChiakiErrorCode probe_video_packet(PlusVitaStreamProbe *probe,
 	return probe_video_drain(probe, false);
 }
 
+static ChiakiErrorCode probe_report_corrupt_frames(PlusVitaStreamProbe *probe,
+	ChiakiSeqNum16 end)
+{
+	probe->recovery_requests++;
+	tkproto_TakionMessage msg = { 0 };
+	msg.type = tkproto_TakionMessage_PayloadType_CORRUPTFRAME;
+	msg.has_corrupt_payload = true;
+	msg.corrupt_payload.start = probe->recovery_report_start;
+	msg.corrupt_payload.end = end;
+	ChiakiErrorCode result = probe_send_protobuf(probe, &msg, 2);
+	CHIAKI_LOGI(probe->log, "Stream probe recovery CORRUPTFRAME start=%u end=%u send=%d requests=%u",
+		(unsigned int)probe->recovery_report_start, (unsigned int)end,
+		(int)result, probe->recovery_requests);
+	return result;
+}
+
+static ChiakiErrorCode probe_begin_video_recovery(PlusVitaStreamProbe *probe,
+	ChiakiSeqNum16 start, ChiakiSeqNum16 end)
+{
+	probe->awaiting_recovery_idr = true;
+	probe->recovery_started_ms = sceKernelGetProcessTimeWide() / 1000u;
+	probe->recovery_last_request_ms = probe->recovery_started_ms;
+	probe->recovery_report_start = start;
+	probe->recovery_count++;
+	return probe_report_corrupt_frames(probe, end);
+}
+
+static ChiakiErrorCode probe_drop_recovery_frame(PlusVitaStreamProbe *probe,
+	ProbeVideoAssembly *assembly)
+{
+	const uint64_t now = sceKernelGetProcessTimeWide() / 1000u;
+	/* Re-report the broken reference chain at most ten times in five seconds. */
+	if(now - probe->recovery_last_request_ms >= PROBE_RECOVERY_RETRY_MS
+		&& now - probe->recovery_started_ms < PROBE_RECOVERY_TIMEOUT_MS)
+	{
+		probe->recovery_last_request_ms = now;
+		ChiakiErrorCode err = probe_report_corrupt_frames(probe, assembly->frame_index);
+		if(err != CHIAKI_ERR_SUCCESS) return err;
+	}
+	probe->recovery_dropped++;
+	probe->video_frame_completed = assembly->frame_index;
+	probe->video_frame_completed_valid = true;
+	probe_video_assembly_reset(assembly);
+	return CHIAKI_ERR_SUCCESS;
+}
+
 static ChiakiErrorCode probe_video_submit(PlusVitaStreamProbe *probe,
 	ProbeVideoAssembly *assembly)
 {
@@ -692,50 +740,16 @@ static ChiakiErrorCode probe_video_submit(PlusVitaStreamProbe *probe,
 		{
 			CHIAKI_LOGW(probe->log, "Stream probe recovery WIRE_FRAME_GAP previous=%u observed=%u; waiting for validated IDR",
 				(unsigned int)probe->video_frame_completed, (unsigned int)assembly->frame_index);
-			probe->awaiting_recovery_idr = true;
-			probe->recovery_started_ms = sceKernelGetProcessTimeWide() / 1000u;
-			probe->recovery_count++;
-			probe->recovery_report_start = (ChiakiSeqNum16)(probe->video_frame_completed + 1);
-			probe->recovery_last_request_ms = probe->recovery_started_ms;
-			probe->recovery_requests++;
-			tkproto_TakionMessage msg = { 0 };
-			msg.type = tkproto_TakionMessage_PayloadType_CORRUPTFRAME;
-			msg.has_corrupt_payload = true;
-			msg.corrupt_payload.start = (ChiakiSeqNum16)(probe->video_frame_completed + 1);
-			msg.corrupt_payload.end = (ChiakiSeqNum16)(assembly->frame_index - 1);
-			ChiakiErrorCode request = probe_send_protobuf(probe, &msg, 2);
-			CHIAKI_LOGI(probe->log, "Stream probe recovery CORRUPTFRAME start=%u end=%u send=%d",
-				(unsigned int)msg.corrupt_payload.start, (unsigned int)msg.corrupt_payload.end, (int)request);
+			ChiakiErrorCode request = probe_begin_video_recovery(probe,
+				(ChiakiSeqNum16)(probe->video_frame_completed + 1),
+				(ChiakiSeqNum16)(assembly->frame_index - 1));
 			if(request != CHIAKI_ERR_SUCCESS) { free(frame); return request; }
 		}
 		if(probe->awaiting_recovery_idr && !probe_has_nal(frame, frame_size, 5))
 		{
 			/* The reference chain is broken. Never submit dependent P frames. */
-			uint64_t recovery_now = sceKernelGetProcessTimeWide() / 1000u;
-			/* Re-report the unusable chain, not only the first missing AU.
-			 * Rate-limited to ten reports per five-second recovery episode. */
-			if(recovery_now - probe->recovery_last_request_ms >= 500
-				&& recovery_now - probe->recovery_started_ms < 5000)
-			{
-				tkproto_TakionMessage retry = { 0 };
-				retry.type = tkproto_TakionMessage_PayloadType_CORRUPTFRAME;
-				retry.has_corrupt_payload = true;
-				retry.corrupt_payload.start = probe->recovery_report_start;
-				retry.corrupt_payload.end = assembly->frame_index;
-				ChiakiErrorCode request = probe_send_protobuf(probe, &retry, 2);
-				probe->recovery_last_request_ms = recovery_now;
-				probe->recovery_requests++;
-				CHIAKI_LOGI(probe->log, "Stream probe recovery CORRUPTFRAME retry start=%u end=%u send=%d requests=%u",
-					(unsigned int)retry.corrupt_payload.start, (unsigned int)retry.corrupt_payload.end,
-					(int)request, probe->recovery_requests);
-				if(request != CHIAKI_ERR_SUCCESS) { free(frame); return request; }
-			}
-			probe->recovery_dropped++;
-			probe->video_frame_completed = assembly->frame_index;
-			probe->video_frame_completed_valid = true;
 			free(frame);
-			probe_video_assembly_reset(assembly);
-			return CHIAKI_ERR_SUCCESS;
+			return probe_drop_recovery_frame(probe, assembly);
 		}
 		uint32_t idr_before = probe->reference_guard.idr_count;
 		if(!plus_vita_h264_guard_frame(&probe->reference_guard, frame, frame_size))
@@ -749,6 +763,19 @@ static ChiakiErrorCode probe_video_submit(PlusVitaStreamProbe *probe,
 				probe->reference_guard.observed_nal, probe->reference_guard.observed_slice,
 				probe->reference_guard.observed_mb, (unsigned long)frame_size, probe->incomplete_frames);
 			free(frame);
+			/* A rejected slice breaks the reference chain. During PS3 play,
+			 * request a validated IDR while audio and local controls stay live. */
+			if(probe->ps3_live && probe->video_decoded_frame
+				&& strcmp(probe->reference_guard.reason, "SLICE_TYPE") == 0)
+			{
+				if(!probe->awaiting_recovery_idr)
+				{
+					ChiakiErrorCode request = probe_begin_video_recovery(probe,
+						assembly->frame_index, assembly->frame_index);
+					if(request != CHIAKI_ERR_SUCCESS) return request;
+				}
+				return probe_drop_recovery_frame(probe, assembly);
+			}
 			return CHIAKI_ERR_INVALID_DATA;
 		}
 		guarded_idr = probe->reference_guard.idr_count != idr_before;
@@ -1780,9 +1807,10 @@ static ChiakiErrorCode probe_visible_preview(PlusVitaStreamProbe *probe,
 #endif
 		if(probe->awaiting_recovery_idr
 			&& now >= probe->recovery_started_ms
-			&& now - probe->recovery_started_ms >= 5000)
+			&& now - probe->recovery_started_ms >= PROBE_RECOVERY_TIMEOUT_MS)
 		{
-			CHIAKI_LOGE(probe->log, "Stream probe recovery IDR_TIMEOUT after 5000ms; dependent frames not decoded");
+			CHIAKI_LOGE(probe->log, "Stream probe recovery IDR_TIMEOUT after %ums; dependent frames not decoded",
+				PROBE_RECOVERY_TIMEOUT_MS);
 			err = CHIAKI_ERR_TIMEOUT;
 			break;
 		}
